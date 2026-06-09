@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -8,13 +6,13 @@ services:
     environment:
       POSTGRES_DB: astra_tarot
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d astra_tarot"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -29,10 +27,10 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/astra_tarot
       SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
       SPRING_FLYWAY_URL: jdbc:postgresql://postgres:5432/astra_tarot
       SPRING_FLYWAY_USER: postgres
-      SPRING_FLYWAY_PASSWORD: postgres
+      SPRING_FLYWAY_PASSWORD: ${DB_PASSWORD}
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,3 +1,4 @@
+### Maven ###
 HELP.md
 target/
 .mvn/wrapper/maven-wrapper.jar
@@ -31,3 +32,37 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Environment Variables ###
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+### Application Properties (chứa secrets) ###
+application-secrets.properties
+**/application-secrets.properties
+
+### Docker ###
+docker-compose.override.yml
+.dockerignore
+
+### Logs ###
+*.log
+logs/
+
+### OS generated files ###
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.tmp
+
+### Database ###
+*.db
+*.sqlite
+*.sqlite3
