@@ -44,15 +44,16 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authenticationProvider(authenticationProvider())
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(
-                                "/auth/**",
-                                "/api/auth/oauth/exchange",
-                                "/oauth2/**",
-                                "/login/oauth2/**",
-                                "/user/email/verify",
-                                "/swagger-ui/**",
-                                "/v3/api-docs/**"
-                        ).permitAll()
+                         .requestMatchers(
+                                 "/auth/**",
+                                 "/api/auth/oauth/exchange",
+                                 "/oauth2/**",
+                                 "/login/oauth2/**",
+                                 "/user/email/verify",
+                                 "/api/v1/readers/apply",
+                                 "/swagger-ui/**",
+                                 "/v3/api-docs/**"
+                         ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .oauth2Login(oauth2 -> oauth2.successHandler(oAuth2LoginSuccessHandler))
