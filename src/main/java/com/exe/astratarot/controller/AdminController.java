@@ -16,23 +16,23 @@ import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/admin/readers")
+@RequestMapping("/api/v1/admin")
 @RequiredArgsConstructor
-public class ReaderAdminController {
+public class AdminController {
 
     private final ReaderProfileService readerProfileService;
     private final ReaderService readerService;
 
-    @GetMapping("/applications")
-    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/readers/applications")
+    @PreAuthorize("hasAuthority('ADMIN_READERS_VIEW')")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getAllPendingApplications(
             @AuthenticationPrincipal CustomUserDetails adminDetails) {
         UUID adminId = adminDetails.getUser().getId();
         return ResponseEntity.ok(readerProfileService.getAllPendingApplications(adminId));
     }
 
-    @PatchMapping("/{applicationId}/review")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PatchMapping("/readers/{applicationId}/review")
+    @PreAuthorize("hasAuthority('ADMIN_READERS_REVIEW')")
     public ResponseEntity<ApiResponse<Void>> reviewApplication(
             @AuthenticationPrincipal CustomUserDetails adminDetails,
             @PathVariable UUID applicationId,
