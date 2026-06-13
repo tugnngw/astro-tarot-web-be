@@ -9,6 +9,9 @@ import com.exe.astratarot.domain.entity.ReaderApplication;
 import com.exe.astratarot.domain.entity.ReaderAvailability;
 import com.exe.astratarot.domain.entity.ReaderProfile;
 import com.exe.astratarot.domain.entity.ReaderUnavailableDate;
+import com.exe.astratarot.domain.mapper.ReaderAvailabilityMapper;
+import com.exe.astratarot.domain.mapper.ReaderProfileMapper;
+import com.exe.astratarot.domain.mapper.ReaderUnavailableDateMapper;
 import com.exe.astratarot.exception.ReaderNotVerifiedException;
 import com.exe.astratarot.repository.ReaderApplicationRepository;
 import com.exe.astratarot.repository.ReaderAvailabilityRepository;
@@ -34,19 +37,17 @@ public class ReaderProfileServiceImpl implements ReaderProfileService {
     private final ReaderUnavailableDateRepository readerUnavailableDateRepository;
     private final ReaderApplicationRepository readerApplicationRepository;
 
+    private final ReaderProfileMapper readerProfileMapper;
+    private final ReaderAvailabilityMapper readerAvailabilityMapper;
+    private final ReaderUnavailableDateMapper readerUnavailableDateMapper;
+
     @Override
     @Transactional
     public void updateProfile(UUID userId, UpdateProfileRequest request) {
         ReaderProfile profile = readerProfileRepository.findByUserId(userId)
                 .orElseThrow(() -> new ReaderNotVerifiedException());
 
-        if (request.getBio() != null) profile.setBio(request.getBio());
-        if (request.getSpecialties() != null) profile.setSpecialties(request.getSpecialties());
-        if (request.getYearsExperience() != null) profile.setYearsExperience(request.getYearsExperience());
-        if (request.getPricePer15m() != null) profile.setPricePer15m(request.getPricePer15m());
-        if (request.getPricePer30m() != null) profile.setPricePer30m(request.getPricePer30m());
-        if (request.getPricePer60m() != null) profile.setPricePer60m(request.getPricePer60m());
-
+        readerProfileMapper.updateFromRequest(request, profile);
         readerProfileRepository.save(profile);
     }
 
@@ -102,40 +103,19 @@ public class ReaderProfileServiceImpl implements ReaderProfileService {
     }
 
     private ReaderProfileResponse mapToResponse(ReaderProfile profile) {
-        List<ReaderAvailabilityResponse> availabilityList = 
+        List<ReaderAvailabilityResponse> availabilityList =
             readerAvailabilityRepository.findByReaderId(profile.getId()).stream()
-                .map(avail -> ReaderAvailabilityResponse.builder()
-                    .id(avail.getId())
-                    .dayOfWeek(avail.getDayOfWeek())
-                    .startTime(avail.getStartTime())
-                    .endTime(avail.getEndTime())
-                    .isActive(avail.getActive())
-                    .build())
+                .map(readerAvailabilityMapper::toResponse)
                 .collect(Collectors.toList());
 
-        List<ReaderUnavailableDateResponse> unavailableDates = 
+        List<ReaderUnavailableDateResponse> unavailableDates =
             readerUnavailableDateRepository.findByReaderId(profile.getId()).stream()
-                .map(date -> ReaderUnavailableDateResponse.builder()
-                    .id(date.getId())
-                    .unavailableDate(date.getUnavailableDate())
-                    .reason(date.getReason())
-                    .build())
+                .map(readerUnavailableDateMapper::toResponse)
                 .collect(Collectors.toList());
 
-        return ReaderProfileResponse.builder()
-                .id(profile.getId())
-                .username(profile.getUser().getUsername())
-                .bio(profile.getBio())
-                .specialties(profile.getSpecialties())
-                .yearsExperience(profile.getYearsExperience())
-                .pricePer15m(profile.getPricePer15m())
-                .pricePer30m(profile.getPricePer30m())
-                .pricePer60m(profile.getPricePer60m())
-                .rating(profile.getRating())
-                .totalReviews(profile.getTotalReviews())
-                .isAvailable(profile.getAvailable())
-                .weeklyAvailability(availabilityList)
-                .unavailableDates(unavailableDates)
-                .build();
+        ReaderProfileResponse response = readerProfileMapper.toResponse(profile);
+        response.setWeeklyAvailability(availabilityList);
+        response.setUnavailableDates(unavailableDates);
+        return response;
     }
 }

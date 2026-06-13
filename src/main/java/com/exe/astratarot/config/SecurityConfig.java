@@ -45,6 +45,7 @@ public class SecurityConfig {
                 .authenticationProvider(authenticationProvider())
                 .authorizeHttpRequests(auth -> auth
                          .requestMatchers(
+                                 "/api/auth/**",
                                  "/auth/**",
                                  "/api/auth/oauth/exchange",
                                  "/oauth2/**",
