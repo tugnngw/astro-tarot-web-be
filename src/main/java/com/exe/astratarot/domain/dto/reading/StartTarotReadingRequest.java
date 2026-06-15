@@ -2,9 +2,7 @@ package com.exe.astratarot.domain.dto.reading;
 
 import com.exe.astratarot.domain.dto.prompt.DrawnCardDetailDTO;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -30,7 +28,8 @@ public class StartTarotReadingRequest {
     private String question;
 
     @NotNull(message = "Number of cards is required")
-    @Size(min = 1, max = 78, message = "Number of cards must be between 1 and 78")
+    @Min(value = 1, message = "Number of cards must be at least 1")
+    @Max(value = 78, message = "Number of cards must not exceed 78")
     private Integer numberOfCards;
 
     @Builder.Default
