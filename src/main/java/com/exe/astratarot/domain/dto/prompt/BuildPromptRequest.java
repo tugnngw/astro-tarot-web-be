@@ -38,9 +38,8 @@ public class BuildPromptRequest {
      * Pre-calculated astrological context (natal chart + transits).
      * Must be created by the Astrology Module before being passed here.
      * The AI NEVER calculates astrology; this DTO contains only external calculations.
-     * Required field.
+     * Optional field. If null, the prompt will be generated without astrology context.
      */
-    @NotNull(message = "Astrology context is required")
     @Valid
     private AstrologyContextDTO astrologyContext;
 

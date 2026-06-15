@@ -40,7 +40,11 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
         prompt.append(buildReadingContext(request.getSpreadName()));
 
         // Section 3: Astrology Context
-        prompt.append(buildAstrologyContext(request.getAstrologyContext()));
+        if (request.getAstrologyContext() != null) {
+            prompt.append(buildAstrologyContext(request.getAstrologyContext()));
+        } else {
+            prompt.append(buildAstrologyContextUnavailable());
+        }
 
         // Section 4: Tarot Cards
         prompt.append(buildTarotCardsSection(request.getDrawnCardDetails()));
@@ -106,6 +110,9 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
      * Formats natal chart and transit data into readable text.
      */
     private String buildAstrologyContext(AstrologyContextDTO astrology) {
+        if (astrology == null) {
+            return "";
+        }
         StringBuilder section = new StringBuilder();
         section.append("ASTROLOGY CONTEXT\n\n");
 
@@ -209,6 +216,21 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
         return "USER QUESTION\n" +
                 userQuestion + "\n\n" +
                 "---\n\n";
+    }
+
+    /**
+     * Builds an unavailable astrology context section.
+     * Used when astrology context is null or not provided.
+     */
+    private String buildAstrologyContextUnavailable() {
+        return """
+                ASTROLOGY CONTEXT
+
+                Astrology context not available for this reading.
+
+                ---
+
+                """;
     }
 
     /**
