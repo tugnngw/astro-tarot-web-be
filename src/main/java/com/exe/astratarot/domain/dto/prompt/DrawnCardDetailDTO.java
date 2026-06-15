@@ -7,6 +7,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.UUID;
+
 /**
  * Represents a single tarot card with all details needed for prompt construction.
  *
@@ -21,6 +23,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DrawnCardDetailDTO {
+
+    @NotNull(message = "Card ID is required")
+    private UUID cardId;
 
     /**
      * The tarot card's name (e.g., "The Fool", "The Magician", "The High Priestess").
