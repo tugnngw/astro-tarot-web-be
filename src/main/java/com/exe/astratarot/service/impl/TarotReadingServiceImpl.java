@@ -56,11 +56,8 @@ public class TarotReadingServiceImpl implements TarotReadingService {
     private final AITarotService aiTarotService;
 
     @Override
-    public TarotReadingResultDTO initiateAiTarotReading(StartTarotReadingRequest request) {
-        // Step 1: Fetch the user
-        User user = userRepository.findById(request.getUserId())
-                .orElseThrow(() -> new EntityNotFoundException(
-                        "User not found with ID: " + request.getUserId()));
+    public TarotReadingResultDTO initiateAiTarotReading(User user, StartTarotReadingRequest request) {
+        // Step 1: Validate user (already provided from authenticated context)
 
         // Step 2: Draw cards (pure logic, no reading entity needed)
         List<CardDrawDTO> drawnCardDtos = tarotDrawingService.drawCards(

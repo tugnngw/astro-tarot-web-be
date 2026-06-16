@@ -1,28 +1,24 @@
 package com.exe.astratarot.domain.dto.reading;
 
-import com.exe.astratarot.domain.dto.prompt.DrawnCardDetailDTO;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
-import java.util.UUID;
-
 /**
  * Request DTO for initiating an AI Tarot reading.
- * Contains user details, question, card drawing parameters, and optional spread name.
+ *
+ * User ID is derived from the authenticated JWT context and not accepted in the request body.
+ * This ensures that a user can only create readings for their own account.
+ *
+ * Contains question, card drawing parameters, and optional spread name.
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class StartTarotReadingRequest {
-
-    @NotNull(message = "User ID is required")
-    private UUID userId;
 
     @NotBlank(message = "User question is required")
     private String question;

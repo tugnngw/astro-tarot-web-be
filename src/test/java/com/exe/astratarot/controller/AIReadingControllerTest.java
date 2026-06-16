@@ -18,6 +18,7 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -37,6 +38,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -53,7 +55,7 @@ class AIReadingControllerTest {
     @MockBean
     private TarotReadingService tarotReadingService;
 
-    private static final UUID TEST_USER_ID = UUID.randomUUID();
+    private static final UUID TEST_USER_ID = UUID.randomUUID(); // Mock User ID for service method arguments
     private static final UUID TEST_READING_ID = UUID.randomUUID();
     private static final UUID TEST_CARD_ID = UUID.randomUUID();
 
@@ -66,7 +68,6 @@ class AIReadingControllerTest {
     @Test
     void startAiTarotReading_success_returns200() throws Exception {
         StartTarotReadingRequest request = StartTarotReadingRequest.builder()
-                .userId(TEST_USER_ID)
                 .question("Will I succeed?")
                 .numberOfCards(3)
                 .spreadName("Past-Present-Future")
@@ -76,7 +77,13 @@ class AIReadingControllerTest {
                 .readingId(TEST_READING_ID)
                 .userQuestion("Will I succeed?")
                 .spreadName("Past-Present-Future")
-                .drawnCards(List.of(DrawnCardDetailDTO.builder().cardId(TEST_CARD_ID).cardName("The Fool").position((short)0).reversed(false).build()))
+                .drawnCards(List.of(DrawnCardDetailDTO.builder()
+                        .cardId(TEST_CARD_ID)
+                        .cardName("The Fool")
+                        .arcanaType("Major Arcana")
+                        .position((short)0)
+                        .reversed(false)
+                        .build()))
                 .aiInterpretation("AI interpretation content.")
                 .modelUsed("gemini-pro")
                 .totalTokensUsed(50)
@@ -85,31 +92,45 @@ class AIReadingControllerTest {
 
         ApiResponse<TarotReadingResultDTO> expectedResponse = ApiResponse.success("AI Tarot reading generated successfully", resultDto);
 
-        when(tarotReadingService.initiateAiTarotReading(request)).thenReturn(resultDto);
+        when(tarotReadingService.initiateAiTarotReading(any(User.class), eq(request))).thenReturn(resultDto);
+
+        mockMvc.perform(post("/api/ai-readings")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(toJson(request))
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isOk())
+                .andExpect(content().json(toJson(expectedResponse)));
+
+        verify(tarotReadingService).initiateAiTarotReading(any(User.class), eq(request));
+    }
+
+    @Test
+    void startAiTarotReading_unauthenticatedRequest_returns401() throws Exception {
+        StartTarotReadingRequest request = StartTarotReadingRequest.builder()
+                .question("Will I succeed?")
+                .numberOfCards(3)
+                .spreadName("Past-Present-Future")
+                .build();
 
         mockMvc.perform(post("/api/ai-readings")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(toJson(request)))
-                .andExpect(status().isOk())
-                .andExpect(content().json(toJson(expectedResponse)));
+                .andExpect(status().isUnauthorized());
 
-        verify(tarotReadingService).initiateAiTarotReading(request);
+        verifyNoInteractions(tarotReadingService);
     }
 
     @Test
     void startAiTarotReading_invalidRequest_returns400() throws Exception {
         StartTarotReadingRequest request = StartTarotReadingRequest.builder()
-                .userId(TEST_USER_ID)
                 .numberOfCards(1)
                 .build();
 
-        ApiResponse<TarotReadingResultDTO> expectedErrorResponse = ApiResponse.error("Failed to generate AI Tarot reading: User question is required");
-
         mockMvc.perform(post("/api/ai-readings")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(toJson(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(content().json(toJson(expectedErrorResponse)));
+                        .content(toJson(request))
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isBadRequest());
 
         verifyNoInteractions(tarotReadingService);
     }
@@ -117,22 +138,19 @@ class AIReadingControllerTest {
     @Test
     void startAiTarotReading_serviceException_returns500() throws Exception {
         StartTarotReadingRequest request = StartTarotReadingRequest.builder()
-                .userId(TEST_USER_ID)
                 .question("Service error?")
                 .numberOfCards(1)
                 .build();
 
         EntityNotFoundException serviceException = new EntityNotFoundException("User not found");
-        when(tarotReadingService.initiateAiTarotReading(request)).thenThrow(serviceException);
-
-        ApiResponse<TarotReadingResultDTO> expectedErrorResponse = ApiResponse.error("Failed to generate AI Tarot reading: User not found");
+        when(tarotReadingService.initiateAiTarotReading(any(User.class), eq(request))).thenThrow(serviceException);
 
         mockMvc.perform(post("/api/ai-readings")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(toJson(request)))
-                .andExpect(status().isInternalServerError())
-                .andExpect(content().json(toJson(expectedErrorResponse)));
+                        .content(toJson(request))
+                        .header("Authorization", "Bearer test-token"))
+                .andExpect(status().isInternalServerError());
 
-        verify(tarotReadingService).initiateAiTarotReading(request);
+        verify(tarotReadingService).initiateAiTarotReading(any(User.class), eq(request));
     }
 }

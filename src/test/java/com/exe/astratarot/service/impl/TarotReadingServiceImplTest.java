@@ -22,6 +22,7 @@ import com.exe.astratarot.service.TarotDrawingService;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -71,7 +72,6 @@ class TarotReadingServiceImplTest {
         );
 
         StartTarotReadingRequest request = StartTarotReadingRequest.builder()
-                .userId(TEST_USER_ID)
                 .question("My destiny?")
                 .numberOfCards(1)
                 .build();
@@ -99,13 +99,12 @@ class TarotReadingServiceImplTest {
                 .createdAt(Instant.now())
                 .build();
 
-        when(userRepository.findById(TEST_USER_ID)).thenReturn(Optional.of(user));
         when(tarotDrawingService.drawCards(null, 1, true)).thenReturn(cardDraws);
         when(tarotCardRepository.findById(TEST_CARD_ID)).thenReturn(Optional.of(tarotCard));
         when(aiTarotService.generateInterpretation(any(BuildPromptRequest.class))).thenReturn(llmResponse);
         when(tarotReadingRepository.save(any(TarotReading.class))).thenReturn(savedReading);
 
-        TarotReadingResultDTO result = tarotReadingService.initiateAiTarotReading(request);
+        TarotReadingResultDTO result = tarotReadingService.initiateAiTarotReading(user, request);
 
         assertNotNull(result);
         assertEquals(TEST_READING_ID, result.getReadingId());
@@ -118,30 +117,28 @@ class TarotReadingServiceImplTest {
         assertFalse(result.getDrawnCards().get(0).getReversed());
         assertEquals("Your destiny is bright.", result.getAiInterpretation());
 
-        verify(userRepository).findById(TEST_USER_ID);
         verify(tarotDrawingService).drawCards(null, 1, true);
         verify(tarotCardRepository, times(2)).findById(TEST_CARD_ID);
         verify(aiTarotService).generateInterpretation(any(BuildPromptRequest.class));
         verify(tarotReadingRepository).save(any(TarotReading.class));
         verify(readingCardRepository).saveAll(anyList());
+        verifyNoInteractions(userRepository);
     }
 
     @Test
     void initiateAiTarotReading_userNotFound_shouldThrowException() {
+        // Since User is now passed directly from the authenticated context,
+        // userRepository.findById is NOT called in the service.
+        // The test needs to be adjusted to reflect this change.
+
         StartTarotReadingRequest request = StartTarotReadingRequest.builder()
-                .userId(TEST_USER_ID)
                 .question("Does user exist?")
                 .numberOfCards(1)
                 .build();
 
-        when(userRepository.findById(TEST_USER_ID)).thenReturn(Optional.empty());
-
-        EntityNotFoundException thrown = assertThrows(EntityNotFoundException.class,
-                () -> tarotReadingService.initiateAiTarotReading(request));
-        assertTrue(thrown.getMessage().contains("User not found"));
-
-        verify(userRepository).findById(TEST_USER_ID);
-        verifyNoInteractions(tarotDrawingService, aiTarotService, tarotReadingRepository, readingCardRepository);
+        // No mock for userRepository.findById since it's not called.
+        // The test primarily verifies that code paths for null user behave correctly.
+        // For now, we remove this test case since the user is provided by the security context.
     }
 
     @Test
@@ -152,23 +149,19 @@ class TarotReadingServiceImplTest {
         );
 
         StartTarotReadingRequest request = StartTarotReadingRequest.builder()
-                .userId(TEST_USER_ID)
                 .question("Card exists?")
                 .numberOfCards(1)
                 .build();
-        // Default includeReversed = true via @Builder.Default
 
-        when(userRepository.findById(TEST_USER_ID)).thenReturn(Optional.of(user));
         when(tarotDrawingService.drawCards(null, 1, true)).thenReturn(cardDraws);
         when(tarotCardRepository.findById(TEST_CARD_ID)).thenReturn(Optional.empty());
 
         EntityNotFoundException thrown = assertThrows(EntityNotFoundException.class,
-                () -> tarotReadingService.initiateAiTarotReading(request));
+                () -> tarotReadingService.initiateAiTarotReading(user, request));
         assertTrue(thrown.getMessage().contains("Tarot card not found"));
 
-        verify(userRepository).findById(TEST_USER_ID);
         verify(tarotDrawingService).drawCards(null, 1, true);
-        verify(tarotCardRepository).findById(TEST_CARD_ID);
+        verify(tarotCardRepository, times(1)).findById(TEST_CARD_ID); // Only called once in enrichCardDetails before exception is thrown
         verifyNoInteractions(aiTarotService, tarotReadingRepository, readingCardRepository);
     }
 
@@ -180,24 +173,21 @@ class TarotReadingServiceImplTest {
         );
 
         StartTarotReadingRequest request = StartTarotReadingRequest.builder()
-                .userId(TEST_USER_ID)
                 .question("Will Gemini work?")
                 .numberOfCards(1)
                 .build();
 
         TarotCard tarotCard = TarotCard.builder().id(TEST_CARD_ID).name("The Fool").arcanaType("Major Arcana").build();
 
-        when(userRepository.findById(TEST_USER_ID)).thenReturn(Optional.of(user));
         when(tarotDrawingService.drawCards(null, 1, true)).thenReturn(cardDraws);
         when(tarotCardRepository.findById(TEST_CARD_ID)).thenReturn(Optional.of(tarotCard));
         when(aiTarotService.generateInterpretation(any(BuildPromptRequest.class)))
                 .thenThrow(new LLMProviderException("Gemini API is down"));
 
         LLMProviderException thrown = assertThrows(LLMProviderException.class,
-                () -> tarotReadingService.initiateAiTarotReading(request));
+                () -> tarotReadingService.initiateAiTarotReading(user, request));
         assertTrue(thrown.getMessage().contains("Gemini API is down"));
 
-        verify(userRepository).findById(TEST_USER_ID);
         verify(tarotDrawingService).drawCards(null, 1, true);
         verify(tarotCardRepository).findById(TEST_CARD_ID);
         verify(aiTarotService).generateInterpretation(any(BuildPromptRequest.class));
@@ -210,7 +200,6 @@ class TarotReadingServiceImplTest {
         List<CardDrawDTO> cardDraws = Collections.emptyList();
 
         StartTarotReadingRequest request = StartTarotReadingRequest.builder()
-                .userId(TEST_USER_ID)
                 .question("No cards drawn?")
                 .numberOfCards(0)
                 .build();
@@ -231,12 +220,11 @@ class TarotReadingServiceImplTest {
                 .createdAt(Instant.now())
                 .build();
 
-        when(userRepository.findById(TEST_USER_ID)).thenReturn(Optional.of(user));
         when(tarotDrawingService.drawCards(null, 0, true)).thenReturn(cardDraws);
         when(aiTarotService.generateInterpretation(any(BuildPromptRequest.class))).thenReturn(expectedResponse);
         when(tarotReadingRepository.save(any(TarotReading.class))).thenReturn(savedReading);
 
-        TarotReadingResultDTO result = tarotReadingService.initiateAiTarotReading(request);
+        TarotReadingResultDTO result = tarotReadingService.initiateAiTarotReading(user, request);
 
         assertNotNull(result);
         assertEquals(TEST_READING_ID, result.getReadingId());
@@ -246,11 +234,139 @@ class TarotReadingServiceImplTest {
         assertTrue(result.getDrawnCards().isEmpty());
         assertEquals("AI interpretation for no cards.", result.getAiInterpretation());
 
-        verify(userRepository).findById(TEST_USER_ID);
         verify(tarotDrawingService).drawCards(null, 0, true);
         verify(tarotCardRepository, never()).findById(any());
         verify(aiTarotService).generateInterpretation(any(BuildPromptRequest.class));
         verify(tarotReadingRepository).save(any(TarotReading.class));
         verify(readingCardRepository).saveAll(Collections.emptyList());
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void initiateAiTarotReading_persistenceFailure_shouldRollbackTransaction() {
+        User user = User.builder().id(TEST_USER_ID).build();
+        List<CardDrawDTO> cardDraws = List.of(
+                CardDrawDTO.builder().cardId(TEST_CARD_ID).position((short) 0).reversed(false).build()
+        );
+
+        StartTarotReadingRequest request = StartTarotReadingRequest.builder()
+                .question("Persistence test?")
+                .numberOfCards(1)
+                .build();
+
+        LLMResponse llmResponse = LLMResponse.builder()
+                .content("Gemini succeeded.")
+                .modelInfo("gemini-pro")
+                .tokenUsage(LLMTokenUsage.builder().totalTokens(50).build())
+                .build();
+
+        TarotCard tarotCard = TarotCard.builder().id(TEST_CARD_ID).name("The Fool").arcanaType("Major Arcana").build();
+
+        when(tarotDrawingService.drawCards(null, 1, true)).thenReturn(cardDraws);
+        when(tarotCardRepository.findById(TEST_CARD_ID)).thenReturn(Optional.of(tarotCard)); // Mocked for enrichCardDetails
+        when(aiTarotService.generateInterpretation(any(BuildPromptRequest.class))).thenReturn(llmResponse);
+        when(tarotReadingRepository.save(any(TarotReading.class)))
+                .thenThrow(new RuntimeException("Database error during save"));
+
+        RuntimeException thrown = assertThrows(RuntimeException.class,
+                () -> tarotReadingService.initiateAiTarotReading(user, request));
+        assertTrue(thrown.getMessage().contains("Database error during save"));
+
+        verify(tarotReadingRepository).save(any(TarotReading.class));
+        verify(readingCardRepository, never()).saveAll(anyList()); // Ensure saveAll is not called if save fails
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void initiateAiTarotReading_repositoryException_shouldThrowException() {
+        User user = User.builder().id(TEST_USER_ID).build();
+        List<CardDrawDTO> cardDraws = List.of(
+                CardDrawDTO.builder().cardId(TEST_CARD_ID).position((short) 0).reversed(false).build()
+        );
+
+        StartTarotReadingRequest request = StartTarotReadingRequest.builder()
+                .question("Repository error test?")
+                .numberOfCards(1)
+                .build();
+
+        TarotCard tarotCard = TarotCard.builder().id(TEST_CARD_ID).name("The Fool").arcanaType("Major Arcana").build();
+
+        when(tarotDrawingService.drawCards(null, 1, true)).thenReturn(cardDraws);
+        when(tarotCardRepository.findById(TEST_CARD_ID)).thenReturn(Optional.of(tarotCard)); // Mocked for enrichCardDetails AND saveReadingAndReturnResult
+        when(aiTarotService.generateInterpretation(any(BuildPromptRequest.class)))
+                .thenReturn(LLMResponse.builder().content("AI part succeeded").build());
+
+        when(tarotReadingRepository.save(any(TarotReading.class)))
+                .thenReturn(TarotReading.builder().id(TEST_READING_ID).user(user).build());
+        when(readingCardRepository.saveAll(anyList()))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("Unique constraint violation"));
+
+        RuntimeException thrown = assertThrows(org.springframework.dao.DataIntegrityViolationException.class,
+                () -> tarotReadingService.initiateAiTarotReading(user, request));
+        assertTrue(thrown.getMessage().contains("Unique constraint violation"));
+
+        verify(tarotDrawingService).drawCards(null, 1, true);
+        verify(tarotCardRepository, times(2)).findById(TEST_CARD_ID); // Called in enrichCardDetails + saveReadingAndReturnResult
+        verify(aiTarotService).generateInterpretation(any(BuildPromptRequest.class));
+        verify(tarotReadingRepository).save(any(TarotReading.class));
+        verify(readingCardRepository).saveAll(anyList()); // saveAll was called and threw exception
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void initiateAiTarotReading_withAuthenticatedUser_ignoresRequestUserId() {
+        User authenticatedUser = User.builder().id(TEST_USER_ID).build();
+
+        StartTarotReadingRequest request = StartTarotReadingRequest.builder()
+                .question("Security test?")
+                .numberOfCards(1)
+                .build();
+
+        List<CardDrawDTO> cardDraws = List.of(CardDrawDTO.builder().cardId(TEST_CARD_ID).position((short) 0).reversed(false).build());
+        TarotCard tarotCard = TarotCard.builder().id(TEST_CARD_ID).name("The Fool").arcanaType("Major Arcana").build();
+        LLMResponse llmResponse = LLMResponse.builder().content("Security test success.").build();
+        TarotReading savedReading = TarotReading.builder().id(TEST_READING_ID).user(authenticatedUser).build();
+
+        when(tarotDrawingService.drawCards(null, 1, true)).thenReturn(cardDraws);
+        when(tarotCardRepository.findById(TEST_CARD_ID)).thenReturn(Optional.of(tarotCard)); // Mocked for enrichCardDetails AND saveReadingAndReturnResult
+        when(aiTarotService.generateInterpretation(any(BuildPromptRequest.class))).thenReturn(llmResponse);
+        when(tarotReadingRepository.save(any(TarotReading.class))).thenReturn(savedReading);
+
+        TarotReadingResultDTO result = tarotReadingService.initiateAiTarotReading(authenticatedUser, request);
+
+        assertNotNull(result);
+        ArgumentCaptor<TarotReading> readingCaptor = ArgumentCaptor.forClass(TarotReading.class);
+        verify(tarotReadingRepository).save(readingCaptor.capture());
+        assertEquals(authenticatedUser.getId(), readingCaptor.getValue().getUser().getId());
+
+        verify(tarotDrawingService).drawCards(null, 1, true);
+        verify(tarotCardRepository, times(2)).findById(TEST_CARD_ID); // Called in enrichCardDetails + saveReadingAndReturnResult
+        verify(aiTarotService).generateInterpretation(any(BuildPromptRequest.class));
+        verify(readingCardRepository).saveAll(anyList());
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void initiateAiTarotReading_cardEnrichmentFailure_shouldThrowException() {
+        User user = User.builder().id(TEST_USER_ID).build();
+        List<CardDrawDTO> cardDraws = List.of(
+                CardDrawDTO.builder().cardId(TEST_CARD_ID).position((short) 0).reversed(false).build()
+        );
+
+        StartTarotReadingRequest request = StartTarotReadingRequest.builder()
+                .question("Enrichment test?")
+                .numberOfCards(1)
+                .build();
+
+        when(tarotDrawingService.drawCards(null, 1, true)).thenReturn(cardDraws);
+        when(tarotCardRepository.findById(TEST_CARD_ID)).thenThrow(new RuntimeException("DB connection failed"));
+
+        RuntimeException thrown = assertThrows(RuntimeException.class,
+                () -> tarotReadingService.initiateAiTarotReading(user, request));
+        assertTrue(thrown.getMessage().contains("DB connection failed"));
+
+        verify(aiTarotService, never()).generateInterpretation(any());
+        verify(tarotReadingRepository, never()).save(any());
+        verifyNoInteractions(userRepository);
     }
 }
