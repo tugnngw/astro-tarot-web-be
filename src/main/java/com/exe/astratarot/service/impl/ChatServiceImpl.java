@@ -6,6 +6,7 @@ import com.exe.astratarot.domain.dto.chat.ChatMessageResponse;
 import com.exe.astratarot.domain.dto.chat.ChatResponse;
 import com.exe.astratarot.domain.dto.llm.LLMResponse;
 import com.exe.astratarot.domain.dto.llm.LLMTokenUsage;
+import com.exe.astratarot.domain.dto.llm.StreamCompletion;
 import com.exe.astratarot.domain.dto.prompt.BuildPromptRequest;
 import com.exe.astratarot.domain.dto.prompt.DrawnCardDetailDTO;
 import com.exe.astratarot.domain.entity.ChatMessage;
@@ -30,6 +31,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +40,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -132,6 +135,124 @@ public class ChatServiceImpl implements ChatService {
                 .totalTokens(totalTokens)
                 .createdAt(aiMessage.getCreatedAt())
                 .build();
+    }
+
+    @Override
+    @Async("sseTaskExecutor")
+    public void sendMessageStream(UUID readingId,
+                                  User user,
+                                  String message,
+                                  Consumer<String> onChunk,
+                                  Consumer<Throwable> onError,
+                                  Consumer<StreamResult> onComplete) {
+        try {
+            log.debug("Stream request: readingId={}, userId={}", readingId, user.getId());
+
+            // Step 1: Verify ownership
+            TarotReading reading = tarotReadingRepository.findById(readingId)
+                    .orElseThrow(() -> new EntityNotFoundException(
+                            "Tarot reading not found with ID: " + readingId));
+
+            if (!reading.getUser().getId().equals(user.getId())) {
+                throw new IllegalArgumentException("Tarot reading does not belong to user");
+            }
+
+            // Step 2: Find ChatSession
+            ChatSession session = chatSessionRepository.findByTarotReadingId(readingId)
+                    .orElseThrow(() -> new EntityNotFoundException(
+                            "No active chat session found for reading ID: " + readingId));
+
+            // Step 3: Validate session state
+            if (session.getStatus() == ChatStatus.CLOSED) {
+                throw new IllegalStateException("Chat session is closed for reading ID: " + readingId);
+            }
+
+            // Step 4: Save USER message immediately
+            ChatMessage userMessage = ChatMessage.builder()
+                    .session(session)
+                    .senderType(SenderType.USER)
+                    .content(message)
+                    .messageType(MessageType.TEXT)
+                    .build();
+            chatMessageRepository.save(userMessage);
+
+            // Step 5: Build prompt (same as non-streaming)
+            BuildPromptRequest promptRequest = buildContinuationPromptRequest(
+                    reading, user, session, message);
+
+            // Step 6: Stream from AI
+            StringBuilder fullContent = new StringBuilder();
+            aiTarotService.generateInterpretationStream(
+                    promptRequest,
+                    chunk -> {
+                        fullContent.append(chunk);
+                        onChunk.accept(chunk);
+                    },
+                    error -> {
+                        log.error("Stream error for readingId={}: {}", readingId, error.getMessage());
+                        onError.accept(error);
+                    },
+                    completion -> {
+                        // Step 7: Save AI message (only on success) and get its ID
+                        UUID messageId = saveAiResponseAndUpdate(reading, session,
+                                fullContent.toString(), completion);
+                        // Step 8: Notify caller
+                        LLMTokenUsage tokenUsage = completion.getTokenUsage();
+                        onComplete.accept(new StreamResult(
+                                session.getId(),
+                                messageId,
+                                completion.getModelInfo(),
+                                tokenUsage != null ? tokenUsage.getTotalTokens() : 0,
+                                tokenUsage != null ? tokenUsage.getPromptTokens() : 0,
+                                tokenUsage != null ? tokenUsage.getCompletionTokens() : 0
+                        ));
+                    }
+            );
+        } catch (Exception e) {
+            log.error("Stream setup failed for readingId={}: {}", readingId, e.getMessage());
+            onError.accept(e);
+        }
+    }
+
+    /**
+     * Persists the AI response after a successful stream, then updates session
+     * and reading token counts.
+     *
+     * <p>No {@code @Transactional} here — each {@code save()} is individually
+     * auto-flushed by {@code SimpleJpaRepository}.  The caller
+     * ({@link #sendMessageStream}) runs without an open transaction because
+     * holding one across a Gemini streaming call would exhaust the connection
+     * pool under concurrent streams.
+     *
+     * @return the ID of the persisted AI message
+     */
+    protected UUID saveAiResponseAndUpdate(TarotReading reading, ChatSession session,
+                                           String content, StreamCompletion completion) {
+        // Persist AI message
+        ChatMessage aiMessage = ChatMessage.builder()
+                .session(session)
+                .senderType(SenderType.AI)
+                .content(content)
+                .messageType(MessageType.TEXT)
+                .build();
+        chatMessageRepository.save(aiMessage);
+
+        // Update session timestamp
+        session.setLastMessageAt(Instant.now());
+        chatSessionRepository.save(session);
+
+        // Update reading token count
+        int newTokens = completion.getTokenUsage() != null
+                ? completion.getTokenUsage().getTotalTokens() : 0;
+        int currentTokens = reading.getTotalTokensUsed() != null
+                ? reading.getTotalTokensUsed() : 0;
+        reading.setTotalTokensUsed(currentTokens + newTokens);
+        tarotReadingRepository.save(reading);
+
+        log.info("Stream persisted: readingId={}, tokens={}",
+                reading.getId(), newTokens);
+
+        return aiMessage.getId();
     }
 
     @Override
