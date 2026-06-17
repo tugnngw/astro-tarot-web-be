@@ -57,6 +57,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       GEMINI_API_ENDPOINT: ${GEMINI_API_ENDPOINT}
       ASTRO_ENCRYPTION_KEY: ${ASTRO_ENCRYPTION_KEY}
+      JAVA_TOOL_OPTIONS: >
+        -Djavax.net.debug=ssl,handshake
     depends_on:
       postgres:
         condition: service_healthy

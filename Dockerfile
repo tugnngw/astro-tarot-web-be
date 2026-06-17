@@ -8,6 +8,7 @@ RUN mvn clean package -DskipTests
 
 # Runtime stage
 FROM eclipse-temurin:21-jre-alpine
+RUN apk add --no-cache ca-certificates && update-ca-certificates
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 
