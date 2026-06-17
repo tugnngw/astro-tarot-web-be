@@ -114,25 +114,35 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
             return "";
         }
         StringBuilder section = new StringBuilder();
-        section.append("ASTROLOGY CONTEXT\n\n");
+        section.append("=== ASTROLOGY CONTEXT (Supporting Context) ===\n\n");
 
-        // Natal Chart Foundation
+        // ——— Natal Chart Foundation ———
         section.append("Natal Chart:\n");
-        section.append("- Birth: ").append(astrology.getBirthDate());
+        section.append("  • Birth Date: ").append(astrology.getBirthDate());
         if (astrology.getBirthTime() != null) {
             section.append(" at ").append(astrology.getBirthTime());
         }
-        section.append(" in ").append(astrology.getBirthPlace()).append("\n");
-
-        // Primary Signs
-        section.append("- Sun in ").append(astrology.getSunSign());
-        if (astrology.getMoonSign() != null) {
-            section.append(", Moon in ").append(astrology.getMoonSign());
+        if (astrology.getBirthPlace() != null && !astrology.getBirthPlace().isBlank()) {
+             section.append(" in ").append(astrology.getBirthPlace()).append("\n");
+        } else {
+            section.append("\n");
         }
-        if (astrology.getRisingSign() != null) {
-            section.append(", Rising in ").append(astrology.getRisingSign());
+
+        // ——— Primary Zodiac Data ———
+        section.append("  • Sun: ").append(astrology.getSunSign());
+        if (astrology.getElement() != null && !astrology.getElement().isBlank()) {
+            section.append(" (").append(astrology.getElement()).append(")");
+        }
+        if (astrology.getModality() != null && !astrology.getModality().isBlank()) {
+            section.append(" — ").append(astrology.getModality()).append(" modality");
         }
         section.append("\n");
+        if (astrology.getMoonSign() != null) {
+            section.append("  • Moon: ").append(astrology.getMoonSign()).append("\n");
+        }
+        if (astrology.getRisingSign() != null) {
+            section.append("  • Rising: ").append(astrology.getRisingSign()).append("\n");
+        }
 
         // Natal Planet Positions
         if (astrology.getNatalPlanetPositions() != null && !astrology.getNatalPlanetPositions().isEmpty()) {
@@ -179,6 +189,15 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
                         .append(" (orb: ").append(aspect.getOrb()).append("°)\n");
             }
         }
+
+        // ——— Personalization Guidance ———
+        section.append("\nHOW TO USE THIS ASTROLOGY DATA:\n");
+        section.append("• Sun sign → core identity and ego drives.\n");
+        section.append("• Element (Fire/Earth/Air/Water) → emotional and behavioral style.\n");
+        section.append("• Modality (Cardinal/Fixed/Mutable) → approach to action and change.\n");
+        section.append("Let these traits subtly colour the card interpretation.\n");
+        section.append("Do NOT make deterministic predictions based solely on astrology.\n");
+        section.append("Reminder: Tarot cards are the primary source of insight. Astrology enriches, it does not override.\n");
 
         section.append("\n---\n\n");
         return section.toString();

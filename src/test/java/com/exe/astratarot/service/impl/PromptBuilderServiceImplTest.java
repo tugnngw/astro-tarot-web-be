@@ -62,7 +62,6 @@ class PromptBuilderServiceImplTest {
         assertTrue(prompt.contains("The Fool"), "Prompt should contain first card");
         assertTrue(prompt.contains("The Magician"), "Prompt should contain second card");
         assertTrue(prompt.contains("ASTROLOGY CONTEXT"), "Prompt should contain ASTROLOGY CONTEXT header");
-        assertTrue(prompt.contains("not available"), "Prompt should indicate astrology context is not available");
     }
 
     @Test
@@ -93,6 +92,8 @@ class PromptBuilderServiceImplTest {
                 .birthTime(LocalTime.of(14, 30))
                 .birthPlace("New York, NY")
                 .sunSign("Aries")
+                .element("Fire")
+                .modality("Cardinal")
                 .moonSign("Libra")
                 .risingSign("Cancer")
                 .natalPlanetPositions(natalPlanets)
@@ -117,6 +118,9 @@ class PromptBuilderServiceImplTest {
         assertTrue(prompt.contains("1990-03-21"), "Prompt should contain birth date");
         assertTrue(prompt.contains("New York, NY"), "Prompt should contain birth place");
         assertTrue(prompt.contains("Aries"), "Prompt should contain sun sign");
+        assertTrue(prompt.contains("Fire"), "Prompt should contain element");
+        assertTrue(prompt.contains("Cardinal"), "Prompt should contain modality");
+        assertTrue(prompt.contains("HOW TO USE THIS ASTROLOGY DATA"), "Prompt should contain personalization guidance");
         assertTrue(prompt.contains("Libra"), "Prompt should contain moon sign");
         assertTrue(prompt.contains("Cancer"), "Prompt should contain rising sign");
         assertTrue(prompt.contains("TAROT CARDS"), "Prompt should contain TAROT CARDS section");

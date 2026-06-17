@@ -89,6 +89,25 @@ public class AstrologyContextDTO {
     private String sunSign;
 
     /**
+     * Astrological element derived from sun sign.
+     * One of: "Fire" (Aries, Leo, Sagittarius), "Earth" (Taurus, Virgo, Capricorn),
+     *         "Air" (Gemini, Libra, Aquarius), "Water" (Cancer, Scorpio, Pisces)
+     * Calculated deterministically from birth date in MVP.
+     * May be null in future if Swiss Ephemeris calculations differ.
+     */
+    private String element;
+
+    /**
+     * Astrological modality derived from sun sign.
+     * One of: "Cardinal" (Aries, Cancer, Libra, Capricorn),
+     *         "Fixed" (Taurus, Leo, Scorpio, Aquarius),
+     *         "Mutable" (Gemini, Virgo, Sagittarius, Pisces)
+     * Calculated deterministically from birth date in MVP.
+     * May be null in future if Swiss Ephemeris calculations differ.
+     */
+    private String modality;
+
+    /**
      * Moon sign at birth (e.g., "Libra", "Scorpio", "Sagittarius").
      * Represents emotional nature and inner self.
      * Requires exact birth time for accuracy.

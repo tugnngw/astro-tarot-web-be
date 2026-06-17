@@ -1,5 +1,6 @@
 package com.exe.astratarot.service.impl;
 
+import com.exe.astratarot.domain.dto.astrology.AstrologyContextDTO;
 import com.exe.astratarot.domain.dto.llm.LLMResponse;
 import com.exe.astratarot.domain.dto.llm.LLMTokenUsage;
 import com.exe.astratarot.domain.dto.prompt.BuildPromptRequest;
@@ -17,6 +18,7 @@ import com.exe.astratarot.repository.TarotCardRepository;
 import com.exe.astratarot.repository.TarotReadingRepository;
 import com.exe.astratarot.repository.UserRepository;
 import com.exe.astratarot.service.AITarotService;
+import com.exe.astratarot.service.AstrologyContextService;
 import com.exe.astratarot.service.TarotDrawingService;
 import com.exe.astratarot.service.TarotReadingService;
 import jakarta.persistence.EntityNotFoundException;
@@ -54,6 +56,7 @@ public class TarotReadingServiceImpl implements TarotReadingService {
     private final ReadingCardRepository readingCardRepository;
     private final TarotDrawingService tarotDrawingService;
     private final AITarotService aiTarotService;
+    private final AstrologyContextService astrologyContextService;
 
     @Override
     public TarotReadingResultDTO initiateAiTarotReading(User user, StartTarotReadingRequest request) {
@@ -68,10 +71,14 @@ public class TarotReadingServiceImpl implements TarotReadingService {
         // Step 3: Enrich CardDrawDTO → DrawnCardDetailDTO with full card metadata
         List<DrawnCardDetailDTO> enrichedCards = enrichCardDetails(drawnCardDtos);
 
-        // Step 4: Build prompt and call Gemini (NO transaction)
+        // Step 4: Fetch astrology context (NEW - MVP integration)
+        java.util.Optional<AstrologyContextDTO> astrologyContext =
+                astrologyContextService.getAstrologyContext(user.getId());
+
+        // Step 5: Build prompt and call Gemini (NO transaction)
         BuildPromptRequest promptRequest = BuildPromptRequest.builder()
                 .userQuestion(request.getQuestion())
-                .astrologyContext(null) // MVP: astrology context not yet available
+                .astrologyContext(astrologyContext.orElse(null))
                 .drawnCardDetails(enrichedCards)
                 .spreadName(request.getSpreadName())
                 .build();
@@ -79,7 +86,7 @@ public class TarotReadingServiceImpl implements TarotReadingService {
         LLMResponse llmResponse = aiTarotService.generateInterpretation(promptRequest);
         log.info("Gemini interpretation received. Model: {}", llmResponse.getModelInfo());
 
-        // Step 5: Persist reading and cards (inside @Transactional)
+        // Step 6: Persist reading and cards (inside @Transactional)
         return saveReadingAndReturnResult(user, request, enrichedCards, llmResponse);
     }
 
