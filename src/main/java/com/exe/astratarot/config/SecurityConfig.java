@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -33,7 +34,7 @@ public class SecurityConfig {
     private final UserDetailsService userDetailsService;
     private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
 
-    @Value("${app.frontend-url}")
+    @Value("${app.frontend-url:http://localhost:8081}")
     private String frontendUrl;
 
     @Bean
@@ -41,20 +42,14 @@ public class SecurityConfig {
         return http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))  // <-- Đổi thành STATELESS
                 .authenticationProvider(authenticationProvider())
                 .authorizeHttpRequests(auth -> auth
-                         .requestMatchers(
-                                 "/api/auth/**",
-                                 "/auth/**",
-                                 "/api/auth/oauth/exchange",
-                                 "/oauth2/**",
-                                 "/login/oauth2/**",
-                                 "/user/email/verify",
-                                 "/api/v1/readers/apply",
-                                 "/swagger-ui/**",
-                                 "/v3/api-docs/**"
-                         ).permitAll()
+                        // Cho phép tất cả OPTIONS requests (preflight)
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // Cho phép auth endpoints
+                        .requestMatchers("/auth/**", "/oauth2/**", "/ping", "/test").permitAll()
+                        // Tất cả request khác cần auth
                         .anyRequest().authenticated()
                 )
                 .oauth2Login(oauth2 -> oauth2.successHandler(oAuth2LoginSuccessHandler))
@@ -66,10 +61,19 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of(frontendUrl));
+        // Cho phép cả localhost và IP
+        configuration.setAllowedOrigins(List.of(
+                "http://localhost:8081",
+                "http://127.0.0.1:8081",
+                "http://localhost:8080",
+                "http://127.0.0.1:8080"
+        ));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type"));
-        configuration.setAllowCredentials(false);
+        configuration.setAllowedHeaders(List.of("*"));  // Cho phép tất cả headers
+        configuration.setExposedHeaders(List.of("Authorization"));  // Expose Authorization header
+        configuration.setAllowCredentials(true);  // Cho phép credentials
+        configuration.setMaxAge(3600L);  // Cache preflight 1 giờ
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
@@ -77,7 +81,8 @@ public class SecurityConfig {
 
     @Bean
     public AuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider.setUserDetailsService(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder());
         return provider;
     }
