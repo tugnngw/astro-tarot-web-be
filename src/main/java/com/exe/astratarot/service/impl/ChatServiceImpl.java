@@ -24,6 +24,7 @@ import com.exe.astratarot.repository.TarotReadingRepository;
 import com.exe.astratarot.service.AITarotService;
 import com.exe.astratarot.service.AstrologyContextService;
 import com.exe.astratarot.service.ChatService;
+import com.exe.astratarot.service.TokenEstimatorService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -60,6 +61,10 @@ public class ChatServiceImpl implements ChatService {
     private final ReadingCardRepository readingCardRepository;
     private final AITarotService aiTarotService;
     private final AstrologyContextService astrologyContextService;
+    private final TokenEstimatorService tokenEstimatorService;
+
+    @org.springframework.beans.factory.annotation.Value("${ai.chat.max-context-tokens:6000}")
+    private int maxContextTokens;
 
     @Override
     @Transactional
@@ -299,9 +304,16 @@ public class ChatServiceImpl implements ChatService {
     /**
      * Builds a continuation prompt request using the reading context, conversation history,
      * original question, astrology context, and the follow-up message.
+     *
+     * Implements token budget management Phase 1:
+     * - Loads messages newest first
+     * - Keeps adding messages until estimated tokens reach budget
+     * - Stops before exceeding maxContextTokens
+     * - Reverses order before formatting (so latest messages appear at end)
+     * - Preserves original question, astrology context, card details (no trimming)
      */
     private BuildPromptRequest buildContinuationPromptRequest(TarotReading reading, User user, ChatSession session, String message) {
-        // Reconstruct card details from the reading
+        // Step 1: Reconstruct card details from the reading (NOT trimmed)
         List<ReadingCard> readingCards = readingCardRepository.findByReading(reading);
         List<DrawnCardDetailDTO> cardDetails = new ArrayList<>();
         for (ReadingCard rc : readingCards) {
@@ -317,13 +329,20 @@ public class ChatServiceImpl implements ChatService {
                     .build());
         }
 
-        // Load conversation history (last 20 messages, newest first, then reverse)
-        Pageable historyPageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<ChatMessage> historyMessages = chatMessageRepository
+        // Step 2: Load conversation history with token budgeting
+        // Load all messages newest first, then trim by token budget
+        Pageable historyPageable = PageRequest.of(0, 100, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<ChatMessage> allMessages = chatMessageRepository
                 .findBySessionIdOrderByCreatedAtAsc(session.getId(), historyPageable);
-        String conversationHistory = formatConversationHistory(historyMessages.getContent());
 
-        // Fetch astrology context (restored from null in Sprint 1)
+        // Step 3: Trim conversation history to stay within token budget
+        String conversationHistory = trimConversationHistoryByTokenBudget(
+                allMessages.getContent(), maxContextTokens);
+
+        log.debug("Token budget: maxContextTokens={}, conversationHistoryTokens={}",
+                maxContextTokens, tokenEstimatorService.estimateTokens(conversationHistory));
+
+        // Step 4: Fetch astrology context (NOT trimmed, preserved as-is)
         Optional<AstrologyContextDTO> astrologyContext =
                 astrologyContextService.getAstrologyContext(user.getId());
 
@@ -335,6 +354,57 @@ public class ChatServiceImpl implements ChatService {
                 .drawnCardDetails(cardDetails)
                 .spreadName("Continuation")
                 .build();
+    }
+
+    /**
+     * Trims conversation history to stay within token budget.
+     *
+     * Algorithm:
+     * 1. Load messages newest first (already DESC ordered)
+     * 2. Add messages one-by-one (newest first) until token budget exceeded
+     * 3. Stop BEFORE exceeding maxTokens
+     * 4. Reverse the selected messages to chronological order (oldest first)
+     * 5. Format and return
+     *
+     * This preserves the most recent context (latest messages) while staying within budget.
+     *
+     * @param allMessages messages in DESC order (newest first)
+     * @param maxTokens maximum tokens allowed for conversation history
+     * @return formatted conversation history string, or null if no messages fit budget
+     */
+    private String trimConversationHistoryByTokenBudget(List<ChatMessage> allMessages, int maxTokens) {
+        if (allMessages == null || allMessages.isEmpty()) {
+            return null;
+        }
+
+        List<ChatMessage> selectedMessages = new ArrayList<>();
+        int currentTokens = 0;
+
+        // Add messages newest-first until budget exceeded
+        for (ChatMessage msg : allMessages) {
+            int messageTokens = tokenEstimatorService.estimateTokens(msg.getContent()) + 5; // +5 for formatting
+
+            if (currentTokens + messageTokens > maxTokens) {
+                // Budget would be exceeded, stop here
+                log.debug("Token budget exceeded. Selected {} messages with {} tokens (budget: {})",
+                        selectedMessages.size(), currentTokens, maxTokens);
+                break;
+            }
+
+            selectedMessages.add(msg);
+            currentTokens += messageTokens;
+        }
+
+        if (selectedMessages.isEmpty()) {
+            log.warn("No messages fit within token budget of {}", maxTokens);
+            return null;
+        }
+
+        // Reverse to chronological order (oldest first, newest last)
+        java.util.Collections.reverse(selectedMessages);
+
+        // Format as conversation history
+        return formatConversationHistory(selectedMessages);
     }
 
     /**
@@ -356,6 +426,7 @@ public class ChatServiceImpl implements ChatService {
             String senderLabel = msg.getSenderType() == SenderType.USER ? "USER" : "AI";
             sb.append(senderLabel).append(": ").append(msg.getContent()).append("\n\n");
         }
+        log.debug("Formatted {} messages for conversation history.", messages.size());
         return sb.toString().stripTrailing();
     }
 
