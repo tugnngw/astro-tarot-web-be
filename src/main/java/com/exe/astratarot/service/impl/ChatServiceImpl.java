@@ -25,6 +25,7 @@ import com.exe.astratarot.service.AITarotService;
 import com.exe.astratarot.service.AstrologyContextService;
 import com.exe.astratarot.service.ChatService;
 import com.exe.astratarot.service.TokenEstimatorService;
+import com.exe.astratarot.service.AIUsageTrackingService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -62,6 +63,7 @@ public class ChatServiceImpl implements ChatService {
     private final AITarotService aiTarotService;
     private final AstrologyContextService astrologyContextService;
     private final TokenEstimatorService tokenEstimatorService;
+    private final AIUsageTrackingService aiUsageTrackingService;
 
     @org.springframework.beans.factory.annotation.Value("${ai.chat.max-context-tokens:6000}")
     private int maxContextTokens;
@@ -128,6 +130,20 @@ public class ChatServiceImpl implements ChatService {
 
         log.info("Continuation saved: readingId={}, messageId={}, tokens={}",
                 readingId, aiMessage.getId(), totalTokens);
+
+        // Step 8b: Log AI usage
+        try {
+            aiUsageTrackingService.logChatContinuation(
+                    user,
+                    session,
+                    llmResponse.getModelInfo() != null ? "Gemini" : "unknown",
+                    llmResponse.getModelInfo() != null ? llmResponse.getModelInfo() : "unknown",
+                    llmResponse.getTokenUsage(),
+                    null
+            );
+        } catch (Exception usageEx) {
+            log.warn("Failed to log AI usage for chat continuation blocking", usageEx);
+        }
 
         // Step 9: Build response
         return ChatResponse.builder()
@@ -201,7 +217,22 @@ public class ChatServiceImpl implements ChatService {
                         // Step 7: Save AI message (only on success) and get its ID
                         UUID messageId = saveAiResponseAndUpdate(reading, session,
                                 fullContent.toString(), completion);
-                        // Step 8: Notify caller
+
+                        // Step 8: Log AI usage
+                        try {
+                            aiUsageTrackingService.logChatContinuation(
+                                    user,
+                                    session,
+                                    completion.getModelInfo() != null ? "Gemini" : "unknown",
+                                    completion.getModelInfo() != null ? completion.getModelInfo() : "unknown",
+                                    completion.getTokenUsage(),
+                                    null
+                            );
+                        } catch (Exception usageEx) {
+                            log.warn("Failed to log AI usage for chat continuation", usageEx);
+                        }
+
+                        // Step 9: Notify caller
                         LLMTokenUsage tokenUsage = completion.getTokenUsage();
                         onComplete.accept(new StreamResult(
                                 session.getId(),

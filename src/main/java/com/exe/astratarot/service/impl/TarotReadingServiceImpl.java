@@ -25,6 +25,7 @@ import com.exe.astratarot.repository.TarotCardRepository;
 import com.exe.astratarot.repository.TarotReadingRepository;
 import com.exe.astratarot.repository.UserRepository;
 import com.exe.astratarot.service.AITarotService;
+import com.exe.astratarot.service.AIUsageTrackingService;
 import com.exe.astratarot.service.AstrologyContextService;
 import com.exe.astratarot.service.TarotDrawingService;
 import com.exe.astratarot.service.TarotReadingService;
@@ -68,6 +69,7 @@ public class TarotReadingServiceImpl implements TarotReadingService {
     private final AstrologyContextService astrologyContextService;
     private final ChatSessionRepository chatSessionRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final AIUsageTrackingService aiUsageTrackingService;
 
     @Override
     public TarotReadingResultDTO initiateAiTarotReading(User user, StartTarotReadingRequest request) {
@@ -98,7 +100,23 @@ public class TarotReadingServiceImpl implements TarotReadingService {
         log.info("Gemini interpretation received. Model: {}", llmResponse.getModelInfo());
 
         // Step 6: Persist reading and cards (inside @Transactional)
-        return saveReadingAndReturnResult(user, request, enrichedCards, llmResponse);
+        TarotReadingResultDTO result = saveReadingAndReturnResult(user, request, enrichedCards, llmResponse);
+
+        // Log AI Usage (after reading is persisted)
+        // Fetch the actual TarotReading entity using the ID from the result DTO
+        tarotReadingRepository.findById(result.getReadingId()).ifPresent(reading ->
+            aiUsageTrackingService.logReadingGeneration(
+                    user,
+                    reading,
+                    llmResponse.getModelInfo() != null ? "Gemini" : "unknown",
+                    llmResponse.getModelInfo() != null ? llmResponse.getModelInfo() : "unknown",
+                    llmResponse.getTokenUsage(),
+                    null // Latency not available from LLMResponse
+            )
+        );
+
+        // Build and return result DTO
+        return result;
     }
 
     /**
@@ -125,6 +143,16 @@ public class TarotReadingServiceImpl implements TarotReadingService {
                 .totalTokensUsed(totalTokens)
                 .sessionType(SessionType.AI)
                 .build());
+
+        // Log AI Usage (after reading is persisted)
+        aiUsageTrackingService.logReadingGeneration(
+                user,
+                reading,
+                llmResponse.getModelInfo() != null ? "Gemini" : "unknown",
+                llmResponse.getModelInfo() != null ? llmResponse.getModelInfo() : "unknown",
+                llmResponse.getTokenUsage(),
+                null // Latency not available from LLMResponse
+        );
 
         // Create and save ReadingCard entities
         List<ReadingCard> readingCards = enrichedCards.stream()

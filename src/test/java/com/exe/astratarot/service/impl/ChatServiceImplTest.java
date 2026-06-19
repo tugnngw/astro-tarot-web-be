@@ -23,6 +23,7 @@ import com.exe.astratarot.repository.TarotReadingRepository;
 import com.exe.astratarot.service.AITarotService;
 import com.exe.astratarot.service.AstrologyContextService;
 import com.exe.astratarot.service.ChatService;
+import com.exe.astratarot.service.AIUsageTrackingService;
 import com.exe.astratarot.service.TokenEstimatorService;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,6 +66,9 @@ class ChatServiceImplTest {
 
     @Mock
     private TokenEstimatorService tokenEstimatorService;
+
+    @Mock
+    private AIUsageTrackingService aiUsageTrackingService;
 
     @InjectMocks
     private ChatServiceImpl chatService;

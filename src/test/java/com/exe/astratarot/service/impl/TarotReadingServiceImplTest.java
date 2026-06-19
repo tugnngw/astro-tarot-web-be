@@ -23,6 +23,7 @@ import com.exe.astratarot.repository.TarotCardRepository;
 import com.exe.astratarot.repository.TarotReadingRepository;
 import com.exe.astratarot.repository.UserRepository;
 import com.exe.astratarot.service.AITarotService;
+import com.exe.astratarot.service.AIUsageTrackingService;
 import com.exe.astratarot.service.AstrologyContextService;
 import com.exe.astratarot.service.TarotDrawingService;
 import jakarta.persistence.EntityNotFoundException;
@@ -63,6 +64,9 @@ class TarotReadingServiceImplTest {
     private ChatSessionRepository chatSessionRepository;
     @Mock
     private ChatMessageRepository chatMessageRepository;
+
+    @Mock
+    private AIUsageTrackingService aiUsageTrackingService;
 
     @InjectMocks
     private TarotReadingServiceImpl tarotReadingService;
