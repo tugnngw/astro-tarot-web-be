@@ -32,7 +32,7 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final com.exe.astratarot.security.AuthRateLimitFilter authRateLimitFilter;
     private final UserDetailsService userDetailsService;
-    private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
+//    private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
 
     @Value("${app.frontend-url:http://localhost:8081}")
     private String frontendUrl;
@@ -49,15 +49,15 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // Cho phép auth endpoints
                         .requestMatchers("/auth/**",
-                                        "/oauth2/**",
-                                        "/ping",
-                                        "/test",
+                                "/oauth2/**",
+                                "/ping",
+                                "/test",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**").permitAll()
                         // Tất cả request khác cần auth
                         .anyRequest().authenticated()
                 )
-                .oauth2Login(oauth2 -> oauth2.successHandler(oAuth2LoginSuccessHandler))
+//                .oauth2Login(oauth2 -> oauth2.successHandler(oAuth2LoginSuccessHandler))
                 .addFilterBefore(authRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
@@ -67,12 +67,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         // Cho phép cả localhost và IP
-        configuration.setAllowedOrigins(List.of(
-                "http://localhost:8081",
-                "http://127.0.0.1:8081",
-                "http://localhost:8080",
-                "http://127.0.0.1:8080"
-        ));
+        configuration.setAllowedOriginPatterns(List.of("*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));  // Cho phép tất cả headers
         configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));  // Expose Authorization header

@@ -10,6 +10,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -60,4 +61,20 @@ public class BuildPromptRequest {
      * If null or blank, a generic description will be used in the prompt.
      */
     private String spreadName;
+
+    /**
+     * The user's original question from the initial reading (optional).
+     * Included in conversation prompts so the AI remembers the original context.
+     * Null for initial readings; populated for follow-up chat.
+     */
+    private String originalQuestion;
+
+    /**
+     * Formatted conversation history string (optional).
+     * Contains previous messages as "USER: ...\\nAI: ...\\n" pairs.
+     * Prepend this before the user question in conversation prompts.
+     * Null or empty for initial readings; populated for follow-up chat.
+     */
+    @Builder.Default
+    private String conversationHistory = null;
 }

@@ -7,17 +7,23 @@ import com.exe.astratarot.domain.dto.prompt.DrawnCardDetailDTO;
 import com.exe.astratarot.domain.dto.reader.CardDrawDTO;
 import com.exe.astratarot.domain.dto.reading.StartTarotReadingRequest;
 import com.exe.astratarot.domain.dto.reading.TarotReadingResultDTO;
+import com.exe.astratarot.domain.entity.ChatMessage;
+import com.exe.astratarot.domain.entity.ChatSession;
 import com.exe.astratarot.domain.entity.ReadingCard;
 import com.exe.astratarot.domain.entity.TarotCard;
 import com.exe.astratarot.domain.entity.TarotReading;
 import com.exe.astratarot.domain.entity.User;
+import com.exe.astratarot.domain.enums.ChatStatus;
 import com.exe.astratarot.domain.enums.SessionType;
 import com.exe.astratarot.exception.LLMProviderException;
+import com.exe.astratarot.repository.ChatMessageRepository;
+import com.exe.astratarot.repository.ChatSessionRepository;
 import com.exe.astratarot.repository.ReadingCardRepository;
 import com.exe.astratarot.repository.TarotCardRepository;
 import com.exe.astratarot.repository.TarotReadingRepository;
 import com.exe.astratarot.repository.UserRepository;
 import com.exe.astratarot.service.AITarotService;
+import com.exe.astratarot.service.AIUsageTrackingService;
 import com.exe.astratarot.service.AstrologyContextService;
 import com.exe.astratarot.service.TarotDrawingService;
 import jakarta.persistence.EntityNotFoundException;
@@ -54,6 +60,13 @@ class TarotReadingServiceImplTest {
     private AITarotService aiTarotService;
     @Mock
     private AstrologyContextService astrologyContextService;
+    @Mock
+    private ChatSessionRepository chatSessionRepository;
+    @Mock
+    private ChatMessageRepository chatMessageRepository;
+
+    @Mock
+    private AIUsageTrackingService aiUsageTrackingService;
 
     @InjectMocks
     private TarotReadingServiceImpl tarotReadingService;
@@ -69,6 +82,19 @@ class TarotReadingServiceImplTest {
         // to maintain existing test behavior
         when(astrologyContextService.getAstrologyContext(any(UUID.class)))
                 .thenReturn(Optional.empty());
+
+        // Mock ChatSessionRepository to return empty by default (no existing session)
+        // This forces creation of new session in tests
+        when(chatSessionRepository.findByTarotReadingIdAndSessionType(any(UUID.class), any(SessionType.class)))
+                .thenReturn(Optional.empty());
+
+        // Mock ChatSessionRepository.save to return the session passed in
+        when(chatSessionRepository.save(any(ChatSession.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // Mock ChatMessageRepository.save to return the message passed in
+        when(chatMessageRepository.save(any(ChatMessage.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test

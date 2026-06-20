@@ -45,11 +45,19 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
         } else {
             prompt.append(buildAstrologyContextUnavailable());
         }
-
-        // Section 4: Tarot Cards
         prompt.append(buildTarotCardsSection(request.getDrawnCardDetails()));
 
-        // Section 5: User Question
+        // Section 5: Conversation History (follow-up only)
+        if (request.getConversationHistory() != null && !request.getConversationHistory().isBlank()) {
+            prompt.append(buildConversationHistorySection(request.getConversationHistory()));
+        }
+
+        // Section 5b: Original Question (follow-up only)
+        if (request.getOriginalQuestion() != null && !request.getOriginalQuestion().isBlank()) {
+            prompt.append(buildOriginalQuestionSection(request.getOriginalQuestion()));
+        }
+
+        // Section 6: User Question
         prompt.append(buildUserQuestionSection(request.getUserQuestion()));
 
         // Section 6: Response Instructions
@@ -234,6 +242,27 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
     private String buildUserQuestionSection(String userQuestion) {
         return "USER QUESTION\n" +
                 userQuestion + "\n\n" +
+                "---\n\n";
+    }
+
+    /**
+     * Builds the conversation history section.
+     * Contains previous USER/AI message pairs for follow-up context.
+     * Latest messages at the bottom. Empty for initial readings.
+     */
+    private String buildConversationHistorySection(String conversationHistory) {
+        return "CONVERSATION HISTORY\n" +
+                conversationHistory + "\n" +
+                "---\n\n";
+    }
+
+    /**
+     * Builds the original question section.
+     * Preserves the user's initial reading question for context.
+     */
+    private String buildOriginalQuestionSection(String originalQuestion) {
+        return "ORIGINAL QUESTION\n" +
+                originalQuestion + "\n\n" +
                 "---\n\n";
     }
 
