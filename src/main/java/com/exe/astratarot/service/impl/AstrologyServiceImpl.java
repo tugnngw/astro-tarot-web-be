@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -75,6 +76,7 @@ public class AstrologyServiceImpl implements AstrologyService {
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = "astrology-context", key = "#userId")
     public AstrologyProfileDTO createProfile(UUID userId, CreateAstrologyProfileRequest request) {
         UserAstrologicalData entity = new UserAstrologicalData();
         entity.setUser(User.builder().id(userId).build()); // Set user via ID
@@ -122,6 +124,7 @@ public class AstrologyServiceImpl implements AstrologyService {
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = "astrology-context", key = "#userId")
     public AstrologyProfileDTO updateProfile(UUID userId, UUID profileId, UpdateAstrologyProfileRequest request) {
         UserAstrologicalData entity = userAstrologicalDataRepository.findByUserIdAndId(userId, profileId)
                 .orElseThrow(() -> new IllegalArgumentException("Profile not found for user or ID mismatch."));
@@ -153,6 +156,7 @@ public class AstrologyServiceImpl implements AstrologyService {
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = "astrology-context", key = "#userId")
     public void deleteProfile(UUID userId, UUID profileId) {
         // Check existence before deletion to provide a specific error message
         userAstrologicalDataRepository.findByUserIdAndId(userId, profileId)

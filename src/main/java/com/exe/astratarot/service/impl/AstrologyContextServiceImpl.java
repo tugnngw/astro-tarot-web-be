@@ -9,6 +9,7 @@ import com.exe.astratarot.util.ZodiacCalculator;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -27,6 +28,14 @@ import java.util.UUID;
  * MVP Scope: Only birth data and deterministic metadata are populated.
  * Future fields (moon sign, rising sign, planetary positions, aspects) are NULL.
  *
+ * Caching:
+ * - Cache name: astrology-context
+ * - Cache key: userId
+ * - TTL: 24 hours
+ * - Serialization: JSON (no Java native serialization)
+ * - Cache miss: DB → build context → cache → return
+ * - Cache hit: Redis → return (no DB access)
+ *
  * Failure Handling:
  * - No primary profile → returns Optional.empty() (reading continues without context)
  * - Decryption failure → logs warning, returns Optional.empty() (reading continues)
@@ -41,6 +50,7 @@ public class AstrologyContextServiceImpl implements AstrologyContextService {
     private final DataEncryptionService dataEncryptionService;
 
     @Override
+    @Cacheable(cacheNames = "astrology-context", key = "#userId", unless = "#result == null || #result.isEmpty()")
     public Optional<AstrologyContextDTO> getAstrologyContext(UUID userId) {
         if (userId == null) {
             log.warn("Cannot fetch astrology context: userId is null");
