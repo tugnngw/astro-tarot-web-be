@@ -1,6 +1,5 @@
 package com.exe.astratarot.security;
 
-import com.exe.astratarot.exception.InvalidTokenException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,36 +25,61 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final UserDetailsService userDetailsService;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
-            throws ServletException, IOException {
+    protected void doFilterInternal(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            FilterChain filterChain
+    ) throws ServletException, IOException {
 
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            chain.doFilter(request, response);
-            return;
-        }
-
-        String token = authHeader.substring(7);
+        // ✅ Log request path
+        log.info("🔍 Processing request: {} {}", request.getMethod(), request.getRequestURI());
 
         try {
-            String subject = jwtService.extractSubjectSafely(token);
+            final String authHeader = request.getHeader("Authorization");
 
-            if (subject != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                UserDetails userDetails = userDetailsService.loadUserByUsername(subject);
-                if (jwtService.validateToken(token, userDetails)
-                        && userDetails.isEnabled()
-                        && userDetails.isAccountNonLocked()) {
-                    UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                            userDetails, null, userDetails.getAuthorities());
-                    auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(auth);
-                }
+            log.info("🔑 Auth header: {}", authHeader != null ? "Present" : "Missing");
+
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                log.info("❌ No Bearer token found, continuing filter chain");
+                filterChain.doFilter(request, response);
+                return;
             }
-        } catch (InvalidTokenException | IllegalArgumentException e) {
-            log.debug("JWT rejected on request [{}]: {}", request.getRequestURI(), e.getMessage());
-            SecurityContextHolder.clearContext();
-        }
 
-        chain.doFilter(request, response);
+            final String jwt = authHeader.substring(7);
+            log.info("🔑 JWT token: {}...", jwt.substring(0, Math.min(jwt.length(), 30)));
+
+            try {
+                final String username = jwtService.extractUsername(jwt);
+                log.info("👤 Extracted username: {}", username);
+
+                if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                    UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                    log.info("👤 Loaded user details: {}", userDetails.getUsername());
+
+                    if (jwtService.isTokenValid(jwt, userDetails)) {
+                        UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                                userDetails,
+                                null,
+                                userDetails.getAuthorities()
+                        );
+                        authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        SecurityContextHolder.getContext().setAuthentication(authToken);
+                        log.info("✅ Authentication set for user: {}", username);
+                    } else {
+                        log.warn("⚠️ Invalid JWT token for user: {}", username);
+                    }
+                } else {
+                    log.warn("⚠️ Username null or authentication already exists");
+                }
+            } catch (Exception e) {
+                log.error("❌ Error processing JWT: {}", e.getMessage(), e);
+            }
+
+            filterChain.doFilter(request, response);
+
+        } catch (Exception e) {
+            log.error("❌ JWT authentication error: {}", e.getMessage(), e);
+            filterChain.doFilter(request, response);
+        }
     }
 }

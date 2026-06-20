@@ -1,7 +1,7 @@
 package com.exe.astratarot.config;
 
 import com.exe.astratarot.security.JwtAuthenticationFilter;
-import com.exe.astratarot.security.OAuth2LoginSuccessHandler;
+import com.exe.astratarot.security.AuthRateLimitFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -30,9 +30,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
-    private final com.exe.astratarot.security.AuthRateLimitFilter authRateLimitFilter;
+    private final AuthRateLimitFilter authRateLimitFilter;
     private final UserDetailsService userDetailsService;
-    private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
 
     @Value("${app.frontend-url:http://localhost:8081}")
     private String frontendUrl;
@@ -42,22 +41,18 @@ public class SecurityConfig {
         return http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))  // <-- Đổi thành STATELESS
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authenticationProvider(authenticationProvider())
                 .authorizeHttpRequests(auth -> auth
-                        // Cho phép tất cả OPTIONS requests (preflight)
+                        // Cho phép OPTIONS requests (preflight)
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // Cho phép auth endpoints
-                        .requestMatchers("/auth/**",
-                                        "/oauth2/**",
-                                        "/ping",
-                                        "/test",
-                                "/swagger-ui/**",
-                                "/v3/api-docs/**").permitAll()
-                        // Tất cả request khác cần auth
+                        // Public endpoints - KHÔNG cần token
+                        .requestMatchers("/auth/**").permitAll()
+                        .requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers("/error").permitAll()
+                        // ✅ Tất cả API khác cần authentication
                         .anyRequest().authenticated()
                 )
-                .oauth2Login(oauth2 -> oauth2.successHandler(oAuth2LoginSuccessHandler))
                 .addFilterBefore(authRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
@@ -66,18 +61,12 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Cho phép cả localhost và IP
-        configuration.setAllowedOrigins(List.of(
-                "http://localhost:8081",
-                "http://127.0.0.1:8081",
-                "http://localhost:8080",
-                "http://127.0.0.1:8080"
-        ));
+        configuration.setAllowedOriginPatterns(List.of("*"));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("*"));  // Cho phép tất cả headers
-        configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));  // Expose Authorization header
-        configuration.setAllowCredentials(false);  // Cho phép credentials
-        configuration.setMaxAge(3600L);  // Cache preflight 1 giờ
+        configuration.setAllowedHeaders(List.of("*"));
+        configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));
+        configuration.setAllowCredentials(true);
+        configuration.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
@@ -91,7 +80,6 @@ public class SecurityConfig {
         provider.setPasswordEncoder(passwordEncoder());
         return provider;
     }
-
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {

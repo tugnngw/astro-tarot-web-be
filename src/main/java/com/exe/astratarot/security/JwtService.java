@@ -1,9 +1,9 @@
 package com.exe.astratarot.security;
 
-import com.exe.astratarot.exception.InvalidTokenException;
-import io.jsonwebtoken.*;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
-import io.jsonwebtoken.security.SignatureException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
@@ -11,102 +11,89 @@ import org.springframework.stereotype.Service;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Function;
 
 @Service
+@Slf4j
 public class JwtService {
+
     @Value("${jwt.secret}")
     private String secret;
 
-    @Value("${jwt.expiration}")
+    @Value("${jwt.expiration:86400000}")
     private Long expiration;
 
     private SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
+
+    public String extractUsername(String token) {
+        try {
+            return extractClaim(token, Claims::getSubject);
+        } catch (Exception e) {
+            log.error("Failed to extract username from token: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    public Date extractExpiration(String token) {
+        return extractClaim(token, Claims::getExpiration);
+    }
+
+    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
+        final Claims claims = extractAllClaims(token);
+        return claimsResolver.apply(claims);
+    }
+
+    private Claims extractAllClaims(String token) {
+        // ✅ Dùng parser() thay vì parserBuilder() cho jjwt 0.12.x
+        return Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+    }
+
+    private Boolean isTokenExpired(String token) {
+        Date expiration = extractExpiration(token);
+        return expiration.before(new Date());
     }
 
     public String generateToken(UserDetails userDetails) {
-        return generateToken(userDetails, Map.of());
+        Map<String, Object> claims = new HashMap<>();
+        return generateToken(userDetails, claims);
     }
 
-    public String generateToken(UserDetails userDetails, Map<String, Object> claims) {
-        String subject = userDetails instanceof CustomUserDetails customUserDetails
-                ? customUserDetails.getUser().getId().toString()
-                : userDetails.getUsername();
+    public String generateToken(UserDetails userDetails, Map<String, Object> extraClaims) {
+        Map<String, Object> claims = new HashMap<>(extraClaims);
+        return createToken(claims, userDetails.getUsername());
+    }
 
+    private String createToken(Map<String, Object> claims, String subject) {
+        // ✅ Dùng builder() mới cho jjwt 0.12.x
         return Jwts.builder()
                 .claims(claims)
                 .subject(subject)
-                .issuedAt(new Date())
+                .issuedAt(new Date(System.currentTimeMillis()))
                 .expiration(new Date(System.currentTimeMillis() + expiration))
-                .signWith(getSigningKey(), Jwts.SIG.HS256)
+                .signWith(getSigningKey())
                 .compact();
     }
 
-    public String generateTokenFromEmail(String email) {
-        return Jwts.builder()
-                .subject(email)
-                .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + expiration))
-                .signWith(getSigningKey(), Jwts.SIG.HS256)
-                .compact();
+    public Boolean isTokenValid(String token, UserDetails userDetails) {
+        try {
+            final String username = extractUsername(token);
+            return (username != null && username.equals(userDetails.getUsername()) && !isTokenExpired(token));
+        } catch (Exception e) {
+            log.error("Token validation failed: {}", e.getMessage());
+            return false;
+        }
     }
 
     public Long getExpiration() {
         return expiration;
-    }
-
-    public String extractSubject(String token) {
-        return Jwts.parser()
-                .verifyWith(getSigningKey())
-                .build()
-                .parseSignedClaims(token)
-                .getPayload()
-                .getSubject();
-    }
-
-    public String extractEmail(String token) {
-        return extractSubject(token);
-    }
-
-    public String extractSubjectSafely(String token) {
-        try {
-            return extractSubject(token);
-        } catch (ExpiredJwtException e) {
-            throw new InvalidTokenException("JWT token expired");
-        } catch (MalformedJwtException e) {
-            throw new InvalidTokenException("JWT token malformed");
-        } catch (UnsupportedJwtException e) {
-            throw new InvalidTokenException("JWT token unsupported");
-        } catch (SignatureException e) {
-            throw new InvalidTokenException("JWT signature invalid");
-        } catch (JwtException e) {
-            throw new InvalidTokenException("JWT token invalid");
-        }
-    }
-
-    public String extractEmailSafely(String token) {
-        return extractSubjectSafely(token);
-    }
-
-    public boolean validateToken(String token, UserDetails userDetails) {
-        String subject = extractSubject(token);
-        if (userDetails instanceof CustomUserDetails customUserDetails) {
-            return subject.equals(customUserDetails.getUser().getId().toString()) && !isTokenExpired(token);
-        }
-        return subject.equals(userDetails.getUsername()) && !isTokenExpired(token);
-    }
-
-    private boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
-    }
-
-    private Date extractExpiration(String token) {
-        return Jwts.parser()
-                .verifyWith(getSigningKey())
-                .build()
-                .parseSignedClaims(token)
-                .getPayload()
-                .getExpiration();
     }
 }
