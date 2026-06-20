@@ -25,7 +25,7 @@ import com.exe.astratarot.domain.entity.User;
 public interface TarotReadingService {
 
     /**
-     * Initiates a complete AI Tarot reading for the authenticated user.
+     * Initiates a complete AI Tarot reading for the authenticated user (synchronous).
      *
      * @param user The authenticated user who is requesting the reading.
      *             This is derived from the JWT context to ensure security.
@@ -33,4 +33,42 @@ public interface TarotReadingService {
      * @return TarotReadingResultDTO containing the AI interpretation and card details
      */
     TarotReadingResultDTO initiateAiTarotReading(User user, StartTarotReadingRequest request);
+
+    /**
+     * Initiates an AI Tarot reading via streaming (Server-Sent Events).
+     *
+     * <p>Streams interpretation tokens progressively as they arrive from Gemini,
+     * then persists the complete reading only after successful stream completion.
+     *
+     * <p>Events:
+     * <ul>
+     *   <li>{@code chunk} — partial interpretation text fragment
+     *   <li>{@code complete} — stream finished, reading persisted
+     *   <li>{@code error} — terminal error, reading NOT persisted
+     * </ul>
+     *
+     * @param user the authenticated user
+     * @param request Tarot reading parameters (question, numberOfCards, etc.)
+     * @param onChunk consumer for each interpretation text fragment
+     * @param onError consumer for terminal errors
+     * @param onComplete consumer for final reading metadata (reading ID, tokens, etc.)
+     */
+    void initiateAiTarotReadingStream(
+            User user,
+            StartTarotReadingRequest request,
+            java.util.function.Consumer<String> onChunk,
+            java.util.function.Consumer<Throwable> onError,
+            java.util.function.Consumer<StreamReadingResult> onComplete);
+
+    /**
+     * Metadata returned after a streaming reading is successfully persisted.
+     */
+    record StreamReadingResult(
+            java.util.UUID readingId,
+            java.util.UUID sessionId,
+            String aiInterpretation,
+            String modelUsed,
+            Integer totalTokens,
+            Integer promptTokens,
+            Integer completionTokens) {}
 }
