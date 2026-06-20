@@ -11,9 +11,14 @@ import com.exe.astratarot.domain.dto.reading.TarotReadingResultDTO;
 import com.exe.astratarot.domain.entity.TarotCard;
 import com.exe.astratarot.domain.entity.TarotReading;
 import com.exe.astratarot.domain.entity.User;
+import com.exe.astratarot.domain.enums.UserRole;
 import com.exe.astratarot.exception.LLMProviderException;
+import com.exe.astratarot.security.CustomUserDetails;
+import com.exe.astratarot.security.JwtService;
 import com.exe.astratarot.service.TarotReadingService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,8 +31,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import com.exe.astratarot.config.TestSecurityConfig;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
@@ -46,6 +58,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@ActiveProfiles("test")
+@Import(TestSecurityConfig.class)
 @Slf4j
 class AIReadingControllerTest {
 
@@ -55,11 +69,28 @@ class AIReadingControllerTest {
     @MockBean
     private TarotReadingService tarotReadingService;
 
+    @MockBean
+    private JwtService jwtService;
+
+    @MockBean
+    private UserDetailsService userDetailsService;
+
+    @MockBean
+    private StringRedisTemplate redisTemplate; // Mock for AuthRateLimitFilter
     private static final UUID TEST_USER_ID = UUID.randomUUID(); // Mock User ID for service method arguments
     private static final UUID TEST_READING_ID = UUID.randomUUID();
     private static final UUID TEST_CARD_ID = UUID.randomUUID();
+    private static final String TEST_TOKEN = "test-token";
+    private static final String TEST_USERNAME = "test-user";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @BeforeEach
+    void setUp() {
+        objectMapper.registerModule(new JavaTimeModule());
+        objectMapper.configure(SerializationFeature.WRITE_DATE_TIMESTAMPS_AS_NANOSECONDS, false);
+        objectMapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, true);
+    }
 
     private String toJson(Object obj) throws Exception {
         return objectMapper.writeValueAsString(obj);
@@ -92,20 +123,37 @@ class AIReadingControllerTest {
 
         ApiResponse<TarotReadingResultDTO> expectedResponse = ApiResponse.success("AI Tarot reading generated successfully", resultDto);
 
-        when(tarotReadingService.initiateAiTarotReading(any(User.class), eq(request))).thenReturn(resultDto);
+        // Mock JWTService and UserDetailsService for authentication
+        User mockUser = User.builder()
+                .id(TEST_USER_ID)
+                .username(TEST_USERNAME)
+                .role(UserRole.USER)
+                .build();
+
+        CustomUserDetails customUserDetails = new CustomUserDetails(mockUser);
+
+        when(jwtService.extractSubjectSafely(TEST_TOKEN)).thenReturn(TEST_USERNAME);
+        when(jwtService.validateToken(eq(TEST_TOKEN), any(CustomUserDetails.class))).thenReturn(true);
+        when(userDetailsService.loadUserByUsername(TEST_USERNAME)).thenReturn(customUserDetails);
+
+        when(tarotReadingService.initiateAiTarotReading(eq(mockUser), eq(request))).thenReturn(resultDto);
 
         mockMvc.perform(post("/api/ai-readings")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(toJson(request))
-                        .header("Authorization", "Bearer test-token"))
-                .andExpect(status().isOk())
-                .andExpect(content().json(toJson(expectedResponse)));
+                        .header("Authorization", "Bearer " + TEST_TOKEN))
+                .andExpect(status().isOk());
 
         verify(tarotReadingService).initiateAiTarotReading(any(User.class), eq(request));
+        verify(jwtService).extractSubjectSafely(TEST_TOKEN);
+        verify(jwtService).validateToken(eq(TEST_TOKEN), any(CustomUserDetails.class));
+        verify(userDetailsService).loadUserByUsername(TEST_USERNAME);
+        verify(jwtService).validateToken(eq(TEST_TOKEN), any(CustomUserDetails.class));
+        verify(userDetailsService).loadUserByUsername(TEST_USERNAME);
     }
 
     @Test
-    void startAiTarotReading_unauthenticatedRequest_returns401() throws Exception {
+    void startAiTarotReading_unauthenticatedRequest_returns403() throws Exception {
         StartTarotReadingRequest request = StartTarotReadingRequest.builder()
                 .question("Will I succeed?")
                 .numberOfCards(3)
@@ -115,7 +163,7 @@ class AIReadingControllerTest {
         mockMvc.perform(post("/api/ai-readings")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(toJson(request)))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isForbidden());
 
         verifyNoInteractions(tarotReadingService);
     }
@@ -126,13 +174,31 @@ class AIReadingControllerTest {
                 .numberOfCards(1)
                 .build();
 
+        // Mock JWTService and UserDetailsService for authentication
+        User mockUser = User.builder()
+                .id(TEST_USER_ID)
+                .username(TEST_USERNAME)
+                .role(UserRole.USER)
+                .build();
+
+        CustomUserDetails customUserDetails = new CustomUserDetails(mockUser);
+
+        when(jwtService.extractSubjectSafely(TEST_TOKEN)).thenReturn(TEST_USERNAME);
+        when(jwtService.validateToken(eq(TEST_TOKEN), any(CustomUserDetails.class))).thenReturn(true);
+        when(userDetailsService.loadUserByUsername(TEST_USERNAME)).thenReturn(customUserDetails);
+
         mockMvc.perform(post("/api/ai-readings")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(toJson(request))
-                        .header("Authorization", "Bearer test-token"))
+                        .header("Authorization", "Bearer " + TEST_TOKEN))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(tarotReadingService);
+        verify(jwtService).extractSubjectSafely(TEST_TOKEN);
+        verify(jwtService).validateToken(eq(TEST_TOKEN), any(CustomUserDetails.class));
+        verify(userDetailsService).loadUserByUsername(TEST_USERNAME);
+        verify(jwtService).validateToken(eq(TEST_TOKEN), any(CustomUserDetails.class));
+        verify(userDetailsService).loadUserByUsername(TEST_USERNAME);
     }
 
     @Test
@@ -142,15 +208,33 @@ class AIReadingControllerTest {
                 .numberOfCards(1)
                 .build();
 
+        // Mock JWTService and UserDetailsService for authentication
+        User mockUser = User.builder()
+                .id(TEST_USER_ID)
+                .username(TEST_USERNAME)
+                .role(UserRole.USER)
+                .build();
+
+        CustomUserDetails customUserDetails = new CustomUserDetails(mockUser);
+
+        when(jwtService.extractSubjectSafely(TEST_TOKEN)).thenReturn(TEST_USERNAME);
+        when(jwtService.validateToken(eq(TEST_TOKEN), any(CustomUserDetails.class))).thenReturn(true);
+        when(userDetailsService.loadUserByUsername(TEST_USERNAME)).thenReturn(customUserDetails);
+
         EntityNotFoundException serviceException = new EntityNotFoundException("User not found");
-        when(tarotReadingService.initiateAiTarotReading(any(User.class), eq(request))).thenThrow(serviceException);
+        when(tarotReadingService.initiateAiTarotReading(eq(mockUser), eq(request))).thenThrow(serviceException);
 
         mockMvc.perform(post("/api/ai-readings")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(toJson(request))
-                        .header("Authorization", "Bearer test-token"))
+                        .header("Authorization", "Bearer " + TEST_TOKEN))
                 .andExpect(status().isInternalServerError());
 
         verify(tarotReadingService).initiateAiTarotReading(any(User.class), eq(request));
+        verify(jwtService).extractSubjectSafely(TEST_TOKEN);
+        verify(jwtService).validateToken(eq(TEST_TOKEN), any(CustomUserDetails.class));
+        verify(userDetailsService).loadUserByUsername(TEST_USERNAME);
+        verify(jwtService).validateToken(eq(TEST_TOKEN), any(CustomUserDetails.class));
+        verify(userDetailsService).loadUserByUsername(TEST_USERNAME);
     }
 }
