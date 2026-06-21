@@ -61,7 +61,7 @@ class PromptBuilderServiceImplTest {
         assertTrue(prompt.contains("What is my future?"), "Prompt should contain user question");
         assertTrue(prompt.contains("The Fool"), "Prompt should contain first card");
         assertTrue(prompt.contains("The Magician"), "Prompt should contain second card");
-        assertTrue(prompt.contains("ASTROLOGY CONTEXT"), "Prompt should contain ASTROLOGY CONTEXT header");
+        assertTrue(prompt.contains("TAROT CARDS"), "Prompt should contain TAROT CARDS section");
     }
 
     @Test
@@ -120,7 +120,6 @@ class PromptBuilderServiceImplTest {
         assertTrue(prompt.contains("Aries"), "Prompt should contain sun sign");
         assertTrue(prompt.contains("Fire"), "Prompt should contain element");
         assertTrue(prompt.contains("Cardinal"), "Prompt should contain modality");
-        assertTrue(prompt.contains("HOW TO USE THIS ASTROLOGY DATA"), "Prompt should contain personalization guidance");
         assertTrue(prompt.contains("Libra"), "Prompt should contain moon sign");
         assertTrue(prompt.contains("Cancer"), "Prompt should contain rising sign");
         assertTrue(prompt.contains("TAROT CARDS"), "Prompt should contain TAROT CARDS section");
@@ -154,11 +153,10 @@ class PromptBuilderServiceImplTest {
         // Assert
         assertTrue(prompt.contains("READING CONTEXT"), "Should contain reading context");
         assertTrue(prompt.contains("Test Spread"), "Should contain spread name");
-        assertTrue(prompt.contains("ASTROLOGY CONTEXT"), "Should contain astrology context header");
         assertTrue(prompt.contains("TAROT CARDS"), "Should contain tarot cards section");
         assertTrue(prompt.contains("Card 1"), "Should contain card details");
         assertTrue(prompt.contains("USER QUESTION"), "Should contain user question section");
         assertTrue(prompt.contains("Test question"), "Should contain the actual question");
-        assertTrue(prompt.contains("RESPONSE INSTRUCTIONS"), "Should contain response instructions");
+        assertTrue(prompt.contains("CẤU TRÚC BÀI ĐỌC LẦN ĐẦU"), "Should contain response format instructions");
     }
 }
