@@ -92,7 +92,7 @@ public class TarotReadingServiceImpl implements TarotReadingService {
         List<DrawnCardDetailDTO> enrichedCards = enrichCardDetails(drawnCardDtos);
 
         // Step 4: Fetch astrology context (NEW - MVP integration)
-        java.util.Optional<AstrologyContextDTO> astrologyContext =
+        Optional<AstrologyContextDTO> astrologyContext =
                 astrologyContextService.getAstrologyContext(user.getId());
 
         // Step 5: Build prompt and call Gemini (NO transaction)
@@ -163,6 +163,7 @@ public class TarotReadingServiceImpl implements TarotReadingService {
             aiTarotService.generateInterpretationStream(
                     promptRequest,
                     chunk -> {
+                        log.info("SERVICE CHUNK: [{}]", chunk);
                         fullContent.append(chunk);
                         onChunk.accept(chunk);
                     },
@@ -184,17 +185,24 @@ public class TarotReadingServiceImpl implements TarotReadingService {
                                     fullContent.toString(),
                                     completion);
 
-                            // Step 7: Notify completion with result
+                            // Step 7: Look up session ID from the persisted reading
+                            UUID sessionId = chatSessionRepository
+                                    .findByTarotReadingIdAndSessionType(result.getReadingId(), SessionType.AI)
+                                    .map(s -> s.getId())
+                                    .orElse(null);
+
+                            // Step 8: Notify completion with result
                             LLMTokenUsage tokenUsage = completion.getTokenUsage();
                             onComplete.accept(new TarotReadingService.StreamReadingResult(
                                     result.getReadingId(),
-                                    null,
+                                    sessionId,
                                     fullContent.toString(),
                                     completion.getModelInfo(),
                                     tokenUsage != null ? tokenUsage.getTotalTokens() : 0,
                                     tokenUsage != null ? tokenUsage.getPromptTokens() : 0,
                                     tokenUsage != null ? tokenUsage.getCompletionTokens() : 0
                             ));
+                            log.info("SERVICE COMPLETE");
                         } catch (Exception persistEx) {
                             log.error("Persistence failed after stream completion: {}", persistEx.getMessage());
                             onError.accept(persistEx);

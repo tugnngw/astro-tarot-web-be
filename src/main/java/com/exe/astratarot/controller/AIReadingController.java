@@ -106,6 +106,7 @@ public class AIReadingController {
                         emitter.send(SseEmitter.event()
                                 .name("chunk")
                                 .data(Map.of("content", chunk)));
+                        log.info("CONTROLLER CHUNK: [{}]", chunk);
                     } catch (IOException e) {
                         log.warn("SSE send failed (client disconnected): userId={}", userDetails.getUser().getId());
                     }
@@ -134,6 +135,7 @@ public class AIReadingController {
                                                 .totalTokens(result.totalTokens())
                                                 .build()
                                 )));
+                        log.info("CONTROLLER COMPLETE");
                     } catch (IOException e) {
                         log.warn("SSE complete send failed: userId={}", userDetails.getUser().getId());
                     }

@@ -2,6 +2,7 @@ package com.exe.astratarot.service.impl;
 
 import com.exe.astratarot.domain.dto.llm.LLMResponse;
 import com.exe.astratarot.domain.dto.llm.LLMTokenUsage;
+import com.exe.astratarot.domain.dto.llm.StreamCompletion;
 import com.exe.astratarot.domain.dto.prompt.BuildPromptRequest;
 import com.exe.astratarot.domain.dto.prompt.DrawnCardDetailDTO;
 import com.exe.astratarot.domain.dto.reader.CardDrawDTO;
@@ -26,6 +27,7 @@ import com.exe.astratarot.service.AITarotService;
 import com.exe.astratarot.service.AIUsageTrackingService;
 import com.exe.astratarot.service.AstrologyContextService;
 import com.exe.astratarot.service.TarotDrawingService;
+import com.exe.astratarot.service.TarotReadingService;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,6 +41,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -401,5 +404,107 @@ class TarotReadingServiceImplTest {
         verify(aiTarotService, never()).generateInterpretation(any());
         verify(tarotReadingRepository, never()).save(any());
         verifyNoInteractions(userRepository);
+    }
+
+    // New test for stream method specifically testing sessionId propagation
+    @Test
+    void initiateAiTarotReadingStream_successfulFlow_shouldReturnResultWithSessionId() {
+        User user = User.builder().id(TEST_USER_ID).build();
+        List<CardDrawDTO> cardDraws = List.of(
+                CardDrawDTO.builder().cardId(TEST_CARD_ID).position((short) 0).reversed(false).build()
+        );
+
+        StartTarotReadingRequest request = StartTarotReadingRequest.builder()
+                .question("My destiny?")
+                .numberOfCards(1)
+                .build();
+
+        LLMResponse llmResponse = LLMResponse.builder()
+                .content("Your destiny is bright.")
+                .modelInfo("gemini-pro")
+                .tokenUsage(LLMTokenUsage.builder().totalTokens(50).build())
+                .build();
+
+        TarotCard tarotCard = TarotCard.builder()
+                .id(TEST_CARD_ID)
+                .name("The Fool")
+                .arcanaType("Major Arcana")
+                .build();
+
+        TarotReading reading = TarotReading.builder()
+                .id(TEST_READING_ID)
+                .user(user)
+                .mainQuestion("My destiny?")
+                .aiModelUsed("gemini-pro")
+                .sessionType(SessionType.AI)
+                .createdAt(Instant.now())
+                .build();
+
+        ChatSession chatSession = ChatSession.builder()
+                .id(UUID.randomUUID())
+                .user(user)
+                .tarotReading(reading)
+                .sessionType(SessionType.AI)
+                .status(ChatStatus.ACTIVE)
+                .build();
+
+        // Mocking the repository to return the created ChatSession
+        when(chatSessionRepository.findByTarotReadingIdAndSessionType(eq(TEST_READING_ID), eq(SessionType.AI)))
+                .thenReturn(Optional.of(chatSession));
+
+        // Mocking the save methods to return the entities passed in
+        when(tarotReadingRepository.save(any(TarotReading.class)))
+                .thenReturn(reading);
+        when(readingCardRepository.saveAll(anyList()))
+                .thenReturn(Collections.emptyList());
+
+        // Capture the onComplete callback
+        ArgumentCaptor<TarotReadingService.StreamReadingResult> onCompleteCaptor =
+                ArgumentCaptor.forClass(TarotReadingService.StreamReadingResult.class);
+
+        // Mock dependencies for the stream method
+        when(tarotDrawingService.drawCards(null, 1, true)).thenReturn(cardDraws);
+        when(tarotCardRepository.findById(TEST_CARD_ID)).thenReturn(Optional.of(tarotCard));
+        // Mock the call to onComplete consumer to capture the result
+        doAnswer(invocation -> {
+            Consumer<String> chunkConsumer = invocation.getArgument(1);
+            Consumer<Throwable> errorConsumer = invocation.getArgument(2);
+            Consumer<StreamCompletion> completeConsumer = invocation.getArgument(3);
+
+            // Simulate a successful stream completion
+            chunkConsumer.accept("Initial chunk.");
+            chunkConsumer.accept("Second chunk.");
+
+            completeConsumer.accept(StreamCompletion.builder()
+                    .modelInfo("gemini-pro")
+                    .tokenUsage(LLMTokenUsage.builder().totalTokens(50).promptTokens(10).completionTokens(40).build())
+                    .build());
+            return null;
+        }).when(aiTarotService).generateInterpretationStream(any(BuildPromptRequest.class), any(), any(), any());
+
+        // Capture the result
+        TarotReadingService.StreamReadingResult[] capturedResult = new TarotReadingService.StreamReadingResult[1];
+
+        // Call the stream method
+        tarotReadingService.initiateAiTarotReadingStream(
+                user,
+                request,
+                (chunk) -> {}, // Dummy onChunk
+                (error) -> {}, // Dummy onError - no errors expected
+                (result) -> { capturedResult[0] = result; } // Capture the result
+        );
+
+        // Allow async method to complete
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        // Verify the onComplete callback was invoked with the correct result
+        assertNotNull(capturedResult[0], "onComplete should have been called");
+        assertEquals(TEST_READING_ID, capturedResult[0].readingId());
+        assertNotNull(capturedResult[0].sessionId(), "Session ID must not be null");
+        assertEquals(chatSession.getId(), capturedResult[0].sessionId());
     }
 }

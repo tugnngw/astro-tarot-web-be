@@ -103,7 +103,7 @@ public class GeminiProvider implements LLMProvider {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
             // Add API key to URL parameter as per Gemini API documentation
-            String url = apiEndpoint + "?key=" + apiKey;
+            String url = apiEndpoint + ":generateContent?key=" + apiKey;
 
             // Create request entity
             HttpEntity<String> request = new HttpEntity<>(objectMapper.writeValueAsString(requestBody), headers);
@@ -202,6 +202,7 @@ public class GeminiProvider implements LLMProvider {
                         String text = extractChunkText(node);
                         if (text != null && !text.isEmpty()) {
                             onChunk.accept(text);
+                            log.info("GEMINI CHUNK: [{}]", text);
                         }
 
                         // Capture usageMetadata — appears in final chunk
@@ -216,6 +217,9 @@ public class GeminiProvider implements LLMProvider {
                             .modelInfo(model)
                             .tokenUsage(tokenUsage)
                             .build());
+                    log.info("GEMINI STREAM COMPLETE model={}, tokens={}",
+                            modelVersion,
+                            tokenUsage != null ? tokenUsage.getTotalTokens() : null);
 
                 } catch (Exception e) {
                     onError.accept(new LLMProviderException(
