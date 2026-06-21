@@ -39,7 +39,7 @@ public interface AIUsageTrackingService {
      * Log AI usage after chat continuation.
      *
      * @param user the authenticated user
-     * @param chatSession the ChatSession for the continuation
+     * @param chatSession the ChatSession for the continuation (may be null for astrology-only chat)
      * @param provider AI provider name (e.g., "Gemini")
      * @param model AI model name (e.g., "gemini-1.5-flash")
      * @param tokenUsage token usage data (may be null)

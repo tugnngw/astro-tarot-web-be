@@ -25,7 +25,11 @@
     </properties>
 
     <dependencies>
-
+        <!-- pom.xml -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
         <!-- WEB -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

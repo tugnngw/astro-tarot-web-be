@@ -40,6 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -71,91 +72,129 @@ public class ChatServiceImpl implements ChatService {
     @Override
     @Transactional
     public ChatResponse sendMessage(UUID readingId, User user, String message) {
-        log.debug("Continuation request: readingId={}, userId={}", readingId, user.getId());
+        log.debug("Chat request: readingId={}, userId={}", readingId, user.getId());
+        if (readingId != null) {
+            // Existing reading flow (unchanged)
+            // Step 1: Verify TarotReading exists and belongs to user
+            TarotReading reading = tarotReadingRepository.findById(readingId)
+                    .orElseThrow(() -> new EntityNotFoundException("Tarot reading not found with ID: " + readingId));
 
-        // Step 1: Verify TarotReading exists and belongs to user
-        TarotReading reading = tarotReadingRepository.findById(readingId)
-                .orElseThrow(() -> new EntityNotFoundException("Tarot reading not found with ID: " + readingId));
+            if (!reading.getUser().getId().equals(user.getId())) {
+                throw new IllegalArgumentException("Tarot reading does not belong to user");
+            }
 
-        if (!reading.getUser().getId().equals(user.getId())) {
-            throw new IllegalArgumentException("Tarot reading does not belong to user");
+            // Step 2: Find or create ChatSession for this reading
+            ChatSession session = chatSessionRepository.findByTarotReadingId(readingId)
+                    .orElseThrow(() -> new EntityNotFoundException(
+                            "No active chat session found for reading ID: " + readingId));
+
+            // Step 3: Validate session state
+            if (session.getStatus() == ChatStatus.CLOSED) {
+                throw new IllegalStateException("Chat session is closed for reading ID: " + readingId);
+            }
+
+            // Step 4: Save user's follow-up message
+            ChatMessage userMessage = ChatMessage.builder()
+                    .session(session)
+                    .senderType(SenderType.USER)
+                    .content(message)
+                    .messageType(MessageType.TEXT)
+                    .build();
+            chatMessageRepository.save(userMessage);
+
+            // Step 5: Build continuation prompt (with history, cards, astrology) and call AI
+            BuildPromptRequest promptRequest = buildContinuationPromptRequest(reading, user, session, message);
+            LLMResponse llmResponse = aiTarotService.generateInterpretation(promptRequest);
+            log.debug("AI continuation response received for readingId={}", readingId);
+
+            // Step 6: Save AI response
+            LLMTokenUsage tokenUsage = llmResponse.getTokenUsage();
+            int promptTokens = tokenUsage != null ? tokenUsage.getPromptTokens() : 0;
+            int completionTokens = tokenUsage != null ? tokenUsage.getCompletionTokens() : 0;
+            int totalTokens = tokenUsage != null ? tokenUsage.getTotalTokens() : 0;
+
+            ChatMessage aiMessage = ChatMessage.builder()
+                    .session(session)
+                    .senderType(SenderType.AI)
+                    .content(llmResponse.getContent())
+                    .messageType(MessageType.TEXT)
+                    .build();
+            chatMessageRepository.save(aiMessage);
+
+            // Step 7: Update session timestamp
+            session.setLastMessageAt(Instant.now());
+            chatSessionRepository.save(session);
+
+            // Step 8: Update reading total token count
+            int currentTokens = reading.getTotalTokensUsed() != null ? reading.getTotalTokensUsed() : 0;
+            reading.setTotalTokensUsed(currentTokens + totalTokens);
+            tarotReadingRepository.save(reading);
+
+            // Step 9: Log AI usage
+            try {
+                aiUsageTrackingService.logChatContinuation(
+                        user,
+                        session,
+                        llmResponse.getModelInfo() != null ? "Gemini" : "unknown",
+                        llmResponse.getModelInfo() != null ? llmResponse.getModelInfo() : "unknown",
+                        llmResponse.getTokenUsage(),
+                        null
+                );
+            } catch (Exception usageEx) {
+                log.warn("Failed to log AI usage for chat continuation", usageEx);
+            }
+
+            // Step 10: Build response
+            return ChatResponse.builder()
+                    .sessionId(session.getId())
+                    .messageId(aiMessage.getId())
+                    .reply(llmResponse.getContent())
+                    .modelUsed(llmResponse.getModelInfo())
+                    .promptTokens(promptTokens)
+                    .completionTokens(completionTokens)
+                    .totalTokens(totalTokens)
+                    .createdAt(aiMessage.getCreatedAt())
+                    .build();
+        } else {
+            // New flow: astrology profile only, no reading
+            // Fetch astrology context
+            Optional<AstrologyContextDTO> astroContext = astrologyContextService.getAstrologyContext(user.getId());
+            // Build prompt without cards
+            BuildPromptRequest promptRequest = BuildPromptRequest.builder()
+                    .userQuestion(message)
+                    .astrologyContext(astroContext.orElse(null))
+                    .drawnCardDetails(Collections.emptyList())
+                    .spreadName(null)
+                    .build();
+            LLMResponse llmResponse = aiTarotService.generateInterpretation(promptRequest);
+            // No session/message IDs for this lightweight flow
+            LLMTokenUsage tokenUsage = llmResponse.getTokenUsage();
+            int promptTokens = tokenUsage != null ? tokenUsage.getPromptTokens() : 0;
+            int completionTokens = tokenUsage != null ? tokenUsage.getCompletionTokens() : 0;
+            int totalTokens = tokenUsage != null ? tokenUsage.getTotalTokens() : 0;
+            // Log usage (session null)
+            try {
+                aiUsageTrackingService.logChatContinuation(
+                        user,
+                        null,
+                        llmResponse.getModelInfo() != null ? "Gemini" : "unknown",
+                        llmResponse.getModelInfo() != null ? llmResponse.getModelInfo() : "unknown",
+                        llmResponse.getTokenUsage(),
+                        null);
+            } catch (Exception usageEx) {
+                log.warn("Failed to log AI usage for astrology-only chat", usageEx);
+            }
+            return ChatResponse.builder()
+                    .sessionId(null)
+                    .messageId(null)
+                    .reply(llmResponse.getContent())
+                    .modelUsed(llmResponse.getModelInfo())
+                    .promptTokens(promptTokens)
+                    .completionTokens(completionTokens)
+                    .totalTokens(totalTokens)
+                    .createdAt(Instant.now())
+                    .build();
         }
-
-        // Step 2: Find or create ChatSession for this reading
-        ChatSession session = chatSessionRepository.findByTarotReadingId(readingId)
-                .orElseThrow(() -> new EntityNotFoundException(
-                        "No active chat session found for reading ID: " + readingId));
-
-        // Step 3: Validate session state
-        if (session.getStatus() == ChatStatus.CLOSED) {
-            throw new IllegalStateException("Chat session is closed for reading ID: " + readingId);
-        }
-
-        // Step 4: Save user's follow-up message
-        ChatMessage userMessage = ChatMessage.builder()
-                .session(session)
-                .senderType(SenderType.USER)
-                .content(message)
-                .messageType(MessageType.TEXT)
-                .build();
-        chatMessageRepository.save(userMessage);
-
-        // Step 5: Build continuation prompt (with history, cards, astrology) and call AI
-        BuildPromptRequest promptRequest = buildContinuationPromptRequest(reading, user, session, message);
-        LLMResponse llmResponse = aiTarotService.generateInterpretation(promptRequest);
-        log.debug("AI continuation response received for readingId={}", readingId);
-
-        // Step 6: Save AI response
-        LLMTokenUsage tokenUsage = llmResponse.getTokenUsage();
-        int promptTokens = tokenUsage != null ? tokenUsage.getPromptTokens() : 0;
-        int completionTokens = tokenUsage != null ? tokenUsage.getCompletionTokens() : 0;
-        int totalTokens = tokenUsage != null ? tokenUsage.getTotalTokens() : 0;
-
-        ChatMessage aiMessage = ChatMessage.builder()
-                .session(session)
-                .senderType(SenderType.AI)
-                .content(llmResponse.getContent())
-                .messageType(MessageType.TEXT)
-                .build();
-        chatMessageRepository.save(aiMessage);
-
-        // Step 7: Update session timestamp
-        session.setLastMessageAt(Instant.now());
-        chatSessionRepository.save(session);
-
-        // Step 8: Update reading total token count
-        int currentTokens = reading.getTotalTokensUsed() != null ? reading.getTotalTokensUsed() : 0;
-        reading.setTotalTokensUsed(currentTokens + totalTokens);
-        tarotReadingRepository.save(reading);
-
-        log.info("Continuation saved: readingId={}, messageId={}, tokens={}",
-                readingId, aiMessage.getId(), totalTokens);
-
-        // Step 8b: Log AI usage
-        try {
-            aiUsageTrackingService.logChatContinuation(
-                    user,
-                    session,
-                    llmResponse.getModelInfo() != null ? "Gemini" : "unknown",
-                    llmResponse.getModelInfo() != null ? llmResponse.getModelInfo() : "unknown",
-                    llmResponse.getTokenUsage(),
-                    null
-            );
-        } catch (Exception usageEx) {
-            log.warn("Failed to log AI usage for chat continuation blocking", usageEx);
-        }
-
-        // Step 9: Build response
-        return ChatResponse.builder()
-                .sessionId(session.getId())
-                .messageId(aiMessage.getId())
-                .reply(llmResponse.getContent())
-                .modelUsed(llmResponse.getModelInfo())
-                .promptTokens(promptTokens)
-                .completionTokens(completionTokens)
-                .totalTokens(totalTokens)
-                .createdAt(aiMessage.getCreatedAt())
-                .build();
     }
 
     @Override
@@ -169,81 +208,98 @@ public class ChatServiceImpl implements ChatService {
         try {
             log.debug("Stream request: readingId={}, userId={}", readingId, user.getId());
 
-            // Step 1: Verify ownership
-            TarotReading reading = tarotReadingRepository.findById(readingId)
-                    .orElseThrow(() -> new EntityNotFoundException(
-                            "Tarot reading not found with ID: " + readingId));
+            if (readingId != null) {
+                // Step 1: Verify ownership
+                TarotReading reading = tarotReadingRepository.findById(readingId)
+                        .orElseThrow(() -> new EntityNotFoundException(
+                                "Tarot reading not found with ID: " + readingId));
 
-            if (!reading.getUser().getId().equals(user.getId())) {
-                throw new IllegalArgumentException("Tarot reading does not belong to user");
+                if (!reading.getUser().getId().equals(user.getId())) {
+                    throw new IllegalArgumentException("Tarot reading does not belong to user");
+                }
+
+                // Step 2: Find ChatSession
+                ChatSession session = chatSessionRepository.findByTarotReadingId(readingId)
+                        .orElseThrow(() -> new EntityNotFoundException(
+                                "No active chat session found for reading ID: " + readingId));
+
+                // Step 3: Validate session state
+                if (session.getStatus() == ChatStatus.CLOSED) {
+                    throw new IllegalStateException("Chat session is closed for reading ID: " + readingId);
+                }
+
+                // Step 4: Save USER message immediately
+                ChatMessage userMessage = ChatMessage.builder()
+                        .session(session)
+                        .senderType(SenderType.USER)
+                        .content(message)
+                        .messageType(MessageType.TEXT)
+                        .build();
+                chatMessageRepository.save(userMessage);
+
+                // Step 5: Build continuation prompt request
+                BuildPromptRequest promptRequest = buildContinuationPromptRequest(
+                        reading, user, session, message);
+
+                // Step 6: Stream from AI and handle callbacks
+                StringBuilder fullContent = new StringBuilder();
+                aiTarotService.generateInterpretationStream(
+                        promptRequest,
+                        chunk -> {
+                            fullContent.append(chunk);
+                            onChunk.accept(chunk);
+                        },
+                        error -> {
+                            log.error("Stream error for readingId={}: {}", readingId, error.getMessage());
+                            onError.accept(error);
+                        },
+                        completion -> {
+                            // Save AI response and update session/reading
+                            UUID messageId = saveAiResponseAndUpdate(reading, session,
+                                    fullContent.toString(), completion);
+
+                            // Log AI usage
+                            try {
+                                aiUsageTrackingService.logChatContinuation(
+                                        user,
+                                        session,
+                                        completion.getModelInfo() != null ? "Gemini" : "unknown",
+                                        completion.getModelInfo() != null ? completion.getModelInfo() : "unknown",
+                                        completion.getTokenUsage(),
+                                        null);
+                            } catch (Exception usageEx) {
+                                log.warn("Failed to log AI usage for chat continuation", usageEx);
+                            }
+
+                            // Notify caller
+                            LLMTokenUsage tokenUsage = completion.getTokenUsage();
+                            onComplete.accept(new StreamResult(
+                                    session.getId(),
+                                    messageId,
+                                    completion.getModelInfo(),
+                                    tokenUsage != null ? tokenUsage.getTotalTokens() : 0,
+                                    tokenUsage != null ? tokenUsage.getPromptTokens() : 0,
+                                    tokenUsage != null ? tokenUsage.getCompletionTokens() : 0));
+                        });
+            } else {
+                // Astrology-only flow (no readingId)
+                BuildPromptRequest promptRequest = buildAstrologyOnlyPrompt(user, message);
+
+                aiTarotService.generateInterpretationStream(
+                        promptRequest,
+                        onChunk,
+                        onError,
+                        completion -> {
+                            LLMTokenUsage usage = completion.getTokenUsage();
+                            onComplete.accept(new StreamResult(
+                                    null,
+                                    null,
+                                    completion.getModelInfo(),
+                                    usage != null ? usage.getTotalTokens() : 0,
+                                    usage != null ? usage.getPromptTokens() : 0,
+                                    usage != null ? usage.getCompletionTokens() : 0));
+                        });
             }
-
-            // Step 2: Find ChatSession
-            ChatSession session = chatSessionRepository.findByTarotReadingId(readingId)
-                    .orElseThrow(() -> new EntityNotFoundException(
-                            "No active chat session found for reading ID: " + readingId));
-
-            // Step 3: Validate session state
-            if (session.getStatus() == ChatStatus.CLOSED) {
-                throw new IllegalStateException("Chat session is closed for reading ID: " + readingId);
-            }
-
-            // Step 4: Save USER message immediately
-            ChatMessage userMessage = ChatMessage.builder()
-                    .session(session)
-                    .senderType(SenderType.USER)
-                    .content(message)
-                    .messageType(MessageType.TEXT)
-                    .build();
-            chatMessageRepository.save(userMessage);
-
-            // Step 5: Build prompt (same as non-streaming)
-            BuildPromptRequest promptRequest = buildContinuationPromptRequest(
-                    reading, user, session, message);
-
-            // Step 6: Stream from AI
-            StringBuilder fullContent = new StringBuilder();
-            aiTarotService.generateInterpretationStream(
-                    promptRequest,
-                    chunk -> {
-                        fullContent.append(chunk);
-                        onChunk.accept(chunk);
-                    },
-                    error -> {
-                        log.error("Stream error for readingId={}: {}", readingId, error.getMessage());
-                        onError.accept(error);
-                    },
-                    completion -> {
-                        // Step 7: Save AI message (only on success) and get its ID
-                        UUID messageId = saveAiResponseAndUpdate(reading, session,
-                                fullContent.toString(), completion);
-
-                        // Step 8: Log AI usage
-                        try {
-                            aiUsageTrackingService.logChatContinuation(
-                                    user,
-                                    session,
-                                    completion.getModelInfo() != null ? "Gemini" : "unknown",
-                                    completion.getModelInfo() != null ? completion.getModelInfo() : "unknown",
-                                    completion.getTokenUsage(),
-                                    null
-                            );
-                        } catch (Exception usageEx) {
-                            log.warn("Failed to log AI usage for chat continuation", usageEx);
-                        }
-
-                        // Step 9: Notify caller
-                        LLMTokenUsage tokenUsage = completion.getTokenUsage();
-                        onComplete.accept(new StreamResult(
-                                session.getId(),
-                                messageId,
-                                completion.getModelInfo(),
-                                tokenUsage != null ? tokenUsage.getTotalTokens() : 0,
-                                tokenUsage != null ? tokenUsage.getPromptTokens() : 0,
-                                tokenUsage != null ? tokenUsage.getCompletionTokens() : 0
-                        ));
-                    }
-            );
         } catch (Exception e) {
             log.error("Stream setup failed for readingId={}: {}", readingId, e.getMessage());
             onError.accept(e);
@@ -459,6 +515,22 @@ public class ChatServiceImpl implements ChatService {
         }
         log.debug("Formatted {} messages for conversation history.", messages.size());
         return sb.toString().stripTrailing();
+    }
+
+    /**
+     * Builds a prompt request for astrology-only chat (no reading, no cards).
+     */
+    private BuildPromptRequest buildAstrologyOnlyPrompt(User user, String message) {
+        Optional<AstrologyContextDTO> astrologyContext =
+                astrologyContextService.getAstrologyContext(user.getId());
+        return BuildPromptRequest.builder()
+                .userQuestion(message)
+                .originalQuestion(null)
+                .conversationHistory(null)
+                .astrologyContext(astrologyContext.orElse(null))
+                .drawnCardDetails(Collections.emptyList())
+                .spreadName("Astrology Chat")
+                .build();
     }
 
     /**

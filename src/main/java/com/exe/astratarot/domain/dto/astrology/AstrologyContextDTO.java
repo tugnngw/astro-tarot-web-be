@@ -184,4 +184,9 @@ public class AstrologyContextDTO {
      */
     @Valid
     private List<AspectDTO> transitAspects;
+
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public boolean isEmpty() {
+        return birthDate == null && birthPlace == null;
+    }
 }

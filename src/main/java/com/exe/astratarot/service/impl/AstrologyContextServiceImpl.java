@@ -50,7 +50,7 @@ public class AstrologyContextServiceImpl implements AstrologyContextService {
     private final DataEncryptionService dataEncryptionService;
 
     @Override
-    @Cacheable(cacheNames = "astrology-context", key = "#userId", unless = "#result == null || #result.isEmpty()")
+    @Cacheable(cacheNames = "astrology-context", key = "#userId", unless = "#result == null || (#result.birthDate == null && #result.birthPlace == null)")
     public Optional<AstrologyContextDTO> getAstrologyContext(UUID userId) {
         if (userId == null) {
             log.warn("Cannot fetch astrology context: userId is null");

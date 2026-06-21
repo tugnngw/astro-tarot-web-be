@@ -102,12 +102,12 @@ public class AIUsageTrackingServiceImpl implements AIUsageTrackingService {
 
             AIUsageLog saved = aiUsageLogRepository.save(usageLog);
             log.info("Logged chat continuation usage: sessionId={}, provider={}, model={}, tokens={}, cost={}",
-                    chatSession.getId(), provider, model, totalTokens, estimatedCost);
+                    chatSession != null ? chatSession.getId() : "null", provider, model, totalTokens, estimatedCost);
             return saved;
 
         } catch (Exception e) {
             // Log error but don't fail the request
-            log.error("Failed to log chat continuation usage: sessionId={}, error={}", chatSession.getId(), e.getMessage(), e);
+            log.error("Failed to log chat continuation usage: sessionId={}, error={}", chatSession != null ? chatSession.getId() : "null", e.getMessage(), e);
             return null;
         }
     }
