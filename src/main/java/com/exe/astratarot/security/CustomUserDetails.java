@@ -63,7 +63,8 @@ public class CustomUserDetails implements UserDetails {
                     SecurityPermissions.ADMIN_READERS_REVIEW,
                     SecurityPermissions.CATALOG_MANAGE,
                     SecurityPermissions.ORDERS_MANAGE,
-                    SecurityPermissions.USERS_MANAGE));
+                    SecurityPermissions.USERS_MANAGE,
+                    SecurityPermissions.AUDIT_VIEW));
 
     /** Quyền của một vai trò, dùng chung cho token và cho API trả về FE. */
     public static List<String> permissionsOf(UserRole role) {

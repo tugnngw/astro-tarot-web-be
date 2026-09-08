@@ -12,6 +12,7 @@ import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -27,6 +28,16 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+/*
+ * BẮT BUỘC phải có. Thiếu annotation này thì Spring không dựng proxy cho
+ * @PreAuthorize, và MỌI annotation phân quyền trong dự án trở thành lời chú
+ * thích: chỉ còn .anyRequest().authenticated() bên dưới chặn, nghĩa là bất kỳ
+ * tài khoản nào đã đăng nhập cũng gọi được /api/v1/admin/**.
+ *
+ * Đã kiểm chứng bằng token của một tài khoản STAFF: trước khi bật, nó đọc được
+ * cả danh sách tài khoản lẫn hồ sơ Reader chờ duyệt.
+ */
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;

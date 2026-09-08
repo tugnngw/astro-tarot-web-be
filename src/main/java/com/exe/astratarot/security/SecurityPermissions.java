@@ -45,6 +45,8 @@ public final class SecurityPermissions {
     public static final String ORDERS_MANAGE = "ORDERS_MANAGE";
     /** Toàn quyền trên tài khoản, gồm cả gán MANAGER và ADMIN. */
     public static final String USERS_MANAGE = "USERS_MANAGE";
+    /** Đọc nhật ký thao tác quản trị. */
+    public static final String AUDIT_VIEW = "AUDIT_VIEW";
 
     // ----- Còn để lại vì đã có từ trước, chưa endpoint nào dùng -----
     public static final String ADMIN_MANAGE_AVAILABILITY = "ADMIN_MANAGE_AVAILABILITY";

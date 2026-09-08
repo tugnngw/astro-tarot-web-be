@@ -3,6 +3,6 @@ package com.exe.astratarot.exception;
 public class AlreadyAppliedException extends RuntimeException {
     
     public AlreadyAppliedException() {
-        super("User has already submitted a pending application");
+        super("Bạn đã có một hồ sơ đang chờ duyệt");
     }
 }
