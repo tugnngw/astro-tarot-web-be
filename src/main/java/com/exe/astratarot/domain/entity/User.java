@@ -73,6 +73,13 @@ public class User {
     @Column(name = "email_verification_expires_at")
     private Instant emailVerificationExpiresAt;
 
+    /** Bản băm của token đặt lại mật khẩu — không lưu token gốc. */
+    @Column(name = "password_reset_token")
+    private String passwordResetToken;
+
+    @Column(name = "password_reset_expires_at")
+    private Instant passwordResetExpiresAt;
+
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 

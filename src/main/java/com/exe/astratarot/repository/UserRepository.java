@@ -18,6 +18,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     Optional<User> findByEmailVerificationToken(String emailVerificationToken);
 
+    Optional<User> findByPasswordResetToken(String passwordResetToken);
+
     boolean existsByUsernameIgnoreCaseAndDeletedAtIsNull(String username);
 
     boolean existsByEmailIgnoreCaseAndDeletedAtIsNull(String email);
