@@ -1,0 +1,11 @@
+package com.exe.astratarot.domain.dto.auth;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
+public record RefreshTokenRequest(
+        @NotBlank(message = "Refresh token is required")
+        @Size(max = 512, message = "Refresh token must not exceed 512 characters")
+        String refreshToken
+) {
+}
