@@ -20,6 +20,7 @@ public class ProductResponse {
     private Long compareAtPrice;
     private Integer stock;
     private String imageUrl;
+    private Boolean imageIsIllustrative;
     private Boolean featured;
     private String categoryName;
     private String categorySlug;

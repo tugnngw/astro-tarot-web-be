@@ -73,6 +73,7 @@ public class ProductServiceImpl implements ProductService {
                 .compareAtPrice(p.getCompareAtPrice())
                 .stock(p.getStock())
                 .imageUrl(p.getImageUrl())
+                .imageIsIllustrative(p.getImageIsIllustrative())
                 .featured(p.getFeatured())
                 .categoryName(c == null ? null : c.getName())
                 .categorySlug(c == null ? null : c.getSlug())

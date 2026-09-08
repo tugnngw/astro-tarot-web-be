@@ -48,6 +48,11 @@ public class Product {
     @Column(name = "image_url", columnDefinition = "TEXT")
     private String imageUrl;
 
+    /** TRUE khi imageUrl là ảnh minh hoạ chứ không phải ảnh chụp đúng sản phẩm. */
+    @Builder.Default
+    @Column(name = "image_is_illustrative", nullable = false)
+    private Boolean imageIsIllustrative = false;
+
     @Builder.Default
     @Column(nullable = false)
     private Boolean active = true;
