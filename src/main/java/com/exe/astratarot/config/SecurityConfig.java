@@ -82,9 +82,15 @@ public class SecurityConfig {
                         // luôn /api/v1/readers/profile/me và phơi hồ sơ riêng của
                         // Reader ra ngoài. Mẫu một sao chỉ khớp đúng một đoạn đường
                         // dẫn nên /profile/me nằm ngoài.
+                        //
+                        // Khung giờ trống và đánh giá cũng công khai: khách phải
+                        // xem được Reader rảnh lúc nào và người khác nhận xét ra
+                        // sao TRƯỚC khi quyết định đăng ký tài khoản.
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/readers",
-                                "/api/v1/readers/*").permitAll()
+                                "/api/v1/readers/*",
+                                "/api/v1/readers/*/slots",
+                                "/api/v1/readers/*/reviews").permitAll()
                         // Ảnh đại diện đã tải lên — hiển thị công khai như mọi
                         // ảnh khác trên trang. Việc tải LÊN vẫn cần đăng nhập
                         // (POST /api/v1/me/avatar).

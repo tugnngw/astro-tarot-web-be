@@ -7,4 +7,7 @@ import java.util.UUID;
 
 public interface ReaderAvailabilityRepository extends JpaRepository<ReaderAvailability, UUID> {
     List<ReaderAvailability> findByReaderId(UUID readerId);
+
+    /** Khung giờ đang bật của một ngày trong tuần. 0 = Chủ nhật, theo cột day_of_week. */
+    List<ReaderAvailability> findByReaderIdAndDayOfWeekAndActiveTrue(UUID readerId, Short dayOfWeek);
 }

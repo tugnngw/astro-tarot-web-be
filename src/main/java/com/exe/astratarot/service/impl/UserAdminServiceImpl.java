@@ -69,8 +69,16 @@ public class UserAdminServiceImpl implements UserAdminService {
     private final UsernameGenerator usernameGenerator;
     private final ActivityLogService activityLogService;
     private final AuthService authService;
+    private final com.exe.astratarot.service.NotificationService notificationService;
 
     private final SecureRandom secureRandom = new SecureRandom();
+
+    /** Nhãn tiếng Việt cho thông báo gửi tới người bị đổi vai trò. */
+    private static final java.util.Map<UserRole, String> ROLE_LABEL = java.util.Map.of(
+            UserRole.USER, "Thành viên",
+            UserRole.STAFF, "Nhân viên",
+            UserRole.MANAGER, "Quản lý",
+            UserRole.ADMIN, "Quản trị viên");
 
     /** Những vai trò MANAGER được phép chạm vào, ở cả hai đầu: trước và sau khi đổi. */
     private static final Set<UserRole> MANAGER_SCOPE = EnumSet.of(UserRole.USER, UserRole.STAFF);
@@ -264,6 +272,15 @@ public class UserAdminServiceImpl implements UserAdminService {
 
         activityLogService.record(actor.getId(), AdminActions.USER_ROLE_CHANGE, AdminActions.ENTITY_USER,
                 target.getId(), Map.of("from", oldRole.name(), "to", newRole.name()));
+
+        // Người bị đổi vai trò cũng vừa bị đăng xuất khỏi mọi thiết bị. Không
+        // báo thì họ chỉ thấy mình bị đá ra mà không hiểu vì sao.
+        notificationService.push(target,
+                com.exe.astratarot.service.NotificationTypes.ACCOUNT_ROLE_CHANGED,
+                "Vai trò tài khoản đã thay đổi",
+                "Tài khoản của bạn được chuyển sang vai trò " + ROLE_LABEL.getOrDefault(newRole, newRole.name())
+                        + ". Bạn cần đăng nhập lại.",
+                Map.of("from", oldRole.name(), "to", newRole.name()));
         return target;
     }
 
