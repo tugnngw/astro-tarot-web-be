@@ -15,6 +15,11 @@ import java.util.UUID;
 public class ReaderProfileResponse {
     private UUID id;
     private String username;
+    /** Tài khoản đứng sau hồ sơ này. Cần cho giao diện phân biệt "đây là tôi". */
+    private UUID userId;
+    /** Tên hiển thị. Trang công khai gọi Reader bằng tên, không phải tên đăng nhập. */
+    private String fullName;
+    private String avatar;
     private String bio;
     private String[] specialties;
     private Integer yearsExperience;

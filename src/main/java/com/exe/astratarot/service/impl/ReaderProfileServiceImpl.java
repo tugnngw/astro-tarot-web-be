@@ -114,6 +114,13 @@ public class ReaderProfileServiceImpl implements ReaderProfileService {
                 .collect(Collectors.toList());
 
         ReaderProfileResponse response = readerProfileMapper.toResponse(profile);
+        // Mapper chỉ nhìn thấy ReaderProfile; tên và ảnh nằm bên User nên phải gán
+        // ở đây. Trang công khai gọi Reader bằng tên chứ không phải tên đăng nhập.
+        if (profile.getUser() != null) {
+            response.setUserId(profile.getUser().getId());
+            response.setFullName(profile.getUser().getFullName());
+            response.setAvatar(profile.getUser().getAvatar());
+        }
         response.setWeeklyAvailability(availabilityList);
         response.setUnavailableDates(unavailableDates);
         return response;

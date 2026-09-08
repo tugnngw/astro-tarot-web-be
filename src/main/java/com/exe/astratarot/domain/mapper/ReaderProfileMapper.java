@@ -16,8 +16,18 @@ public interface ReaderProfileMapper {
     /**
      * Maps a {@link ReaderProfile} entity to a {@link ReaderProfileResponse} DTO.
      */
+    /*
+     * `id` là id của HỒ SƠ, không phải của tài khoản.
+     *
+     * Bản trước ánh xạ user.id vào id, nên mọi thứ khoá theo reader_profile_id
+     * đều gãy: lấy id từ GET /readers rồi gọi GET /readers/{id} luôn trả 404,
+     * vì findById tra bảng reader_profiles. Booking, khung giờ trống và đánh
+     * giá cũng đều tham chiếu reader_profile_id.
+     *
+     * Id của tài khoản vẫn cần cho giao diện nhận ra "hồ sơ này là của tôi",
+     * nên nó nằm ở trường userId riêng (gán trong ReaderProfileServiceImpl).
+     */
     @Mapping(source = "user.username", target = "username")
-    @Mapping(source = "user.id", target = "id")
     @Mapping(source = "available", target = "isAvailable")
     ReaderProfileResponse toResponse(ReaderProfile readerProfile);
 
