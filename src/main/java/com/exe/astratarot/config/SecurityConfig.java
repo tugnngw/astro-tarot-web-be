@@ -54,6 +54,13 @@ public class SecurityConfig {
                                 "/test",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**").permitAll()
+                        // Catalog shop: khách chưa đăng nhập vẫn phải duyệt được
+                        // sản phẩm. Giỏ hàng và đơn hàng (/shop/cart, /shop/orders)
+                        // KHÔNG nằm trong đây nên vẫn cần đăng nhập.
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/shop/categories",
+                                "/api/v1/shop/products",
+                                "/api/v1/shop/products/**").permitAll()
                         // Tất cả request khác cần auth
                         .anyRequest().authenticated()
                 )
