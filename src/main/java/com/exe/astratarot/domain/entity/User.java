@@ -41,6 +41,27 @@ public class User {
 
     private String phone;
 
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private com.exe.astratarot.domain.enums.Gender gender = com.exe.astratarot.domain.enums.Gender.UNDISCLOSED;
+
+    /** Ngày sinh mức tài khoản. Dữ liệu lập bản đồ sao nằm ở user_astrological_data. */
+    @Column(name = "date_of_birth")
+    private java.time.LocalDate dateOfBirth;
+
+    @Column(columnDefinition = "TEXT")
+    private String bio;
+
+    @Column(columnDefinition = "TEXT")
+    private String address;
+
+    @Column(length = 120)
+    private String city;
+
+    @Column(length = 120)
+    private String country;
+
     @Column(columnDefinition = "TEXT")
     private String avatar;
 

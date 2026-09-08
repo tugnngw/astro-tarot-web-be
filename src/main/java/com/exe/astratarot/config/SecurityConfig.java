@@ -61,6 +61,10 @@ public class SecurityConfig {
                                 "/api/v1/shop/categories",
                                 "/api/v1/shop/products",
                                 "/api/v1/shop/products/**").permitAll()
+                        // Ảnh đại diện đã tải lên — hiển thị công khai như mọi
+                        // ảnh khác trên trang. Việc tải LÊN vẫn cần đăng nhập
+                        // (POST /api/v1/me/avatar).
+                        .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
                         // Tất cả request khác cần auth
                         .anyRequest().authenticated()
                 )
