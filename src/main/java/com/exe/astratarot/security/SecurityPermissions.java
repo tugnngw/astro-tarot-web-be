@@ -48,6 +48,17 @@ public final class SecurityPermissions {
     /** Đọc nhật ký thao tác quản trị. */
     public static final String AUDIT_VIEW = "AUDIT_VIEW";
 
+    // ----- Tiền -----
+    /** Đối soát và xác nhận khoản khách chuyển. */
+    public static final String PAYMENTS_MANAGE = "PAYMENTS_MANAGE";
+    /** Reader xin rút tiền khỏi ký quỹ. Quản trị viên KHÔNG có: người duyệt không nên là người xin. */
+    public static final String PAYOUT_REQUEST = "PAYOUT_REQUEST";
+    /** Duyệt hoặc từ chối lệnh rút. */
+    public static final String PAYOUT_REVIEW = "PAYOUT_REVIEW";
+
+    /** Xử lý báo cáo vi phạm. */
+    public static final String REPORT_REVIEW = "REPORT_REVIEW";
+
     // ----- Còn để lại vì đã có từ trước, chưa endpoint nào dùng -----
     public static final String ADMIN_MANAGE_AVAILABILITY = "ADMIN_MANAGE_AVAILABILITY";
     public static final String ADMIN_MANAGE_UNAVAILABLE = "ADMIN_MANAGE_UNAVAILABLE";

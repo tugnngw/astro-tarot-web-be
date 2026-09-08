@@ -51,6 +51,8 @@ public class BookingServiceImpl implements BookingService {
     private final ReviewRepository reviewRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final com.exe.astratarot.service.EscrowService escrowService;
+    private final com.exe.astratarot.service.PaymentService paymentService;
 
     /**
      * Lịch rảnh của Reader khai báo bằng giờ địa phương (LocalTime + thứ trong
@@ -237,6 +239,12 @@ public class BookingServiceImpl implements BookingService {
         }
 
         b.setStatus(BookingStatus.COMPLETED);
+
+        // Nhả tiền cho Reader ở đúng thời điểm này, không sớm hơn. Chỉ nhả khi
+        // khách đã trả — buổi xem chưa thanh toán thì không có gì trong ký quỹ.
+        if (b.getPaymentStatus() == com.exe.astratarot.domain.enums.PaymentStatus.PAID) {
+            escrowService.releaseForBooking(b);
+        }
         notificationService.push(b.getUser(), NotificationTypes.BOOKING_COMPLETED,
                 "Buổi xem đã hoàn tất",
                 "Bạn có thể để lại đánh giá cho "
@@ -259,6 +267,11 @@ public class BookingServiceImpl implements BookingService {
         }
 
         b.setStatus(BookingStatus.CANCELLED);
+
+        // Đã trả tiền thì gỡ khỏi ký quỹ và đánh dấu chờ hoàn. Không làm gì nếu
+        // chưa trả.
+        paymentService.refundIfPaid(b);
+
         b.setCancelReason(reason == null || reason.isBlank() ? null : reason.trim());
 
         // Báo cho BÊN KIA, không phải cho người vừa bấm huỷ.

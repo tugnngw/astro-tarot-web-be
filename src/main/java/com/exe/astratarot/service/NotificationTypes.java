@@ -16,6 +16,13 @@ public final class NotificationTypes {
     public static final String READER_APPLICATION_APPROVED = "READER_APPLICATION_APPROVED";
     public static final String READER_APPLICATION_REJECTED = "READER_APPLICATION_REJECTED";
     public static final String ACCOUNT_ROLE_CHANGED = "ACCOUNT_ROLE_CHANGED";
+    public static final String PAYMENT_CONFIRMED = "PAYMENT_CONFIRMED";
+    public static final String PAYMENT_FAILED = "PAYMENT_FAILED";
+    public static final String PAYMENT_REFUNDED = "PAYMENT_REFUNDED";
+    public static final String PAYOUT_APPROVED = "PAYOUT_APPROVED";
+    public static final String PAYOUT_REJECTED = "PAYOUT_REJECTED";
+    public static final String PAYOUT_PAID = "PAYOUT_PAID";
+    public static final String REPORT_RESOLVED = "REPORT_RESOLVED";
 
     private NotificationTypes() {}
 }

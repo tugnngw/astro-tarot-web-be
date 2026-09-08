@@ -40,6 +40,10 @@ public class PayoutRequest {
     @Enumerated(EnumType.STRING)
     private PayoutStatus status = PayoutStatus.PENDING;
 
+    /** Vì sao bị từ chối. Reader phải biết để sửa thông tin ngân hàng. */
+    @Column(name = "reject_reason", columnDefinition = "TEXT")
+    private String rejectReason;
+
     @CreationTimestamp
     @Column(name = "requested_at", updatable = false)
     private Instant requestedAt;

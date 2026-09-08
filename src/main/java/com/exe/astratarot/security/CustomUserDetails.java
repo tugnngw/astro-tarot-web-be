@@ -42,7 +42,8 @@ public class CustomUserDetails implements UserDetails {
                     SecurityPermissions.USER_BASIC,
                     SecurityPermissions.READER_MANAGE_PROFILE,
                     SecurityPermissions.SUPPORT_VIEW,
-                    SecurityPermissions.SUPPORT_RESPOND),
+                    SecurityPermissions.SUPPORT_RESPOND,
+                    SecurityPermissions.PAYOUT_REQUEST),
 
             UserRole.MANAGER, List.of(
                     SecurityPermissions.USER_BASIC,
@@ -50,7 +51,8 @@ public class CustomUserDetails implements UserDetails {
                     SecurityPermissions.STAFF_VIEW,
                     SecurityPermissions.STAFF_MANAGE,
                     SecurityPermissions.ADMIN_READERS_VIEW,
-                    SecurityPermissions.ADMIN_READERS_REVIEW),
+                    SecurityPermissions.ADMIN_READERS_REVIEW,
+                    SecurityPermissions.REPORT_REVIEW),
 
             UserRole.ADMIN, List.of(
                     SecurityPermissions.USER_BASIC,
@@ -64,7 +66,10 @@ public class CustomUserDetails implements UserDetails {
                     SecurityPermissions.CATALOG_MANAGE,
                     SecurityPermissions.ORDERS_MANAGE,
                     SecurityPermissions.USERS_MANAGE,
-                    SecurityPermissions.AUDIT_VIEW));
+                    SecurityPermissions.AUDIT_VIEW,
+                    SecurityPermissions.PAYMENTS_MANAGE,
+                    SecurityPermissions.PAYOUT_REVIEW,
+                    SecurityPermissions.REPORT_REVIEW));
 
     /** Quyền của một vai trò, dùng chung cho token và cho API trả về FE. */
     public static List<String> permissionsOf(UserRole role) {
