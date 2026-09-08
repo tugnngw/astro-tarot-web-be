@@ -61,6 +61,19 @@ public class SecurityConfig {
                                 "/api/v1/shop/categories",
                                 "/api/v1/shop/products",
                                 "/api/v1/shop/products/**").permitAll()
+                        // Danh sách Reader là một trong ba trụ cột của trang, khách
+                        // chưa đăng nhập phải xem được. Trước đây hai endpoint này
+                        // có @PreAuthorize("permitAll()") nhưng vẫn trả 403, vì
+                        // .anyRequest().authenticated() bên dưới chặn từ trước khi
+                        // tới annotation.
+                        //
+                        // Viết rõ hai mẫu thay vì /api/v1/readers/** — dấu ** sẽ nuốt
+                        // luôn /api/v1/readers/profile/me và phơi hồ sơ riêng của
+                        // Reader ra ngoài. Mẫu một sao chỉ khớp đúng một đoạn đường
+                        // dẫn nên /profile/me nằm ngoài.
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/readers",
+                                "/api/v1/readers/*").permitAll()
                         // Ảnh đại diện đã tải lên — hiển thị công khai như mọi
                         // ảnh khác trên trang. Việc tải LÊN vẫn cần đăng nhập
                         // (POST /api/v1/me/avatar).

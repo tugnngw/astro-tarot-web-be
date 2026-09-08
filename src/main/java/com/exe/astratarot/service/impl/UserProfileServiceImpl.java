@@ -219,6 +219,7 @@ public class UserProfileServiceImpl implements UserProfileService {
                 .city(u.getCity())
                 .country(u.getCountry())
                 .role(u.getRole().name())
+                .permissions(com.exe.astratarot.security.CustomUserDetails.permissionsOf(u.getRole()))
                 .status(u.getStatus().name())
                 .authProvider(u.getAuthProvider().name())
                 .lastLoginAt(u.getLastLoginAt())

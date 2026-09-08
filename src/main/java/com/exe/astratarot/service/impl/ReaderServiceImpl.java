@@ -33,7 +33,7 @@ public class ReaderServiceImpl implements ReaderService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if (user.getRole() == UserRole.READER) {
+        if (user.getRole() == UserRole.STAFF) {
             throw new AlreadyReaderException();
         }
 
@@ -71,7 +71,7 @@ public class ReaderServiceImpl implements ReaderService {
             application.setReviewedAt(java.time.Instant.now());
 
             User user = application.getUser();
-            user.setRole(UserRole.READER);
+            user.setRole(UserRole.STAFF);
 
             ReaderProfile profile = ReaderProfile.builder()
                     .user(user)

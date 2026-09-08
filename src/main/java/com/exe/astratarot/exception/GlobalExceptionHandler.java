@@ -32,8 +32,16 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
+        // Spring ném exception này với message mặc định "Access Denied" khi
+        // @PreAuthorize chặn. Còn khi tầng service tự ném thì message là lời
+        // giải thích viết cho người dùng ("Không thể hạ vai trò của quản trị
+        // viên cuối cùng") — giữ nguyên để giao diện nói được lý do thay vì chỉ
+        // báo "bị từ chối".
+        String message = ex.getMessage();
+        boolean isDefaultMessage = message == null || message.isBlank()
+                || message.equalsIgnoreCase("Access Denied");
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiResponse.error("Access denied"));
+                .body(ApiResponse.error(isDefaultMessage ? "Bạn không có quyền thực hiện thao tác này" : message));
     }
 
     @ExceptionHandler(RateLimitExceededException.class)
