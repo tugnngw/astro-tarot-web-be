@@ -23,6 +23,8 @@ public class BookingResponse {
     private UUID id;
 
     private UUID readerProfileId;
+    /** Tài khoản của Reader. Cần để khách báo cáo đúng người, không phải hồ sơ. */
+    private UUID readerUserId;
     private String readerName;
     private String readerAvatar;
 

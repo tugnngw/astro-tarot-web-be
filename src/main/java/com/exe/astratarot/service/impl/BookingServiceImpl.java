@@ -395,6 +395,7 @@ public class BookingServiceImpl implements BookingService {
         return BookingResponse.builder()
                 .id(b.getId())
                 .readerProfileId(b.getReaderProfile().getId())
+                .readerUserId(reader.getId())
                 .readerName(reader.getFullName())
                 .readerAvatar(reader.getAvatar())
                 .customerId(customer.getId())
