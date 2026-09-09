@@ -66,6 +66,22 @@ public class AIReadingController {
     }
 
     /**
+     * Lịch sử trải bài của chính người đang đăng nhập, mới nhất trước.
+     *
+     * Lấy danh tính từ JWT nên mỗi người chỉ thấy lượt của mình; không nhận
+     * userId từ ngoài vào để tránh xem trộm lịch sử người khác.
+     */
+    @org.springframework.web.bind.annotation.GetMapping
+    public ResponseEntity<ApiResponse<org.springframework.data.domain.Page<com.exe.astratarot.domain.dto.reading.ReadingHistoryItem>>> history(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "0") int page,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "20") int size) {
+        var pageable = org.springframework.data.domain.PageRequest.of(page, size);
+        return ResponseEntity.ok(ApiResponse.success(
+                tarotReadingService.listHistory(userDetails.getUser().getId(), pageable)));
+    }
+
+    /**
      * Initiates an AI Tarot reading via Server-Sent Events (SSE streaming).
      *
      * <p>Streams interpretation tokens progressively as they arrive from Gemini,
