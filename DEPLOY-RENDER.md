@@ -1,5 +1,3 @@
-| **512 MB RAM** | Đủ chạy, nhưng phải ghì JVM lại (đã cấu hình sẵn trong `render.yaml`). Đã đo thật: 360 MB lúc nhàn rỗi, 399 MB sau 270 request liên tiếp — còn dư khoảng 20%. Bỏ `JAVA_TOOL_OPTIONS` đi là bị giết vì hết bộ nhớ. |
-| **0,1 CPU** | Khởi động chậm. Ở máy với 0,5 CPU mất 28 giây; trên Render free có thể tới 1–2 phút. Lần deploy đầu đừng vội tưởng là hỏng. |
 # Đưa backend lên Render + Neon + Upstash (miễn phí, không hết hạn)
 
 Đây là đường rẻ tiền nhất: **không tốn đồng nào, không cần thẻ, không hết hạn
@@ -16,17 +14,48 @@ Trình duyệt ──https──▶ Vercel (FE)
 Không phải mua tên miền, không phải xin chứng chỉ Let's Encrypt, không phải
 dựng nginx — ba thứ khó nhất của đường VPS biến mất.
 
-## Đổi lại, phải chấp nhận ba điều
+## Đang chạy ở đâu
+
+| | |
+|---|---|
+| Frontend | https://astro-tarot-web-fe.vercel.app |
+| Backend | https://astra-tarot-api.onrender.com |
+| Postgres | Neon, project `astrotarot`, Singapore |
+| Redis | Upstash, `astra-tarot-redis`, Singapore |
+
+Dựng ngày 2026-09-09. Đã kiểm chứng trên bản chạy thật: 13 migration áp sạch
+lên Neon (PostgreSQL 18.6), 12 sản phẩm hiện đúng ở `/shop` với giá và nhãn
+"Ảnh minh hoạ", endpoint admin trả 403 với khách, Swagger trả 404, CORS nhận
+đúng domain Vercel và từ chối domain lạ, và `/auth/login` trả 400 đúng nghiệp
+vụ — nghĩa là bộ đếm chống dò mật khẩu ghi được vào Upstash qua TLS.
+
+## Đổi lại, phải chấp nhận bốn điều
 
 | Điều | Ảnh hưởng thật |
 |---|---|
-| Dịch vụ **ngủ sau 15 phút** không ai truy cập | Lần tải đầu tiên sau khi ngủ mất khoảng 50 giây. Khi demo, hãy mở trang trước vài phút cho nó thức dậy. |
-| **512 MB RAM** | Đủ chạy, nhưng phải ghì JVM lại (đã cấu hình sẵn trong `render.yaml`). Đã đo thật: 360 MB lúc nhàn rỗi, 399 MB sau 270 request liên tiếp — còn dư khoảng 20%. Bỏ `JAVA_TOOL_OPTIONS` đi là bị giết vì hết bộ nhớ. |
-| **0,1 CPU** | Khởi động chậm. Đo ở máy với 0,5 CPU mất 28 giây; trên Render free có thể tới 1–2 phút. Lần deploy đầu đừng vội tưởng là hỏng. |
+| Dịch vụ **ngủ sau 15 phút** không ai truy cập | **Đây là vấn đề lớn nhất, và nó tệ hơn con số Render quảng cáo.** Đo thật lúc dựng xong: lần gọi đầu sau khi ngủ **hết 90 giây vẫn chưa xong**, lần thứ hai mất 44 giây. Lý do là phải cộng dồn ba thứ: Render dựng lại container, Spring Boot khởi động trên 0,1 CPU (log cho thấy riêng phần này ~3 phút), và Neon đánh thức compute. Xem mục "Giữ cho dịch vụ khỏi ngủ" — với đồ án cần demo thì gần như bắt buộc phải làm. |
+| **512 MB RAM** | Đủ chạy, nhưng phải ghì JVM lại (đã cấu hình sẵn trong `render.yaml`). Đo thật: 360 MB lúc nhàn rỗi, 399 MB sau 270 request liên tiếp — còn dư khoảng 20%. Bỏ `JAVA_TOOL_OPTIONS` đi là bị giết vì hết bộ nhớ. |
+| **0,1 CPU** | Khởi động rất chậm. Cùng image đó chạy ở máy với 0,5 CPU mất 28 giây; trên Render free, log đo được ~3 phút. Trong lúc chờ, Render in liên tục `No open ports detected, continuing to scan...` — **đó không phải lỗi**, chỉ là Render quét trong khi Spring chưa mở cổng (Tomcat mở connector ở bước cuối cùng). |
 | **Đĩa không lưu được gì** | Ảnh đại diện người dùng tải lên sẽ mất sau mỗi lần deploy và mỗi lần dịch vụ ngủ dậy. Xem phần cuối. |
 
 Vì sao **không** dùng Postgres free của Render: nó bị xoá sau 30 ngày (trước là
 90). Neon thì miễn phí vĩnh viễn.
+
+## Cập nhật code về sau — không tự động
+
+Repo được thêm vào Render bằng **URL public**, không qua GitHub App, nên Render
+không nhận được webhook. Ô **Auto-Deploy** trong Settings có để "On Commit"
+cũng vô tác dụng: **push lên `feat/dat-branch` sẽ không deploy gì cả.**
+
+Sau mỗi lần push, vào Render → dịch vụ `astra-tarot-api` → **Manual Deploy** →
+*Deploy latest commit*.
+
+(Frontend trên Vercel cũng vậy, vì cùng lý do — chạy `npx vercel deploy --prod`
+trong thư mục FE.)
+
+Muốn tự động: nhờ chủ repo `tugnngw` cài
+[Render GitHub App](https://github.com/apps/render) cho repo, rồi nối lại
+nguồn trong Settings.
 
 ---
 
@@ -97,7 +126,11 @@ Flyway tự chạy toàn bộ migration khi khởi động — không cần tạ
 curl https://astra-tarot-api.onrender.com/actuator/health
 ```
 
-Mong đợi `{"status":"UP"}`. Lần gọi đầu có thể mất 50 giây nếu dịch vụ đang ngủ.
+Mong đợi `{"status":"UP","groups":["liveness","readiness"]}`.
+
+Lần gọi đầu sau khi dịch vụ ngủ có thể **hết cả 90 giây mà vẫn chưa xong** — cứ
+gọi lại lần nữa (lần hai đo được 44 giây). Đừng kết luận là hỏng cho tới khi đã
+thử ít nhất hai lần.
 
 ## 5. Nối FE với BE
 
@@ -132,8 +165,14 @@ Ba cách xử lý, tuỳ mức độ bạn quan tâm:
 
 ## Giữ cho dịch vụ khỏi ngủ
 
-Có thể dùng [cron-job.org](https://cron-job.org) (free) gọi
-`https://astra-tarot-api.onrender.com/actuator/health` mỗi 10 phút.
+Với đồ án cần demo thì gần như bắt buộc, vì 90 giây chờ trước mặt người chấm là
+không chấp nhận được.
+
+Dùng [cron-job.org](https://cron-job.org) (free), tạo một job gọi
+`https://astra-tarot-api.onrender.com/actuator/health` mỗi **10 phút** (phải
+nhỏ hơn 15 phút, nếu không dịch vụ vẫn kịp ngủ).
+
+Cách chắc ăn hơn cho hôm demo: mở trang trước **5 phút** rồi bấm quanh vài lần.
 
 Lưu ý cho sòng phẳng: bản free của Render có hạn mức 750 giờ chạy mỗi tháng cho
 cả tài khoản. Một tháng có khoảng 730 giờ, nên giữ thức 24/7 vừa đủ **một** dịch
@@ -143,10 +182,20 @@ vụ. Có dịch vụ thứ hai là vượt hạn mức.
 
 ## Khi có sự cố
 
-**Deploy hỏng: "no open ports detected"**
+**Log in `No open ports detected, continuing to scan...`**
 
-Ứng dụng nghe sai cổng. `server.port=${PORT:8080}` trong `application.properties`
-lo việc này; kiểm tra xem có ai đặt đè biến `PORT` không.
+Trong lúc khởi động thì **đây là bình thường, không phải lỗi.** Render quét cổng
+liên tục trong khi Spring còn đang dựng bean; Tomcat chỉ mở connector ở bước
+cuối cùng, và trên 0,1 CPU bước đó tới sau khoảng 3 phút. Bạn sẽ thấy dòng này
+lặp lại vài lần rồi mọi thứ vẫn chạy.
+
+Chỉ coi là lỗi khi Render **huỷ hẳn bản deploy** với thông báo hết giờ quét
+cổng. Khi đó mới là ứng dụng nghe sai cổng: `server.port=${PORT:8080}` trong
+`application.properties` lo việc này, kiểm tra xem có ai đặt đè biến `PORT`
+bằng giá trị khác không.
+
+Cách phân biệt nhanh: tìm trong log dòng `Tomcat started on port 10000`. Có
+dòng đó là cổng đã mở đúng.
 
 **Log báo `Connection refused` tới Redis, hoặc treo rồi hết giờ**
 
