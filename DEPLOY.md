@@ -1,5 +1,9 @@
 # Đưa backend + cơ sở dữ liệu lên VPS
 
+> **Không có VPS, không muốn tốn tiền?** Đọc [`DEPLOY-RENDER.md`](DEPLOY-RENDER.md)
+> thay cho file này: Render + Neon + Upstash, miễn phí vĩnh viễn, không cần thẻ,
+> và có sẵn tên miền kèm HTTPS nên bỏ qua được toàn bộ phần nginx và Let's Encrypt.
+
 Backend, PostgreSQL và Redis chạy chung trên một VPS bằng Docker Compose. nginx
 đứng trước làm nhiệm vụ kết thúc TLS. Frontend nằm ở Vercel (xem `DEPLOY.md`
 của repo frontend).

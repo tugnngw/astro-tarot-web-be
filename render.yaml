@@ -1,0 +1,131 @@
+# ============================================================
+# Bản thiết kế cho Render (Blueprint).
+#
+# Chỉ dựng backend. Postgres lấy ở Neon, Redis lấy ở Upstash — KHÔNG dùng
+# Postgres free của Render vì nó bị xoá sau 30 ngày.
+#
+# Cách dùng: Render Dashboard → New → Blueprint → trỏ vào repo này.
+# Hoặc dựng tay bằng New → Web Service, chọn Docker, rồi điền biến môi trường
+# theo danh sách bên dưới.
+# ============================================================
+
+services:
+  - type: web
+    name: astra-tarot-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: singapore
+    branch: feat/dat-branch
+
+    # Render gọi đường dẫn này để biết ứng dụng đã sẵn sàng chưa.
+    healthCheckPath: /actuator/health
+
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+
+      # ---------- Ghì JVM lại cho vừa 512 MB ----------
+      # Bản free chỉ có 512 MB. JVM mặc định nhìn thấy bộ nhớ container rồi tự
+      # đặt heap tối đa bằng 25% — nghe thì an toàn, nhưng nó còn cộng thêm
+      # metaspace, stack của từng luồng và bộ nhớ ngoài heap, nên tổng vẫn vượt
+      # 512 MB và bị hệ điều hành giết giữa chừng.
+      #
+      # SerialGC thay vì G1: G1 giữ sẵn vài chục MB cấu trúc nội bộ, thừa thãi
+      # với một tiến trình nhỏ chạy một nhân CPU.
+      - key: JAVA_TOOL_OPTIONS
+        value: "-XX:MaxRAMPercentage=65 -XX:+UseSerialGC -Xss512k -XX:MaxMetaspaceSize=128m"
+
+      # ---------- Chạy sau proxy của Render ----------
+      # Phải là FRAMEWORK, không phải NATIVE. NATIVE để Tomcat xử lý, mà Tomcat
+      # chỉ tin X-Forwarded-* khi proxy nằm trong dải IP nội bộ; proxy của Render
+      # thì không. Hệ quả: Spring tưởng request đến bằng http và dựng link xác
+      # minh email sai giao thức.
+      - key: FORWARD_HEADERS_STRATEGY
+        value: FRAMEWORK
+
+      # ---------- Postgres ở Neon ----------
+      # Lấy chuỗi kết nối ở Neon Dashboard → Connection Details → JDBC.
+      # Dạng: jdbc:postgresql://ep-abc-123.ap-southeast-1.aws.neon.tech/neondb?sslmode=require
+      # PHẢI giữ ?sslmode=require, thiếu là Neon từ chối.
+      - key: SPRING_DATASOURCE_URL
+        sync: false
+      - key: SPRING_DATASOURCE_USERNAME
+        sync: false
+      - key: SPRING_DATASOURCE_PASSWORD
+        sync: false
+      # Flyway mở kết nối riêng, không dùng lại của datasource.
+      - key: SPRING_FLYWAY_URL
+        sync: false
+      - key: SPRING_FLYWAY_USER
+        sync: false
+      - key: SPRING_FLYWAY_PASSWORD
+        sync: false
+      # application.properties còn một chỗ viết ${DB_PASSWORD} trần.
+      - key: DB_PASSWORD
+        sync: false
+
+      # ---------- Redis ở Upstash ----------
+      # Upstash Console → Details → Endpoint và Password.
+      # REDIS_PORT thường là 6379; TLS thì bắt buộc.
+      - key: REDIS_HOST
+        sync: false
+      - key: REDIS_PORT
+        value: "6379"
+      - key: SPRING_DATA_REDIS_PASSWORD
+        sync: false
+      - key: REDIS_SSL_ENABLED
+        value: "true"
+
+      # ---------- Domain của FE trên Vercel ----------
+      # Sai một trong hai là hỏng lặng lẽ:
+      #  - FRONTEND_URL dựng link trong mail xác minh / đặt lại mật khẩu
+      #  - CORS_ALLOWED_ORIGINS quyết định trình duyệt có cho gọi API không
+      # Không có dấu / ở cuối.
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+
+      # ---------- Khoá bí mật ----------
+      # generateValue: Render tự sinh chuỗi ngẫu nhiên ở lần dựng đầu rồi giữ
+      # nguyên. Đổi JWT_SECRET là mọi người đang đăng nhập bị đăng xuất.
+      - key: JWT_SECRET
+        generateValue: true
+      # KHÔNG để Render tự sinh khoá này: nó phải là base64 của ĐÚNG 32 byte,
+      # và đổi khoá sau khi đã có dữ liệu là không giải mã lại được nữa.
+      # Tự sinh bằng: openssl rand -base64 32
+      - key: ASTRO_ENCRYPTION_KEY
+        sync: false
+
+      # ---------- Gửi mail ----------
+      - key: MAIL_HOST
+        value: smtp.gmail.com
+      - key: MAIL_PORT
+        value: "587"
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM_EMAIL
+        sync: false
+      - key: MAIL_FROM_NAME
+        value: Astra Tarot
+
+      # ---------- Tuỳ chọn ----------
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_API_ENDPOINT
+        sync: false
+      - key: BANK_NAME
+        sync: false
+      - key: BANK_ACCOUNT_NUMBER
+        sync: false
+      - key: BANK_ACCOUNT_HOLDER
+        sync: false
+      - key: SECURITY_LOG_LEVEL
+        value: WARN
