@@ -48,6 +48,10 @@ public class SecurityConfig {
     @Value("${app.frontend-url:http://localhost:8081}")
     private String frontendUrl;
 
+    /** Domain của FE. Khai bằng CORS_ALLOWED_ORIGINS, ngăn cách bằng dấu phẩy. */
+    @Value("${app.cors.allowed-origins}")
+    private List<String> allowedOrigins;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
@@ -99,6 +103,9 @@ public class SecurityConfig {
                         // ảnh khác trên trang. Việc tải LÊN vẫn cần đăng nhập
                         // (POST /api/v1/me/avatar).
                         .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
+                        // Docker va nginx goi endpoint nay de biet backend con
+                        // song. Chi tra UP/DOWN, khong kem chi tiet.
+                        .requestMatchers("/actuator/health").permitAll()
                         // Tất cả request khác cần auth
                         .anyRequest().authenticated()
                 )
@@ -111,8 +118,16 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Cho phép cả localhost và IP
-        configuration.setAllowedOriginPatterns(List.of("*"));
+        /*
+         * Chỉ những domain khai trong CORS_ALLOWED_ORIGINS mới gọi được API này
+         * từ trình duyệt.
+         *
+         * Trước đây để "*". Với Bearer token thì "*" không cho ai đăng nhập hộ
+         * được, nhưng nó cho phép mọi trang web dùng trình duyệt của người dùng
+         * làm bàn đạp gọi API mình — kể cả những endpoint công khai vốn tốn
+         * tiền như gọi AI. Trên VPS thì phải khoá lại đúng domain của FE.
+         */
+        configuration.setAllowedOriginPatterns(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));  // Cho phép tất cả headers
         configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));  // Expose Authorization header

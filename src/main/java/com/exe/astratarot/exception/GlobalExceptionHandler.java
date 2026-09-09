@@ -131,6 +131,26 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage()));
     }
 
+    /**
+     * Đường dẫn không tồn tại.
+     *
+     * Không có handler này thì nó rơi xuống @ExceptionHandler(Exception) và trả
+     * 500 kèm một stack trace đầy đủ trong log — cho một request lẽ ra chỉ đáng
+     * 404. Trên máy chủ công cộng, bot dò /.env, /wp-login.php, /admin.php cả
+     * ngày; mỗi lần như vậy là một stack trace, và log thật chìm nghỉm trong đó.
+     *
+     * Đã gặp khi chạy thử prod: tắt Swagger xong thì /swagger-ui/index.html trả
+     * 500 chứ không phải 404.
+     */
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNoResourceFound(
+            org.springframework.web.servlet.resource.NoResourceFoundException ex) {
+        // Ghi ở mức debug thôi: đây là chuyện bình thường, không phải sự cố.
+        log.debug("Khong tim thay duong dan: {}", ex.getResourcePath());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error("Không tìm thấy đường dẫn này."));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Void>> handleValidation(MethodArgumentNotValidException ex) {
         String message = ex.getBindingResult().getFieldErrors().stream()
