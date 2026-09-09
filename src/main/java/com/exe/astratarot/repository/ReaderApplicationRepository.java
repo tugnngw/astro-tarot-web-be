@@ -10,4 +10,7 @@ public interface ReaderApplicationRepository extends JpaRepository<ReaderApplica
     Optional<ReaderApplication> findByUserIdAndStatus(UUID userId, ReaderApplication.ApplicationStatus status);
     
     boolean existsByUserIdAndStatus(UUID userId, ReaderApplication.ApplicationStatus status);
+
+    // Đếm hồ sơ Reader theo trạng thái — cho bảng thống kê quản trị.
+    long countByStatus(ReaderApplication.ApplicationStatus status);
 }

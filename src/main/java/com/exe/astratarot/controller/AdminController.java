@@ -1,6 +1,7 @@
 package com.exe.astratarot.controller;
 
 import com.exe.astratarot.domain.dto.admin.ActivityLogResponse;
+import com.exe.astratarot.domain.dto.admin.AdminStatsResponse;
 import com.exe.astratarot.domain.dto.admin.BulkUpdateRoleRequest;
 import com.exe.astratarot.domain.dto.admin.CreateUserRequest;
 import com.exe.astratarot.domain.dto.admin.ManagedUserDetailResponse;
@@ -14,6 +15,7 @@ import com.exe.astratarot.security.CustomUserDetails;
 import com.exe.astratarot.service.ReaderProfileService;
 import com.exe.astratarot.service.ReaderService;
 import com.exe.astratarot.service.ActivityLogService;
+import com.exe.astratarot.service.AdminStatsService;
 import com.exe.astratarot.service.UserAdminService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -39,6 +41,19 @@ public class AdminController {
     private final ReaderService readerService;
     private final UserAdminService userAdminService;
     private final ActivityLogService activityLogService;
+    private final AdminStatsService adminStatsService;
+
+    /**
+     * Số liệu tổng quan cho trang Quản trị.
+     *
+     * Chỉ đọc và toàn số đếm, không kèm dữ liệu cá nhân. Cùng quyền với các
+     * thao tác quản trị khác (USERS_MANAGE hoặc AUDIT_VIEW), đều là quyền ADMIN.
+     */
+    @GetMapping("/stats")
+    @PreAuthorize("hasAnyAuthority('USERS_MANAGE','AUDIT_VIEW')")
+    public ResponseEntity<ApiResponse<AdminStatsResponse>> stats() {
+        return ResponseEntity.ok(ApiResponse.success(adminStatsService.getStats()));
+    }
 
     /**
      * Danh sách tài khoản.

@@ -31,6 +31,9 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     long countByRoleAndDeletedAtIsNull(UserRole role);
 
+    // Dem tai khoan moi tao sau moc thoi gian (bo qua tai khoan da xoa mem).
+    long countByCreatedAtAfterAndDeletedAtIsNull(java.time.Instant since);
+
     /**
      * Tìm tài khoản cho màn quản lý.
      *

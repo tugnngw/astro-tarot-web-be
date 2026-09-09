@@ -73,5 +73,8 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 
     long countByReaderProfileIdAndStatus(UUID readerProfileId, BookingStatus status);
 
+    // Dem tat ca booking theo trang thai — cho bang thong ke quan tri.
+    long countByStatus(BookingStatus status);
+
     boolean existsByUserIdAndReaderProfileIdAndStatus(UUID userId, UUID readerProfileId, BookingStatus status);
 }
