@@ -27,13 +27,14 @@ public class ReaderServiceImpl implements ReaderService {
     private final ReaderApplicationRepository readerApplicationRepository;
     private final ReaderProfileRepository readerProfileRepository;
     private final UserRepository userRepository;
+    private final com.exe.astratarot.service.NotificationService notificationService;
 
     @Transactional
     public void apply(UUID userId, ApplyReaderRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if (user.getRole() == UserRole.READER) {
+        if (user.getRole() == UserRole.STAFF) {
             throw new AlreadyReaderException();
         }
 
@@ -71,7 +72,7 @@ public class ReaderServiceImpl implements ReaderService {
             application.setReviewedAt(java.time.Instant.now());
 
             User user = application.getUser();
-            user.setRole(UserRole.READER);
+            user.setRole(UserRole.STAFF);
 
             ReaderProfile profile = ReaderProfile.builder()
                     .user(user)
@@ -83,11 +84,25 @@ public class ReaderServiceImpl implements ReaderService {
 
             readerProfileRepository.save(profile);
             userRepository.save(user);
+
+            notificationService.push(user,
+                    com.exe.astratarot.service.NotificationTypes.READER_APPLICATION_APPROVED,
+                    "Hồ sơ Reader đã được duyệt",
+                    "Từ giờ bạn nhận được lịch hẹn. Nhớ khai báo khung giờ rảnh để khách đặt được.",
+                    java.util.Map.of("applicationId", application.getId().toString()));
         } else if ("REJECTED".equalsIgnoreCase(request.getAction())) {
             application.setStatus(ReaderApplication.ApplicationStatus.REJECTED);
             application.setReviewedBy(reviewer);
             application.setReviewedAt(java.time.Instant.now());
             application.setRejectionReason(request.getRejectionReason());
+
+            notificationService.push(application.getUser(),
+                    com.exe.astratarot.service.NotificationTypes.READER_APPLICATION_REJECTED,
+                    "Hồ sơ Reader chưa được duyệt",
+                    request.getRejectionReason() == null || request.getRejectionReason().isBlank()
+                            ? "Hồ sơ của bạn chưa được duyệt lần này."
+                            : request.getRejectionReason(),
+                    java.util.Map.of("applicationId", application.getId().toString()));
         } else {
             throw new IllegalArgumentException("Invalid action: " + request.getAction());
         }

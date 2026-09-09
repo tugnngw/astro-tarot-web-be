@@ -34,6 +34,8 @@ public class ProfileResponse {
     private String city;
     private String country;
     private String role;
+    /** Quyền của vai trò. Giao diện dùng để bật/tắt menu; chốt chặn thật nằm ở BE. */
+    private java.util.List<String> permissions;
     private String status;
     private String authProvider;
     private Instant lastLoginAt;

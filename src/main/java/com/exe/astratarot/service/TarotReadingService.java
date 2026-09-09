@@ -71,4 +71,13 @@ public interface TarotReadingService {
             Integer totalTokens,
             Integer promptTokens,
             Integer completionTokens) {}
+
+    /**
+     * Lịch sử trải bài của một người dùng, mới nhất trước.
+     *
+     * Chỉ trả phần tóm tắt (câu hỏi, thời điểm); nội dung lá bài và lời giải để
+     * dành cho màn chi tiết, tránh kéo cả luồng hội thoại về chỉ để dựng danh sách.
+     */
+    org.springframework.data.domain.Page<com.exe.astratarot.domain.dto.reading.ReadingHistoryItem> listHistory(
+            java.util.UUID userId, org.springframework.data.domain.Pageable pageable);
 }

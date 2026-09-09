@@ -1,0 +1,30 @@
+# Giữ build context nhỏ và sạch.
+#
+# Quan trọng nhất là dòng .env: file đó chứa mật khẩu CSDL, JWT_SECRET và mật
+# khẩu ứng dụng Gmail. Dockerfile hiện chỉ COPY pom.xml và src nên nó không lọt
+# vào image, nhưng chỉ cần ai đó thêm một dòng `COPY . .` là bí mật nằm vĩnh
+# viễn trong một layer — xoá ở lần build sau cũng không gỡ được khỏi layer cũ.
+.env
+.env.*
+!.env.example
+
+target/
+.git/
+.gitignore
+.idea/
+.vscode/
+*.iml
+
+# Bản build lấy phụ thuộc từ mạng trong stage maven, không cần kho .m2 của máy.
+.mvn/wrapper/maven-wrapper.jar
+mvnw
+mvnw.cmd
+
+uploads/
+logs/
+*.log
+
+# Tài liệu và cấu hình triển khai — nginx được gắn bằng volume, không nằm trong image.
+*.md
+deploy/
+docker-compose*.yml

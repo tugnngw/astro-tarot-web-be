@@ -530,4 +530,17 @@ public class TarotReadingServiceImpl implements TarotReadingService {
         chatSessionRepository.save(session);
         log.info("ChatSession {} initialized with initial messages", session.getId());
     }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<com.exe.astratarot.domain.dto.reading.ReadingHistoryItem> listHistory(
+            java.util.UUID userId, org.springframework.data.domain.Pageable pageable) {
+        return tarotReadingRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable)
+                .map(r -> new com.exe.astratarot.domain.dto.reading.ReadingHistoryItem(
+                        r.getId(),
+                        r.getMainQuestion(),
+                        r.getSessionType() != null ? r.getSessionType().name() : null,
+                        r.getAiModelUsed(),
+                        r.getCreatedAt()));
+    }
 }

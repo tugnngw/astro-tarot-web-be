@@ -1,0 +1,159 @@
+# ============================================================
+# Chạy trên VPS: backend + Postgres + Redis + nginx (TLS)
+#
+# Khác docker-compose.yml (dùng ở máy dev) ở bốn điểm, và cả bốn đều là lý do
+# không đem thẳng file kia lên VPS:
+#
+#  1. Postgres và Redis KHÔNG mở ra internet. File dev publish 5433 và 6379 ra
+#     mọi địa chỉ; trên VPS như vậy là để nguyên cơ sở dữ liệu và Redis cho cả
+#     internet gõ cửa. Redis không mật khẩu bị quét và chiếm trong vài giờ là
+#     chuyện thường.
+#  2. Backend cũng không publish cổng ra ngoài. Chỉ nginx nói chuyện với nó qua
+#     mạng nội bộ của Docker.
+#  3. Bỏ JAVA_TOOL_OPTIONS bật debug TLS. Cờ đó đổ toàn bộ quá trình bắt tay
+#     TLS vào log ở mỗi kết nối — log phình rất nhanh và lộ chi tiết không nên
+#     ghi ra đĩa.
+#  4. Thư mục uploads gắn volume. Không có nó thì mọi ảnh đại diện người dùng
+#     tải lên biến mất sau mỗi lần deploy lại.
+#
+# Chạy:  docker compose -f docker-compose.prod.yml up -d --build
+# ============================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: astra-tarot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: astra-tarot
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?can dat DB_PASSWORD trong .env}
+    # Chỉ nghe trên loopback của chính VPS. Muốn nối bằng pgAdmin từ máy nhà thì
+    # dùng SSH tunnel, đừng mở cổng này ra ngoài.
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d astra-tarot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: astra-tarot-redis
+    restart: unless-stopped
+    # Thêm mật khẩu cho Redis. Redis mặc định không xác thực, và đó là thứ bị
+    # quét nhiều nhất trên internet.
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?can dat REDIS_PASSWORD trong .env}"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: .
+    container_name: astra-tarot-backend
+    restart: unless-stopped
+    # KHÔNG publish cổng. nginx gọi qua tên service trong mạng Docker.
+    expose:
+      - "8080"
+    volumes:
+      # Ảnh đại diện người dùng tải lên. Thiếu dòng này là mất sạch mỗi lần
+      # dựng lại container.
+      - uploads_data:/app/uploads
+    environment:
+      # Nạp application-prod.properties. Hồ sơ này PHẢI tồn tại — trước đây
+      # đặt prod mà không có file, nên mật khẩu Redis không được nạp và ứng
+      # dụng nối Redis thất bại (kéo theo /auth chết vì bộ đếm chống dò).
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/astra-tarot
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      # application.properties còn một chỗ viết ${DB_PASSWORD} trần (không có
+      # giá trị mặc định). Truyền cả tên biến này để không phụ thuộc vào thứ tự
+      # ưu tiên của Spring.
+      DB_PASSWORD: ${DB_PASSWORD}
+      SPRING_FLYWAY_URL: jdbc:postgresql://postgres:5432/astra-tarot
+      SPRING_FLYWAY_USER: postgres
+      SPRING_FLYWAY_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+      # Domain của FE trên Vercel. Dùng ở HAI chỗ và sai một trong hai là hỏng:
+      #  - FRONTEND_URL dựng link trong mail xác minh / đặt lại mật khẩu
+      #  - CORS_ALLOWED_ORIGINS quyết định trình duyệt có cho gọi API không
+      FRONTEND_URL: ${FRONTEND_URL:?can dat FRONTEND_URL trong .env}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?can dat CORS_ALLOWED_ORIGINS trong .env}
+
+      JWT_SECRET: ${JWT_SECRET:?can dat JWT_SECRET trong .env}
+      ASTRO_ENCRYPTION_KEY: ${ASTRO_ENCRYPTION_KEY:?can dat ASTRO_ENCRYPTION_KEY trong .env}
+
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-true}
+      MAIL_SMTP_STARTTLS: ${MAIL_SMTP_STARTTLS:-true}
+      MAIL_FROM_EMAIL: ${MAIL_FROM_EMAIL}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME}
+
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_API_ENDPOINT: ${GEMINI_API_ENDPOINT:-}
+
+      # Tài khoản nhận chuyển khoản. Bỏ trống thì màn thanh toán hiện
+      # "Chưa cấu hình" và khách không biết chuyển vào đâu.
+      BANK_NAME: ${BANK_NAME:-}
+      BANK_ACCOUNT_NUMBER: ${BANK_ACCOUNT_NUMBER:-}
+      BANK_ACCOUNT_HOLDER: ${BANK_ACCOUNT_HOLDER:-}
+
+      SECURITY_LOG_LEVEL: ${SECURITY_LOG_LEVEL:-WARN}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: astra-tarot-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - certbot_conf:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+    depends_on:
+      - backend
+
+  # Xin và gia hạn chứng chỉ Let's Encrypt.
+  #
+  # BẮT BUỘC phải có HTTPS: Vercel phục vụ FE qua https, mà trang https không
+  # được phép gọi API qua http — trình duyệt chặn thẳng (mixed content). Deploy
+  # xong mà quên bước này thì trang lên nhưng mọi thứ động đều chết.
+  certbot:
+    image: certbot/certbot:latest
+    container_name: astra-tarot-certbot
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    # Thức dậy mỗi 12 tiếng để gia hạn. Chứng chỉ Let's Encrypt sống 90 ngày.
+    entrypoint: >
+      sh -c "trap exit TERM;
+      while :; do certbot renew --webroot -w /var/www/certbot --quiet;
+      sleep 12h & wait $${!}; done"
+
+volumes:
+  postgres_data:
+  uploads_data:
+  certbot_conf:
+  certbot_www:

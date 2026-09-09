@@ -23,6 +23,7 @@ import com.exe.astratarot.repository.UserRepository;
 import com.exe.astratarot.repository.UserSessionRepository;
 import com.exe.astratarot.service.AuthService;
 import com.exe.astratarot.service.EmailService;
+import com.exe.astratarot.service.UsernameGenerator;
 import com.exe.astratarot.service.TokenIssuerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -65,6 +66,7 @@ public class AuthServiceImpl implements AuthService {
     private final AuthenticationManager authenticationManager;
     private final TokenIssuerService tokenIssuerService;
     private final EmailService emailService;
+    private final UsernameGenerator usernameGenerator;
     private final SecureRandom secureRandom = new SecureRandom();
 
     @Value("${app.frontend-url}")
@@ -86,7 +88,7 @@ public class AuthServiceImpl implements AuthService {
         String rawToken = generateRawToken();
 
         User user = User.builder()
-                .username(generateUsernameFrom(email))
+                .username(usernameGenerator.fromEmail(email))
                 .email(email)
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .fullName(request.fullName().trim())
@@ -102,32 +104,6 @@ public class AuthServiceImpl implements AuthService {
 
         log.info("Đã tạo tài khoản {} và gửi mail xác minh", email);
         return new RegisterResponse(email, true);
-    }
-
-    /**
-     * Sinh username từ phần trước @ của email.
-     *
-     * Cột username là NOT NULL UNIQUE từ V1_1 và luồng OAuth vẫn đang dùng, nên
-     * không bỏ được; nhưng người dùng không cần biết tới nó nữa. Nối thêm 8 ký
-     * tự ngẫu nhiên để hai người có email khác nhau mà trùng phần đầu (ví dụ
-     * an@a.com và an@b.com) không đụng nhau.
-     */
-    private String generateUsernameFrom(String email) {
-        String base = email.split("@")[0]
-                .toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9_]", "");
-        if (base.isEmpty()) {
-            base = "user";
-        }
-        base = base.substring(0, Math.min(base.length(), 40));
-
-        for (int attempt = 0; attempt < 5; attempt++) {
-            String candidate = base + "_" + UUID.randomUUID().toString().substring(0, 8);
-            if (!userRepository.existsByUsernameIgnoreCaseAndDeletedAtIsNull(candidate)) {
-                return candidate;
-            }
-        }
-        throw new IllegalStateException("Không sinh được username duy nhất");
     }
 
     // =========================================================

@@ -58,6 +58,14 @@ public class ProductServiceImpl implements ProductService {
                 .toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ProductResponse> listForAdmin(String keyword, Pageable pageable) {
+        return productRepository
+                .searchForAdmin(isBlank(keyword) ? "" : keyword.trim(), pageable)
+                .map(this::toResponse);
+    }
+
     private static boolean isBlank(String s) {
         return s == null || s.isBlank();
     }
@@ -74,6 +82,10 @@ public class ProductServiceImpl implements ProductService {
                 .stock(p.getStock())
                 .imageUrl(p.getImageUrl())
                 .imageIsIllustrative(p.getImageIsIllustrative())
+                .affiliateUrl(p.getAffiliateUrl())
+                .affiliatePlatform(p.getAffiliatePlatform())
+                .commissionPercent(p.getCommissionPercent())
+                .clickCount(p.getClickCount())
                 .featured(p.getFeatured())
                 .categoryName(c == null ? null : c.getName())
                 .categorySlug(c == null ? null : c.getSlug())

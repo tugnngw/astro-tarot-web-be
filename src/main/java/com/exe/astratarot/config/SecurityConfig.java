@@ -12,6 +12,7 @@ import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -27,6 +28,16 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
+/*
+ * BẮT BUỘC phải có. Thiếu annotation này thì Spring không dựng proxy cho
+ * @PreAuthorize, và MỌI annotation phân quyền trong dự án trở thành lời chú
+ * thích: chỉ còn .anyRequest().authenticated() bên dưới chặn, nghĩa là bất kỳ
+ * tài khoản nào đã đăng nhập cũng gọi được /api/v1/admin/**.
+ *
+ * Đã kiểm chứng bằng token của một tài khoản STAFF: trước khi bật, nó đọc được
+ * cả danh sách tài khoản lẫn hồ sơ Reader chờ duyệt.
+ */
+@EnableMethodSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -36,6 +47,10 @@ public class SecurityConfig {
 
     @Value("${app.frontend-url:http://localhost:8081}")
     private String frontendUrl;
+
+    /** Domain của FE. Khai bằng CORS_ALLOWED_ORIGINS, ngăn cách bằng dấu phẩy. */
+    @Value("${app.cors.allowed-origins}")
+    private List<String> allowedOrigins;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -61,10 +76,36 @@ public class SecurityConfig {
                                 "/api/v1/shop/categories",
                                 "/api/v1/shop/products",
                                 "/api/v1/shop/products/**").permitAll()
+                        // Ghi nhận lượt bấm sang sàn liên kết: phần lớn người bấm
+                        // mua chưa đăng nhập, bắt họ đăng nhập chỉ để đi mua hộ
+                        // mình là cách chắc chắn nhất để mất hoa hồng.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/shop/products/*/click").permitAll()
+                        // Danh sách Reader là một trong ba trụ cột của trang, khách
+                        // chưa đăng nhập phải xem được. Trước đây hai endpoint này
+                        // có @PreAuthorize("permitAll()") nhưng vẫn trả 403, vì
+                        // .anyRequest().authenticated() bên dưới chặn từ trước khi
+                        // tới annotation.
+                        //
+                        // Viết rõ hai mẫu thay vì /api/v1/readers/** — dấu ** sẽ nuốt
+                        // luôn /api/v1/readers/profile/me và phơi hồ sơ riêng của
+                        // Reader ra ngoài. Mẫu một sao chỉ khớp đúng một đoạn đường
+                        // dẫn nên /profile/me nằm ngoài.
+                        //
+                        // Khung giờ trống và đánh giá cũng công khai: khách phải
+                        // xem được Reader rảnh lúc nào và người khác nhận xét ra
+                        // sao TRƯỚC khi quyết định đăng ký tài khoản.
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/readers",
+                                "/api/v1/readers/*",
+                                "/api/v1/readers/*/slots",
+                                "/api/v1/readers/*/reviews").permitAll()
                         // Ảnh đại diện đã tải lên — hiển thị công khai như mọi
                         // ảnh khác trên trang. Việc tải LÊN vẫn cần đăng nhập
                         // (POST /api/v1/me/avatar).
                         .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
+                        // Docker va nginx goi endpoint nay de biet backend con
+                        // song. Chi tra UP/DOWN, khong kem chi tiet.
+                        .requestMatchers("/actuator/health").permitAll()
                         // Tất cả request khác cần auth
                         .anyRequest().authenticated()
                 )
@@ -77,8 +118,16 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Cho phép cả localhost và IP
-        configuration.setAllowedOriginPatterns(List.of("*"));
+        /*
+         * Chỉ những domain khai trong CORS_ALLOWED_ORIGINS mới gọi được API này
+         * từ trình duyệt.
+         *
+         * Trước đây để "*". Với Bearer token thì "*" không cho ai đăng nhập hộ
+         * được, nhưng nó cho phép mọi trang web dùng trình duyệt của người dùng
+         * làm bàn đạp gọi API mình — kể cả những endpoint công khai vốn tốn
+         * tiền như gọi AI. Trên VPS thì phải khoá lại đúng domain của FE.
+         */
+        configuration.setAllowedOriginPatterns(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));  // Cho phép tất cả headers
         configuration.setExposedHeaders(List.of("Authorization", "Content-Type"));  // Expose Authorization header

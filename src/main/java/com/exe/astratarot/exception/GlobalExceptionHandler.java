@@ -32,8 +32,30 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
+        // Spring ném exception này với message mặc định "Access Denied" khi
+        // @PreAuthorize chặn. Còn khi tầng service tự ném thì message là lời
+        // giải thích viết cho người dùng ("Không thể hạ vai trò của quản trị
+        // viên cuối cùng") — giữ nguyên để giao diện nói được lý do thay vì chỉ
+        // báo "bị từ chối".
+        String message = ex.getMessage();
+        boolean isDefaultMessage = message == null || message.isBlank()
+                || message.equalsIgnoreCase("Access Denied");
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiResponse.error("Access denied"));
+                .body(ApiResponse.error(isDefaultMessage ? "Bạn không có quyền thực hiện thao tác này" : message));
+    }
+
+    /**
+     * Body gửi lên không đọc được: JSON sai cú pháp, sai kiểu, hoặc sai bảng mã.
+     *
+     * Không có handler này thì nó rơi xuống @ExceptionHandler(Exception) và trả
+     * 500 — báo cho client rằng máy chủ hỏng, trong khi lỗi nằm ở request họ
+     * gửi. 500 còn làm mọi cơ chế cảnh báo lỗi hệ thống kêu oan.
+     */
+    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnreadableBody(
+            org.springframework.http.converter.HttpMessageNotReadableException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error("Dữ liệu gửi lên không hợp lệ. Kiểm tra lại định dạng JSON và bảng mã UTF-8."));
     }
 
     @ExceptionHandler(RateLimitExceededException.class)
@@ -42,17 +64,53 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage()));
     }
 
+    /**
+     * Tình huống nghiệp vụ bình thường, không phải sự cố.
+     *
+     * Bảy exception của luồng Reader trước đây KHÔNG có handler nào, nên rơi
+     * hết xuống @ExceptionHandler(Exception) và trả 500 kèm "Đã có lỗi xảy ra".
+     * Người dùng nộp hồ sơ lần thứ hai, hay khai một khung giờ bị trùng, đều
+     * nhận về màn hình lỗi hệ thống thay vì câu giải thích họ cần đọc.
+     */
     @ExceptionHandler({
             EmailAlreadyExistsException.class,
             UsernameAlreadyExistsException.class,
             AccountDeactivatedException.class,
             EmailNotVerifiedException.class,
             InvalidCredentialsException.class,
-            TokenReusedException.class
+            TokenReusedException.class,
+            AlreadyReaderException.class,
+            AlreadyAppliedException.class,
+            InvalidApplicationStatusException.class,
+            AvailabilityConflictException.class,
+            InvalidAvailabilityTimeException.class
     })
     public ResponseEntity<ApiResponse<Void>> handleConflictAndBadRequests(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    /** Không tìm thấy đối tượng. Giao diện phân biệt 404 với lỗi thật để hiện đúng màn hình. */
+    @ExceptionHandler({
+            ApplicationNotFoundException.class,
+            ReaderNotVerifiedException.class
+    })
+    public ResponseEntity<ApiResponse<Void>> handleNotFoundDomain(RuntimeException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    /**
+     * Nhà cung cấp mô hình ngôn ngữ lỗi hoặc quá tải.
+     *
+     * 502 chứ không 500: hỏng nằm ở dịch vụ bên ngoài, và giao diện cần phân
+     * biệt để mời người dùng thử lại thay vì báo hệ thống hỏng.
+     */
+    @ExceptionHandler(LLMProviderException.class)
+    public ResponseEntity<ApiResponse<Void>> handleLlmProvider(LLMProviderException ex) {
+        log.warn("Nhà cung cấp AI lỗi: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(ApiResponse.error("Dịch vụ AI đang bận. Bạn thử lại sau ít phút nhé."));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -71,6 +129,26 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleResourceNotFound(ResourceNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    /**
+     * Đường dẫn không tồn tại.
+     *
+     * Không có handler này thì nó rơi xuống @ExceptionHandler(Exception) và trả
+     * 500 kèm một stack trace đầy đủ trong log — cho một request lẽ ra chỉ đáng
+     * 404. Trên máy chủ công cộng, bot dò /.env, /wp-login.php, /admin.php cả
+     * ngày; mỗi lần như vậy là một stack trace, và log thật chìm nghỉm trong đó.
+     *
+     * Đã gặp khi chạy thử prod: tắt Swagger xong thì /swagger-ui/index.html trả
+     * 500 chứ không phải 404.
+     */
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNoResourceFound(
+            org.springframework.web.servlet.resource.NoResourceFoundException ex) {
+        // Ghi ở mức debug thôi: đây là chuyện bình thường, không phải sự cố.
+        log.debug("Khong tim thay duong dan: {}", ex.getResourcePath());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error("Không tìm thấy đường dẫn này."));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

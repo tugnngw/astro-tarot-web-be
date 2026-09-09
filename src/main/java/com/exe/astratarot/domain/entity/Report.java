@@ -50,6 +50,18 @@ public class Report {
     @Enumerated(EnumType.STRING)
     private ReportStatus status = ReportStatus.PENDING;
 
+    /** Người xử lý. Null khi báo cáo còn nằm trong hàng chờ. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "handled_by")
+    private User handledBy;
+
+    @Column(name = "handled_at")
+    private Instant handledAt;
+
+    /** Kết luận. Người tố cáo đọc được, nên viết cho họ hiểu. */
+    @Column(name = "resolution_note", columnDefinition = "TEXT")
+    private String resolutionNote;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
