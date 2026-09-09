@@ -49,6 +49,23 @@ public class GeminiProvider implements LLMProvider {
     @Value("${gemini.api.endpoint}")
     private String apiEndpoint;
 
+    /**
+     * Endpoint đã bỏ hậu tố phương thức, để hai lối gọi tự ghép đúng cái của
+     * mình.
+     *
+     * Trước đây gọi thường ghép "?key=" (ngầm cần endpoint kết thúc bằng
+     * ":generateContent") còn gọi luồng ghép ":streamGenerateContent" (ngầm cần
+     * endpoint KHÔNG có phương thức). Một giá trị cấu hình không thể vừa lòng cả
+     * hai: để ":generateContent" thì luồng thành
+     * "...:generateContent:streamGenerateContent"; để trống thì gọi thường mất
+     * hẳn phương thức. Chuẩn hoá về gốc ở đây nên cấu hình để kiểu nào cũng
+     * chạy — cả URL có sẵn ":generateContent" lẫn URL gốc tới model.
+     */
+    private String baseEndpoint() {
+        return apiEndpoint == null ? ""
+                : apiEndpoint.replaceAll(":(generateContent|streamGenerateContent)$", "");
+    }
+
     public GeminiProvider(RestTemplate restTemplate,
                           @Qualifier("streamingRestTemplate") RestTemplate streamingRestTemplate,
                           ObjectMapper objectMapper) {
@@ -103,7 +120,7 @@ public class GeminiProvider implements LLMProvider {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
             // Add API key to URL parameter as per Gemini API documentation
-            String url = apiEndpoint + "?key=" + apiKey;
+            String url = baseEndpoint() + ":generateContent?key=" + apiKey;
 
             // Create request entity
             HttpEntity<String> request = new HttpEntity<>(objectMapper.writeValueAsString(requestBody), headers);
@@ -162,7 +179,7 @@ public class GeminiProvider implements LLMProvider {
                                Consumer<Throwable> onError,
                                Consumer<StreamCompletion> onComplete) {
         try {
-            String url = apiEndpoint + ":streamGenerateContent?alt=sse&key=" + apiKey;
+            String url = baseEndpoint() + ":streamGenerateContent?alt=sse&key=" + apiKey;
 
             Map<String, Object> requestBody = buildRequestBody(prompt);
 
