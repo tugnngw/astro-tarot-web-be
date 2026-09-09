@@ -12,4 +12,7 @@ public interface ProductService {
     ProductResponse getBySlug(String slug);
     List<ProductResponse> getFeatured();
     List<CategoryResponse> getCategories();
+
+    /** Danh sách cho màn quản trị: gồm cả sản phẩm đã ẩn. */
+    Page<ProductResponse> listForAdmin(String keyword, Pageable pageable);
 }

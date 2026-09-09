@@ -38,4 +38,28 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
     Page<Product> search(@Param("categorySlug") String categorySlug,
                          @Param("keyword") String keyword,
                          Pageable pageable);
+
+    boolean existsBySlug(String slug);
+
+    long countByActiveTrueAndAffiliateUrlIsNotNull();
+
+    long countByActiveTrueAndAffiliateUrlIsNull();
+
+    /** Xếp theo lượt bấm sang sàn — sản phẩm nào đáng giữ, sản phẩm nào nên bỏ. */
+    @Query("""
+            SELECT p FROM Product p
+            LEFT JOIN FETCH p.category
+            WHERE p.active = TRUE
+            ORDER BY p.clickCount DESC
+            """)
+    List<Product> findTopClicked();
+
+    /** Cả sản phẩm đã ẩn, cho màn quản trị. */
+    @Query("""
+            SELECT p FROM Product p
+            LEFT JOIN FETCH p.category
+            WHERE (:keyword = '' OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%')))
+            ORDER BY p.createdAt DESC
+            """)
+    Page<Product> searchForAdmin(@Param("keyword") String keyword, Pageable pageable);
 }

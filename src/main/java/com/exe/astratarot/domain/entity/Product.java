@@ -53,6 +53,26 @@ public class Product {
     @Column(name = "image_is_illustrative", nullable = false)
     private Boolean imageIsIllustrative = false;
 
+    /**
+     * Đường dẫn tiếp thị liên kết. NULL nghĩa là chưa gắn link — giao diện ẩn
+     * hẳn nút mua thay vì dẫn khách tới trang lỗi.
+     */
+    @Column(name = "affiliate_url", columnDefinition = "TEXT")
+    private String affiliateUrl;
+
+    @Builder.Default
+    @Column(name = "affiliate_platform", nullable = false, length = 30)
+    private String affiliatePlatform = "SHOPEE";
+
+    /** Chỉ để ước lượng. Số hoa hồng thật lấy từ báo cáo của sàn. */
+    @Builder.Default
+    @Column(name = "commission_percent", nullable = false, precision = 5, scale = 2)
+    private java.math.BigDecimal commissionPercent = java.math.BigDecimal.ZERO;
+
+    @Builder.Default
+    @Column(name = "click_count", nullable = false)
+    private Long clickCount = 0L;
+
     @Builder.Default
     @Column(nullable = false)
     private Boolean active = true;

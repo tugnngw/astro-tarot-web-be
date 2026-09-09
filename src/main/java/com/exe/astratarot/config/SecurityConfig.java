@@ -72,6 +72,10 @@ public class SecurityConfig {
                                 "/api/v1/shop/categories",
                                 "/api/v1/shop/products",
                                 "/api/v1/shop/products/**").permitAll()
+                        // Ghi nhận lượt bấm sang sàn liên kết: phần lớn người bấm
+                        // mua chưa đăng nhập, bắt họ đăng nhập chỉ để đi mua hộ
+                        // mình là cách chắc chắn nhất để mất hoa hồng.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/shop/products/*/click").permitAll()
                         // Danh sách Reader là một trong ba trụ cột của trang, khách
                         // chưa đăng nhập phải xem được. Trước đây hai endpoint này
                         // có @PreAuthorize("permitAll()") nhưng vẫn trả 403, vì

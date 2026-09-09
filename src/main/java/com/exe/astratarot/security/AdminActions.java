@@ -22,12 +22,16 @@ public final class AdminActions {
     public static final String PAYOUT_REJECT = "PAYOUT_REJECT";
     public static final String PAYOUT_PAID = "PAYOUT_PAID";
     public static final String REPORT_HANDLE = "REPORT_HANDLE";
+    public static final String PRODUCT_CREATE = "PRODUCT_CREATE";
+    public static final String PRODUCT_UPDATE = "PRODUCT_UPDATE";
+    public static final String PRODUCT_SET_ACTIVE = "PRODUCT_SET_ACTIVE";
 
     /** Đối tượng bị tác động. */
     public static final String ENTITY_USER = "USER";
     public static final String ENTITY_PAYMENT = "PAYMENT";
     public static final String ENTITY_PAYOUT = "PAYOUT";
     public static final String ENTITY_REPORT = "REPORT";
+    public static final String ENTITY_PRODUCT = "PRODUCT";
 
     private AdminActions() {}
 }
