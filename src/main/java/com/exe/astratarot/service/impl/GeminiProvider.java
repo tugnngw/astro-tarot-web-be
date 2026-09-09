@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -37,6 +38,7 @@ import java.util.function.Consumer;
  */
 @Service
 @Slf4j
+@ConditionalOnProperty(name = "llm.provider", havingValue = "gemini", matchIfMissing = true)
 public class GeminiProvider implements LLMProvider {
 
     private final RestTemplate restTemplate;
