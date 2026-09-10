@@ -385,7 +385,7 @@ INSERT INTO reports (
     handled_by, handled_at, resolution_note, created_at
 )
 SELECT * FROM (VALUES
-    ('g1000000-0000-4000-8000-000000000001'::uuid,
+    ('aa100000-0000-4000-8000-000000000001'::uuid,
      'a1000000-0000-4000-8000-000000000005'::uuid,
      'a1000000-0000-4000-8000-000000000004'::uuid,
      NULL::uuid,
@@ -395,7 +395,7 @@ SELECT * FROM (VALUES
      NULL::uuid, NULL::timestamptz, NULL::text,
      NOW() - INTERVAL '8 hours'),
 
-    ('g1000000-0000-4000-8000-000000000002'::uuid,
+    ('aa100000-0000-4000-8000-000000000002'::uuid,
      'a1000000-0000-4000-8000-000000000006'::uuid,
      'a1000000-0000-4000-8000-000000000008'::uuid,
      NULL::uuid,
@@ -418,21 +418,21 @@ INSERT INTO support_tickets (
     id, user_id, subject, status, assigned_to, created_at, updated_at
 )
 SELECT * FROM (VALUES
-    ('h1000000-0000-4000-8000-000000000001'::uuid,
+    ('ab100000-0000-4000-8000-000000000001'::uuid,
      'a1000000-0000-4000-8000-000000000005'::uuid,
      'Không nhận được mail xác nhận đặt lịch',
      'OPEN',
      NULL::uuid,
      NOW() - INTERVAL '3 hours', NOW() - INTERVAL '3 hours'),
 
-    ('h1000000-0000-4000-8000-000000000002'::uuid,
+    ('ab100000-0000-4000-8000-000000000002'::uuid,
      'a1000000-0000-4000-8000-000000000006'::uuid,
      'Hỏi về hoàn tiền khi Reader huỷ',
      'PENDING',
      'a1000000-0000-4000-8000-000000000002'::uuid,
      NOW() - INTERVAL '1 day', NOW() - INTERVAL '20 hours'),
 
-    ('h1000000-0000-4000-8000-000000000003'::uuid,
+    ('ab100000-0000-4000-8000-000000000003'::uuid,
      'a1000000-0000-4000-8000-000000000007'::uuid,
      'Cách nộp hồ sơ Reader',
      'RESOLVED',
@@ -444,38 +444,38 @@ WHERE EXISTS (SELECT 1 FROM users u WHERE u.id = v.user_id)
 
 INSERT INTO support_ticket_messages (id, ticket_id, sender_id, body, created_at)
 SELECT * FROM (VALUES
-    ('h2000000-0000-4000-8000-000000000001'::uuid,
-     'h1000000-0000-4000-8000-000000000001'::uuid,
+    ('ab200000-0000-4000-8000-000000000001'::uuid,
+     'ab100000-0000-4000-8000-000000000001'::uuid,
      'a1000000-0000-4000-8000-000000000005'::uuid,
      'Em đặt lịch với chị Lan nhưng chưa thấy mail xác nhận. Nhờ anh/chị kiểm tra giúp ạ.',
      NOW() - INTERVAL '3 hours'),
 
-    ('h2000000-0000-4000-8000-000000000002'::uuid,
-     'h1000000-0000-4000-8000-000000000002'::uuid,
+    ('ab200000-0000-4000-8000-000000000002'::uuid,
+     'ab100000-0000-4000-8000-000000000002'::uuid,
      'a1000000-0000-4000-8000-000000000006'::uuid,
      'Nếu Reader huỷ buổi đã thanh toán thì tiền có về lại không ạ?',
      NOW() - INTERVAL '1 day'),
 
-    ('h2000000-0000-4000-8000-000000000003'::uuid,
-     'h1000000-0000-4000-8000-000000000002'::uuid,
+    ('ab200000-0000-4000-8000-000000000003'::uuid,
+     'ab100000-0000-4000-8000-000000000002'::uuid,
      'a1000000-0000-4000-8000-000000000002'::uuid,
      'Chào bạn, nếu Reader huỷ thì hệ thống hoàn về theo chính sách ký quỹ trong 1–3 ngày làm việc. Bạn gửi giúp mã đơn để mình kiểm tra cụ thể nhé.',
      NOW() - INTERVAL '20 hours'),
 
-    ('h2000000-0000-4000-8000-000000000004'::uuid,
-     'h1000000-0000-4000-8000-000000000003'::uuid,
+    ('ab200000-0000-4000-8000-000000000004'::uuid,
+     'ab100000-0000-4000-8000-000000000003'::uuid,
      'a1000000-0000-4000-8000-000000000007'::uuid,
      'Muốn xin làm Reader thì nộp ở đâu ạ?',
      NOW() - INTERVAL '7 days'),
 
-    ('h2000000-0000-4000-8000-000000000005'::uuid,
-     'h1000000-0000-4000-8000-000000000003'::uuid,
+    ('ab200000-0000-4000-8000-000000000005'::uuid,
+     'ab100000-0000-4000-8000-000000000003'::uuid,
      'a1000000-0000-4000-8000-000000000002'::uuid,
      'Bạn vào hồ sơ → Đăng ký Reader, điền bio và chuyên môn rồi gửi. Quản lý sẽ duyệt trong vài ngày.',
      NOW() - INTERVAL '6 days 12 hours'),
 
-    ('h2000000-0000-4000-8000-000000000006'::uuid,
-     'h1000000-0000-4000-8000-000000000003'::uuid,
+    ('ab200000-0000-4000-8000-000000000006'::uuid,
+     'ab100000-0000-4000-8000-000000000003'::uuid,
      'a1000000-0000-4000-8000-000000000007'::uuid,
      'Cảm ơn ạ, mình đã nộp rồi!',
      NOW() - INTERVAL '6 days')
@@ -489,7 +489,7 @@ INSERT INTO tarot_readings (
     main_question, ai_model_used, total_tokens_used, created_at, updated_at
 )
 SELECT
-    'i1000000-0000-4000-8000-000000000001'::uuid,
+    'ad100000-0000-4000-8000-000000000001'::uuid,
     'a1000000-0000-4000-8000-000000000005'::uuid,
     NULL,
     'c1000000-0000-4000-8000-000000000001'::uuid,
@@ -500,12 +500,12 @@ SELECT
     NOW() - INTERVAL '2 days',
     NOW() - INTERVAL '2 days'
 WHERE EXISTS (SELECT 1 FROM users WHERE id = 'a1000000-0000-4000-8000-000000000005')
-  AND NOT EXISTS (SELECT 1 FROM tarot_readings WHERE id = 'i1000000-0000-4000-8000-000000000001');
+  AND NOT EXISTS (SELECT 1 FROM tarot_readings WHERE id = 'ad100000-0000-4000-8000-000000000001');
 
 INSERT INTO reading_cards (id, reading_id, card_id, position, is_reversed, interpretation)
 SELECT
     gen_random_uuid(),
-    'i1000000-0000-4000-8000-000000000001'::uuid,
+    'ad100000-0000-4000-8000-000000000001'::uuid,
     c.id,
     v.pos,
     v.rev,
@@ -518,10 +518,10 @@ FROM (VALUES
 JOIN LATERAL (
     SELECT id FROM tarot_cards ORDER BY card_number NULLS LAST, name LIMIT 1 OFFSET v.pos
 ) c ON TRUE
-WHERE EXISTS (SELECT 1 FROM tarot_readings WHERE id = 'i1000000-0000-4000-8000-000000000001')
+WHERE EXISTS (SELECT 1 FROM tarot_readings WHERE id = 'ad100000-0000-4000-8000-000000000001')
   AND NOT EXISTS (
       SELECT 1 FROM reading_cards rc
-      WHERE rc.reading_id = 'i1000000-0000-4000-8000-000000000001'
+      WHERE rc.reading_id = 'ad100000-0000-4000-8000-000000000001'
         AND rc.position = v.pos
   );
 
@@ -530,27 +530,27 @@ INSERT INTO chat_sessions (
     last_message_at, created_at, updated_at
 )
 SELECT
-    'i2000000-0000-4000-8000-000000000001'::uuid,
+    'ad200000-0000-4000-8000-000000000001'::uuid,
     'a1000000-0000-4000-8000-000000000005'::uuid,
-    'i1000000-0000-4000-8000-000000000001'::uuid,
+    'ad100000-0000-4000-8000-000000000001'::uuid,
     NULL,
     'AI',
     'ACTIVE',
     NOW() - INTERVAL '2 days',
     NOW() - INTERVAL '2 days',
     NOW() - INTERVAL '2 days'
-WHERE EXISTS (SELECT 1 FROM tarot_readings WHERE id = 'i1000000-0000-4000-8000-000000000001')
-  AND NOT EXISTS (SELECT 1 FROM chat_sessions WHERE id = 'i2000000-0000-4000-8000-000000000001');
+WHERE EXISTS (SELECT 1 FROM tarot_readings WHERE id = 'ad100000-0000-4000-8000-000000000001')
+  AND NOT EXISTS (SELECT 1 FROM chat_sessions WHERE id = 'ad200000-0000-4000-8000-000000000001');
 
 INSERT INTO chat_messages (id, session_id, sender_type, sender_id, content, message_type, created_at, updated_at)
 SELECT * FROM (VALUES
-    ('i3000000-0000-4000-8000-000000000001'::uuid,
-     'i2000000-0000-4000-8000-000000000001'::uuid,
+    ('ad300000-0000-4000-8000-000000000001'::uuid,
+     'ad200000-0000-4000-8000-000000000001'::uuid,
      'USER', 'a1000000-0000-4000-8000-000000000005'::uuid,
      'Tuần này công việc của mình sẽ ra sao?', 'TEXT',
      NOW() - INTERVAL '2 days', NOW() - INTERVAL '2 days'),
-    ('i3000000-0000-4000-8000-000000000002'::uuid,
-     'i2000000-0000-4000-8000-000000000001'::uuid,
+    ('ad300000-0000-4000-8000-000000000002'::uuid,
+     'ad200000-0000-4000-8000-000000000001'::uuid,
      'AI', NULL::uuid,
      'Ba lá bài gợi ý bạn đang đứng trước một bước chuyển nhẹ. Hãy mở lòng với góp ý và chủ động đề xuất ý tưởng mới.',
      'TEXT',
@@ -563,28 +563,28 @@ WHERE EXISTS (SELECT 1 FROM chat_sessions s WHERE s.id = v.session_id)
 -- ---------- Thông báo ----------
 INSERT INTO notifications (id, user_id, title, message, type, is_read, metadata, created_at)
 SELECT * FROM (VALUES
-    ('j1000000-0000-4000-8000-000000000001'::uuid,
+    ('ae100000-0000-4000-8000-000000000001'::uuid,
      'a1000000-0000-4000-8000-000000000005'::uuid,
      'Lịch hẹn đã xác nhận',
      'Buổi xem với Lê Thu Lan đã được xác nhận.',
      'BOOKING_CONFIRMED', FALSE,
      '{"bookingId":"e1000000-0000-4000-8000-000000000002"}'::jsonb,
      NOW() - INTERVAL '1 day'),
-    ('j1000000-0000-4000-8000-000000000002'::uuid,
+    ('ae100000-0000-4000-8000-000000000002'::uuid,
      'a1000000-0000-4000-8000-000000000003'::uuid,
      'Có lịch hẹn mới',
      'Hoàng Văn An vừa đặt lịch với bạn.',
      'BOOKING_CONFIRMED', FALSE,
      '{"bookingId":"e1000000-0000-4000-8000-000000000002"}'::jsonb,
      NOW() - INTERVAL '1 day'),
-    ('j1000000-0000-4000-8000-000000000003'::uuid,
+    ('ae100000-0000-4000-8000-000000000003'::uuid,
      'a1000000-0000-4000-8000-000000000002'::uuid,
      'Ticket hỗ trợ mới',
      'Khách hỏi về mail xác nhận đặt lịch.',
      'SUPPORT', FALSE,
-     '{"ticketId":"h1000000-0000-4000-8000-000000000001"}'::jsonb,
+     '{"ticketId":"ab100000-0000-4000-8000-000000000001"}'::jsonb,
      NOW() - INTERVAL '3 hours'),
-    ('j1000000-0000-4000-8000-000000000004'::uuid,
+    ('ae100000-0000-4000-8000-000000000004'::uuid,
      (SELECT id FROM users WHERE email = 'admin@example.com' LIMIT 1),
      'Có hồ sơ Reader chờ duyệt',
      'Vũ Thành Cường vừa nộp hồ sơ xin làm Reader.',
@@ -622,18 +622,18 @@ WHERE p.slug IN ('rider-waite-tarot', 'moonology-oracle', 'khan-trai-bai-nhung')
 -- ---------- Activity log mẫu cho Admin ----------
 INSERT INTO activity_logs (id, user_id, action, entity_type, entity_id, changes, created_at)
 SELECT * FROM (VALUES
-    ('k1000000-0000-4000-8000-000000000001'::uuid,
+    ('af100000-0000-4000-8000-000000000001'::uuid,
      (SELECT id FROM users WHERE email = 'admin@example.com' LIMIT 1),
      'SEED_DEMO_DATA',
      'system',
      NULL::uuid,
      '{"note":"Flyway V2_4 seed demo data applied"}'::jsonb,
      NOW()),
-    ('k1000000-0000-4000-8000-000000000002'::uuid,
+    ('af100000-0000-4000-8000-000000000002'::uuid,
      (SELECT id FROM users WHERE email = 'manager@astrotarot.demo' LIMIT 1),
      'REPORT_RESOLVED',
      'report',
-     'g1000000-0000-4000-8000-000000000002'::uuid,
+     'aa100000-0000-4000-8000-000000000002'::uuid,
      '{"status":"RESOLVED"}'::jsonb,
      NOW() - INTERVAL '1 day')
 ) AS v(id, user_id, action, entity_type, entity_id, changes, created_at)
