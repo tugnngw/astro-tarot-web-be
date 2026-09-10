@@ -30,7 +30,9 @@ public class EscrowServiceImpl implements EscrowService {
      * buổi xem đã hoàn tất, nên lúc ấy phải lưu mức phí vào từng booking chứ
      * không đọc cấu hình hiện hành.
      */
-    private static final int PLATFORM_FEE_PERCENT = 15;
+    // public để trang thống kê quản trị đọc đúng con số đang áp dụng, thay vì
+    // chép lại 15 ở chỗ khác rồi hai nơi lệch nhau khi đổi phí.
+    public static final int PLATFORM_FEE_PERCENT = 15;
 
     @Override
     @Transactional

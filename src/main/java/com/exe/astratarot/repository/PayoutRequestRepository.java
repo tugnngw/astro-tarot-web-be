@@ -37,4 +37,11 @@ public interface PayoutRequestRepository extends JpaRepository<PayoutRequest, UU
             WHERE p.id = :id
             """)
     java.util.Optional<PayoutRequest> findByIdWithReader(@Param("id") UUID id);
+
+    // --- Thống kê ---
+
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM PayoutRequest p WHERE p.status = :status")
+    long sumAmountByStatus(@Param("status") PayoutStatus status);
+
+    long countByStatus(PayoutStatus status);
 }

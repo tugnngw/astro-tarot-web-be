@@ -5,7 +5,11 @@ import com.exe.astratarot.domain.entity.ReaderApplication;
 import com.exe.astratarot.domain.enums.BookingStatus;
 import com.exe.astratarot.domain.enums.ReportStatus;
 import com.exe.astratarot.domain.enums.UserRole;
+import com.exe.astratarot.domain.enums.PayoutStatus;
+import com.exe.astratarot.domain.enums.TransactionStatus;
 import com.exe.astratarot.repository.AIUsageLogRepository;
+import com.exe.astratarot.repository.PaymentTransactionRepository;
+import com.exe.astratarot.repository.PayoutRequestRepository;
 import com.exe.astratarot.repository.BookingRepository;
 import com.exe.astratarot.repository.ProductClickRepository;
 import com.exe.astratarot.repository.ProductRepository;
@@ -43,6 +47,15 @@ public class AdminStatsServiceImpl implements AdminStatsService {
     private final ProductRepository productRepository;
     private final ProductClickRepository productClickRepository;
     private final AIUsageLogRepository aiUsageLogRepository;
+    private final PaymentTransactionRepository paymentTransactionRepository;
+    private final PayoutRequestRepository payoutRequestRepository;
+
+    /**
+     * Tỷ giá quy đổi chi phí AI (tính bằng USD) sang VND để so được với doanh
+     * thu. Cố định ở đây vì đây là con số ước lượng cho trang thống kê, không
+     * phải tỷ giá dùng để thu tiền của ai. Cần chính xác thì đưa ra cấu hình.
+     */
+    private static final long USD_TO_VND = 25_000L;
 
     @Override
     @Transactional(readOnly = true)
@@ -94,6 +107,24 @@ public class AdminStatsServiceImpl implements AdminStatsService {
         BigDecimal cost = aiUsageLogRepository.sumEstimatedCostUsd();
         double estimatedCostUsd = cost != null ? cost.doubleValue() : 0d;
 
+        // --- Tiền ---
+        long grossRevenue = paymentTransactionRepository.sumAmountByStatus(TransactionStatus.SUCCESS);
+        long grossRevenue30d = paymentTransactionRepository.sumAmountByStatusSince(TransactionStatus.SUCCESS, since30d);
+        int feePercent = com.exe.astratarot.service.impl.EscrowServiceImpl.PLATFORM_FEE_PERCENT;
+        long platformFee = grossRevenue * feePercent / 100;
+        long readerShare = grossRevenue - platformFee;
+        long paidOut = payoutRequestRepository.sumAmountByStatus(PayoutStatus.PAID);
+        long pendingPayout = payoutRequestRepository.sumAmountByStatus(PayoutStatus.PENDING);
+        long successfulPayments = paymentTransactionRepository.countByStatus(TransactionStatus.SUCCESS);
+        long pendingPayments = paymentTransactionRepository.countByStatus(TransactionStatus.PENDING);
+
+        Map<String, Long> revenueByMonth = new LinkedHashMap<>();
+        for (Object[] row : paymentTransactionRepository.sumAmountByMonthSince(now.minus(365, ChronoUnit.DAYS))) {
+            String month = row[0] != null ? row[0].toString() : "?";
+            long sum = row[1] instanceof Number n ? n.longValue() : 0L;
+            revenueByMonth.put(month, sum);
+        }
+
         Map<String, Long> tokensByModel = new LinkedHashMap<>();
         for (Object[] row : aiUsageLogRepository.sumTotalTokensGroupedByModel()) {
             String model = row[0] != null ? row[0].toString() : "unknown";
@@ -116,7 +147,38 @@ public class AdminStatsServiceImpl implements AdminStatsService {
                         tokens30d,
                         estimatedCostUsd,
                         tokensByModel
+                ),
+                buildRevenueStats(
+                        grossRevenue, grossRevenue30d, feePercent, platformFee, readerShare,
+                        paidOut, pendingPayout, estimatedCostUsd,
+                        successfulPayments, pendingPayments, revenueByMonth
                 )
+        );
+    }
+
+    /**
+     * Lợi nhuận ở đây là phần phí nền tảng giữ lại TRỪ chi phí AI — không phải
+     * doanh thu gộp. Phần lớn tiền khách trả là của Reader, gọi đó là lợi nhuận
+     * thì trang thống kê sẽ nói dối một con số lớn gấp mấy lần sự thật.
+     */
+    private AdminStatsResponse.RevenueStats buildRevenueStats(
+            long grossRevenue, long grossRevenue30d, int feePercent, long platformFee, long readerShare,
+            long paidOut, long pendingPayout, double estimatedCostUsd,
+            long successfulPayments, long pendingPayments, Map<String, Long> revenueByMonth) {
+        long aiCostVnd = Math.round(estimatedCostUsd * USD_TO_VND);
+        return new AdminStatsResponse.RevenueStats(
+                grossRevenue,
+                grossRevenue30d,
+                feePercent,
+                platformFee,
+                readerShare,
+                paidOut,
+                pendingPayout,
+                aiCostVnd,
+                platformFee - aiCostVnd,
+                successfulPayments,
+                pendingPayments,
+                revenueByMonth
         );
     }
 }
