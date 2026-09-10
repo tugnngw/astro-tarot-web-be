@@ -1,0 +1,47 @@
+# Deploy production khi có code mới trên main.
+#
+# Không dùng API key Render đầy đủ: key đó đụng được mọi dịch vụ trong tài
+# khoản. Deploy Hook chỉ kích hoạt lại đúng một Web Service — phù hợp repo
+# dùng chung của nhóm.
+#
+# Cần secret `RENDER_DEPLOY_HOOK` trên GitHub (Settings → Secrets and variables
+# → Actions). Cách lấy: Render → astra-tarot-api → Settings → Deploy Hook →
+# Create Hook, rồi dán URL vào secret.
+#
+# Web Service trên Render phải theo dõi nhánh `main` (khớp render.yaml). Nếu
+# vẫn trỏ `feat/dat-branch` thì hook sẽ dựng bản cũ trên nhánh đó.
+name: CD
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy lên Render
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Kiểm tra secret
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::error::Thiếu secret RENDER_DEPLOY_HOOK."
+            echo "Render → astra-tarot-api → Settings → Deploy Hook → Create,"
+            echo "rồi dán URL vào GitHub → Settings → Secrets → Actions."
+            exit 1
+          fi
+
+      # Deploy Hook của Render là GET hoặc POST tới URL họ cấp.
+      - name: Gọi Deploy Hook
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          code=$(curl -sS -o /tmp/hook-body -w "%{http_code}" -X POST "$HOOK")
+          echo "HTTP $code"
+          cat /tmp/hook-body || true
+          case "$code" in
+            2*) echo "Đã xếp hàng deploy trên Render." ;;
+            *) echo "::error::Deploy Hook trả $code"; exit 1 ;;
+          esac

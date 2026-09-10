@@ -1,9 +1,7 @@
 # Kiểm tra mỗi lần đẩy code: biên dịch và chạy test.
 #
-# Cố ý KHÔNG deploy từ đây. Render deploy bằng Manual Deploy trên bảng điều
-# khiển và cần khoá riêng; nhét khoá vào repo dùng chung của nhóm là mở một
-# đường vào production cho bất kỳ ai đọc được secrets. Workflow này chỉ trả lời
-# đúng một câu: nhánh này có build được không.
+# Deploy production nằm ở `.github/workflows/cd.yml` (chỉ chạy trên `main`),
+# gọi Render Deploy Hook — không nhét API key Render đầy đủ vào secrets.
 name: CI
 
 on:

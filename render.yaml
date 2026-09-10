@@ -16,7 +16,7 @@ services:
     dockerfilePath: ./Dockerfile
     plan: free
     region: singapore
-    branch: feat/dat-branch
+    branch: main
 
     # Render gọi đường dẫn này để biết ứng dụng đã sẵn sàng chưa.
     healthCheckPath: /actuator/health
