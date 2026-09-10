@@ -18,4 +18,9 @@ public class ReaderApplicationResponse {
     private Integer experience;
     private String[] specialties;
     private Instant createdAt;
+
+    // Kết quả duyệt. Entity đã lưu sẵn hai trường này nhưng DTO không trả ra,
+    // nên người bị từ chối không có cách nào biết lý do để sửa mà nộp lại.
+    private String rejectionReason;
+    private Instant reviewedAt;
 }

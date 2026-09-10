@@ -13,4 +13,9 @@ public interface ReaderApplicationRepository extends JpaRepository<ReaderApplica
 
     // Đếm hồ sơ Reader theo trạng thái — cho bảng thống kê quản trị.
     long countByStatus(ReaderApplication.ApplicationStatus status);
+
+    // Đơn gần nhất của một người, bất kể trạng thái. findByUserIdAndStatus ở trên
+    // chỉ dùng được khi đã biết trạng thái, mà người nộp đơn thì chính là người
+    // chưa biết mình đang chờ, được duyệt hay bị từ chối.
+    Optional<ReaderApplication> findTopByUserIdOrderByCreatedAtDesc(UUID userId);
 }
