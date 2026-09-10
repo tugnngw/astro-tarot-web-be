@@ -1,0 +1,37 @@
+# Kiểm tra mỗi lần đẩy code: biên dịch và chạy test.
+#
+# Cố ý KHÔNG deploy từ đây. Render deploy bằng Manual Deploy trên bảng điều
+# khiển và cần khoá riêng; nhét khoá vào repo dùng chung của nhóm là mở một
+# đường vào production cho bất kỳ ai đọc được secrets. Workflow này chỉ trả lời
+# đúng một câu: nhánh này có build được không.
+name: CI
+
+on:
+  push:
+    branches: [main, develop, "feat/**", "feature/**"]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build:
+    name: Biên dịch và test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cài JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+          # Cache ~/.m2 để lần chạy sau không tải lại toàn bộ phụ thuộc.
+          cache: maven
+
+      - name: Biên dịch
+        run: ./mvnw -B -ntp compile
+
+      # Test chạy riêng sau compile: hỏng ở bước nào thì nhìn tên bước là biết,
+      # không phải mở log ra dò.
+      - name: Chạy test
+        run: ./mvnw -B -ntp test
