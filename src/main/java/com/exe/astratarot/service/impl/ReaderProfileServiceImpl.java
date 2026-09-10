@@ -89,13 +89,20 @@ public class ReaderProfileServiceImpl implements ReaderProfileService {
                 .collect(Collectors.toList());
         List<Map<String, Object>> result = applications.stream()
                 .map(app -> {
+                    // Quản trị viên duyệt hồ sơ phải biết mình đang duyệt AI:
+                    // trước đây chỉ trả username nên trang quản trị hiện
+                    // "Người dùng không rõ tên" và email "—" cho mọi đơn.
                     Map<String, Object> map = new HashMap<>();
                     map.put("id", app.getId());
                     map.put("userId", app.getUser().getId());
                     map.put("username", app.getUser().getUsername());
+                    map.put("fullName", app.getUser().getFullName());
+                    map.put("email", app.getUser().getEmail());
                     map.put("bio", app.getBio());
+                    map.put("experience", app.getExperience());
+                    map.put("specialties", app.getSpecialties());
                     map.put("status", app.getStatus().toString());
-                    map.put("created_at", app.getCreatedAt());
+                    map.put("createdAt", app.getCreatedAt());
                     return map;
                 })
                 .collect(Collectors.toList());

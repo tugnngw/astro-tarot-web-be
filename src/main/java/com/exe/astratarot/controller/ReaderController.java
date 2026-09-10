@@ -35,10 +35,28 @@ public class ReaderController {
     @PostMapping("/readers/apply")
     @PreAuthorize("hasAuthority('READER_APPLY')")
     public ResponseEntity<ApiResponse<String>> apply(@AuthenticationPrincipal CustomUserDetails userDetails,
-                                                   @RequestBody ApplyReaderRequest request) {
+                                                   @Valid @RequestBody ApplyReaderRequest request) {
         User user = userDetails.getUser();
         readerService.apply(user.getId(), request);
         return ResponseEntity.ok(ApiResponse.success("Application submitted"));
+    }
+
+    /**
+     * Trạng thái đơn của chính người đang đăng nhập.
+     *
+     * Cùng quyền với chính endpoint nộp đơn ở trên: ai nộp được thì xem được đơn
+     * của mình. Danh tính lấy từ JWT, không nhận userId từ ngoài vào.
+     *
+     * Trả data = null khi người này chưa từng nộp đơn — đó là trạng thái bình
+     * thường, không phải lỗi, nên không dùng 404.
+     */
+    @GetMapping("/readers/applications/me")
+    @PreAuthorize("hasAuthority('READER_APPLY')")
+    public ResponseEntity<ApiResponse<ReaderApplicationResponse>> myApplication(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        UUID userId = userDetails.getUser().getId();
+        return ResponseEntity.ok(ApiResponse.success(
+                readerService.myApplication(userId).orElse(null)));
     }
 
     // -------------------------------------------------

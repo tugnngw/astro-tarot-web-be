@@ -28,6 +28,20 @@ public class ReaderServiceImpl implements ReaderService {
     private final ReaderProfileRepository readerProfileRepository;
     private final UserRepository userRepository;
     private final com.exe.astratarot.service.NotificationService notificationService;
+    private final com.exe.astratarot.domain.mapper.ReaderApplicationMapper readerApplicationMapper;
+
+    /**
+     * Đơn gần nhất của chính người đang đăng nhập.
+     *
+     * Trang quản trị đã có danh sách đơn chờ, nhưng người nộp thì không có gì
+     * để xem: nộp xong là mù tịt. Trả về đơn mới nhất bất kể trạng thái để giao
+     * diện hiện được "đang chờ" / "đã duyệt" / "bị từ chối kèm lý do".
+     */
+    @Transactional(readOnly = true)
+    public java.util.Optional<com.exe.astratarot.domain.dto.reader.ReaderApplicationResponse> myApplication(UUID userId) {
+        return readerApplicationRepository.findTopByUserIdOrderByCreatedAtDesc(userId)
+                .map(readerApplicationMapper::toResponse);
+    }
 
     @Transactional
     public void apply(UUID userId, ApplyReaderRequest request) {
