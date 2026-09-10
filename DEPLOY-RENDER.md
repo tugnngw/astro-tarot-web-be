@@ -41,21 +41,39 @@ vụ — nghĩa là bộ đếm chống dò mật khẩu ghi được vào Upsta
 Vì sao **không** dùng Postgres free của Render: nó bị xoá sau 30 ngày (trước là
 90). Neon thì miễn phí vĩnh viễn.
 
-## Cập nhật code về sau — không tự động
+## Cập nhật code về sau — tự động trên main
 
-Repo được thêm vào Render bằng **URL public**, không qua GitHub App, nên Render
-không nhận được webhook. Ô **Auto-Deploy** trong Settings có để "On Commit"
-cũng vô tác dụng: **push lên `feat/dat-branch` sẽ không deploy gì cả.**
+Trước đây repo được thêm vào Render bằng **URL public**, không qua GitHub App,
+nên ô Auto-Deploy "On Commit" vô tác dụng và phải **Manual Deploy** sau mỗi lần
+push.
 
-Sau mỗi lần push, vào Render → dịch vụ `astra-tarot-api` → **Manual Deploy** →
+Giờ có hai cách tự động:
+
+### Cách 1 (khuyên dùng): Deploy Hook + GitHub Actions
+
+Mỗi lần push/merge vào `main`, workflow `.github/workflows/cd.yml` gọi Deploy
+Hook của Render — URL đó chỉ kích hoạt lại đúng dịch vụ `astra-tarot-api`.
+
+1. Render → `astra-tarot-api` → **Settings**  
+   - Branch: **`main`** (khớp `render.yaml`)  
+   - Auto-Deploy có thể để Off nếu dùng hook từ Actions
+2. Cùng trang Settings → **Deploy Hook** → Create Hook → chép URL
+3. GitHub → repo `astro-tarot-web-be` → **Settings → Secrets and variables →
+   Actions** → New repository secret  
+   - Name: `RENDER_DEPLOY_HOOK`  
+   - Value: URL vừa chép
+
+### Cách 2: cài Render GitHub App
+
+Nhờ chủ repo `tugnngw` cài [Render GitHub App](https://github.com/apps/render)
+cho repo, rồi nối lại nguồn trong Settings, bật Auto-Deploy, chọn nhánh `main`.
+Cách này không cần secret `RENDER_DEPLOY_HOOK`.
+
+Deploy tay khi cần: Render → `astra-tarot-api` → **Manual Deploy** →
 *Deploy latest commit*.
 
-(Frontend trên Vercel cũng vậy, vì cùng lý do — chạy `npx vercel deploy --prod`
-trong thư mục FE.)
-
-Muốn tự động: nhờ chủ repo `tugnngw` cài
-[Render GitHub App](https://github.com/apps/render) cho repo, rồi nối lại
-nguồn trong Settings.
+(Frontend trên Vercel: xem `DEPLOY.md` bên FE — cùng kiểu Deploy Hook hoặc
+`npx vercel deploy --prod`.)
 
 ---
 
@@ -91,7 +109,7 @@ Cổng là `6379`, và **bắt buộc TLS** — `render.yaml` đã đặt sẵn
 
 1. Vào [render.com](https://render.com), đăng ký bằng GitHub.
 2. **New → Blueprint**, trỏ vào repo `astro-tarot-web-be`, nhánh
-   `feat/dat-branch`. Render đọc `render.yaml` và điền sẵn hầu hết cấu hình.
+   `main`. Render đọc `render.yaml` và điền sẵn hầu hết cấu hình.
 
    Nếu repo thuộc tài khoản GitHub của người khác và bạn chưa cài được Render
    lên đó, dùng **New → Web Service → Public Git Repository** rồi dán URL repo;
