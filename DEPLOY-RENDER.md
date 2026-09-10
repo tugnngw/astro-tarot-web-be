@@ -235,3 +235,19 @@ chỉ, kể cả `https://`, và không có `/` ở cuối.
 **Mail xác minh có link trỏ về localhost**
 
 Chưa đặt `FRONTEND_URL`.
+
+## PayOS (thanh toán booking)
+
+1. Vào [my.payos.vn](https://my.payos.vn) → **Thông tin kết nối** → chép
+   `Client ID`, `API Key`, `Checksum Key`.
+2. Render → Environment thêm:
+   - `PAYOS_CLIENT_ID`
+   - `PAYOS_API_KEY`
+   - `PAYOS_CHECKSUM_KEY`
+   - `PAYOS_WEBHOOK_URL=https://astra-tarot-api.onrender.com/api/v1/payments/payos/webhook`
+   - (tuỳ chọn) `PAYOS_RETURN_URL` / `PAYOS_CANCEL_URL` — mặc định trỏ
+     `FRONTEND_URL/bookings?payment=success|cancel`
+3. Trên PayOS dashboard cũng dán cùng webhook URL (hoặc để app tự `confirm`
+   lúc khởi động khi đã set `PAYOS_WEBHOOK_URL`).
+4. Redeploy backend. Khách bấm **Thanh toán** sẽ nhận link PayOS; webhook xác
+   nhận → tiền vào ký quỹ (không cần admin bấm confirm nữa).

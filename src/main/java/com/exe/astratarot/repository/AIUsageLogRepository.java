@@ -89,4 +89,26 @@ public interface AIUsageLogRepository extends JpaRepository<AIUsageLog, UUID> {
      * @return number of usage logs
      */
     long countByUserId(UUID userId);
+
+    /** Tổng token mọi lúc (null → 0 ở tầng service). */
+    @Query("SELECT COALESCE(SUM(a.totalTokens), 0) FROM AIUsageLog a")
+    long sumTotalTokens();
+
+    @Query("SELECT COALESCE(SUM(a.promptTokens), 0) FROM AIUsageLog a")
+    long sumPromptTokens();
+
+    @Query("SELECT COALESCE(SUM(a.completionTokens), 0) FROM AIUsageLog a")
+    long sumCompletionTokens();
+
+    @Query("SELECT COALESCE(SUM(a.estimatedCostUsd), 0) FROM AIUsageLog a")
+    BigDecimal sumEstimatedCostUsd();
+
+    @Query("SELECT COALESCE(SUM(a.totalTokens), 0) FROM AIUsageLog a WHERE a.createdAt >= :since")
+    long sumTotalTokensSince(@Param("since") Instant since);
+
+    long countByCreatedAtGreaterThanEqual(Instant since);
+
+    /** Mỗi hàng: [model, tổng token]. */
+    @Query("SELECT a.model, COALESCE(SUM(a.totalTokens), 0) FROM AIUsageLog a GROUP BY a.model ORDER BY SUM(a.totalTokens) DESC")
+    List<Object[]> sumTotalTokensGroupedByModel();
 }

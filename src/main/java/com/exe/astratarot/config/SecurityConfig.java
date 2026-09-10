@@ -106,6 +106,8 @@ public class SecurityConfig {
                         // Docker va nginx goi endpoint nay de biet backend con
                         // song. Chi tra UP/DOWN, khong kem chi tiet.
                         .requestMatchers("/actuator/health").permitAll()
+                        // PayOS gọi webhook không kèm JWT — chữ ký checksum trong body.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/payments/payos/webhook").permitAll()
                         // Tất cả request khác cần auth
                         .anyRequest().authenticated()
                 )

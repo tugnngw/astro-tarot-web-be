@@ -60,6 +60,26 @@ public class BookingController {
                 bookingService.availableSlots(readerProfileId, date, duration)));
     }
 
+    /**
+     * Ngày gần nhất Reader còn khung trống, để giao diện mở trang đúng ngày.
+     *
+     * Khung đã qua giờ bị loại khỏi danh sách, nên xem vào buổi tối thì hôm nay
+     * luôn trống trơn và Reader trông như không nhận khách — dù mai vẫn còn chỗ.
+     * Trả data = null khi trong khoảng dò không còn ngày nào.
+     */
+    @GetMapping("/readers/{readerProfileId}/slots/next-available")
+    @PreAuthorize("permitAll()")
+    public ResponseEntity<ApiResponse<java.time.LocalDate>> nextAvailableDate(
+            @PathVariable UUID readerProfileId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(defaultValue = "30") int duration,
+            @RequestParam(defaultValue = "14") int horizonDays) {
+        LocalDate start = from != null ? from : LocalDate.now();
+        return ResponseEntity.ok(ApiResponse.success(
+                bookingService.nextAvailableDate(readerProfileId, start, duration, horizonDays)
+                        .orElse(null)));
+    }
+
     @GetMapping("/readers/{readerProfileId}/reviews")
     @PreAuthorize("permitAll()")
     public ResponseEntity<ApiResponse<Page<ReviewResponse>>> readerReviews(

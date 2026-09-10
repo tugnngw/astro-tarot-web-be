@@ -10,7 +10,7 @@ import java.util.UUID;
 
 public interface PaymentService {
 
-    /** Sinh (hoặc lấy lại) mã chuyển khoản cho một lịch hẹn. */
+    /** Sinh (hoặc lấy lại) lệnh thanh toán cho một lịch hẹn (PayOS hoặc chuyển khoản). */
     PaymentInstructionResponse createPaymentIntent(UUID userId, UUID bookingId);
 
     Page<PaymentTransactionResponse> list(String status, Pageable pageable);
@@ -22,4 +22,9 @@ public interface PaymentService {
 
     /** Huỷ lịch đã trả tiền: gỡ khỏi ký quỹ và đánh dấu chờ hoàn. Không làm gì nếu chưa trả. */
     void refundIfPaid(Booking booking);
+
+    /**
+     * Webhook PayOS (đã verify chữ ký). Body thô từ cổng — SDK tự kiểm checksum.
+     */
+    void handlePayOsWebhook(Object rawBody);
 }

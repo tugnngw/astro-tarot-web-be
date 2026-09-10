@@ -58,8 +58,12 @@ public class MoneyController {
     public ResponseEntity<ApiResponse<PaymentInstructionResponse>> pay(
             @AuthenticationPrincipal CustomUserDetails me,
             @PathVariable UUID bookingId) {
-        return ResponseEntity.ok(ApiResponse.success("Chuyển khoản theo hướng dẫn bên dưới",
-                paymentService.createPaymentIntent(me.getUser().getId(), bookingId)));
+        PaymentInstructionResponse instruction =
+                paymentService.createPaymentIntent(me.getUser().getId(), bookingId);
+        String msg = "PAYOS".equalsIgnoreCase(instruction.getPaymentMethod())
+                ? "Mở link PayOS để thanh toán"
+                : "Chuyển khoản theo hướng dẫn bên dưới";
+        return ResponseEntity.ok(ApiResponse.success(msg, instruction));
     }
 
     // =========================================================

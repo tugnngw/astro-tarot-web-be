@@ -8,6 +8,7 @@ import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -20,6 +21,17 @@ public interface BookingService {
 
     /** Khung giờ còn trống của một Reader trong một ngày. Công khai, khách xem được. */
     List<SlotResponse> availableSlots(UUID readerProfileId, LocalDate date, int durationMinutes);
+
+    /**
+     * Ngày gần nhất kể từ {@code from} mà Reader còn khung trống, tìm tối đa
+     * {@code horizonDays} ngày. Rỗng nghĩa là trong khoảng đó không còn ngày nào.
+     *
+     * Có endpoint riêng vì giao diện cần biết điều này ngay khi mở trang: khung
+     * đã qua giờ bị loại, nên xem vào buổi tối thì hôm nay luôn trống trơn và
+     * Reader trông như không nhận khách. Để giao diện tự dò từng ngày thì tốn
+     * cả chục lượt gọi; ở đây chỉ một vòng lặp trong bộ nhớ.
+     */
+    Optional<LocalDate> nextAvailableDate(UUID readerProfileId, LocalDate from, int durationMinutes, int horizonDays);
 
     BookingResponse create(UUID customerId, CreateBookingRequest request);
 

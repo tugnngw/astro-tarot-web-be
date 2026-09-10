@@ -31,6 +31,7 @@ Chạy khi backend khởi động (Flyway tự migrate) hoặc trên Neon sau kh
 - Ticket hỗ trợ OPEN / PENDING / RESOLVED kèm tin nhắn
 - 1 lượt trải bài AI + chat
 - Thông báo, activity log, lượt bấm shop affiliate
+- Log token Tarot AI (`ai_usage_logs`, migration V2_5) để biểu đồ admin có số liệu
 
 Shop sản phẩm + 78 lá Tarot đã có từ migration cũ (V1_3, V1_5).
 

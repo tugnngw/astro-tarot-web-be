@@ -5,6 +5,7 @@ import com.exe.astratarot.domain.entity.ReaderApplication;
 import com.exe.astratarot.domain.enums.BookingStatus;
 import com.exe.astratarot.domain.enums.ReportStatus;
 import com.exe.astratarot.domain.enums.UserRole;
+import com.exe.astratarot.repository.AIUsageLogRepository;
 import com.exe.astratarot.repository.BookingRepository;
 import com.exe.astratarot.repository.ProductClickRepository;
 import com.exe.astratarot.repository.ProductRepository;
@@ -17,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
@@ -40,11 +42,13 @@ public class AdminStatsServiceImpl implements AdminStatsService {
     private final ReportRepository reportRepository;
     private final ProductRepository productRepository;
     private final ProductClickRepository productClickRepository;
+    private final AIUsageLogRepository aiUsageLogRepository;
 
     @Override
     @Transactional(readOnly = true)
     public AdminStatsResponse getStats() {
         Instant now = Instant.now();
+        Instant since30d = now.minus(30, ChronoUnit.DAYS);
 
         // --- Tài khoản ---
         // Giữ thứ tự vai trò cố định để giao diện luôn vẽ cùng một hàng.
@@ -77,15 +81,42 @@ public class AdminStatsServiceImpl implements AdminStatsService {
 
         // --- Cửa hàng liên kết ---
         long activeProducts = productRepository.countByActiveTrueAndAffiliateUrlIsNotNull();
-        long clicks30d = productClickRepository.countByCreatedAtAfter(now.minus(30, ChronoUnit.DAYS));
+        long clicks30d = productClickRepository.countByCreatedAtAfter(since30d);
         long clicksTotal = productClickRepository.count();
+
+        // --- Tarot AI (token) ---
+        long aiCalls = aiUsageLogRepository.count();
+        long aiCalls30d = aiUsageLogRepository.countByCreatedAtGreaterThanEqual(since30d);
+        long promptTokens = aiUsageLogRepository.sumPromptTokens();
+        long completionTokens = aiUsageLogRepository.sumCompletionTokens();
+        long totalTokens = aiUsageLogRepository.sumTotalTokens();
+        long tokens30d = aiUsageLogRepository.sumTotalTokensSince(since30d);
+        BigDecimal cost = aiUsageLogRepository.sumEstimatedCostUsd();
+        double estimatedCostUsd = cost != null ? cost.doubleValue() : 0d;
+
+        Map<String, Long> tokensByModel = new LinkedHashMap<>();
+        for (Object[] row : aiUsageLogRepository.sumTotalTokensGroupedByModel()) {
+            String model = row[0] != null ? row[0].toString() : "unknown";
+            long tokens = row[1] instanceof Number n ? n.longValue() : 0L;
+            tokensByModel.put(model, tokens);
+        }
 
         return new AdminStatsResponse(
                 new AdminStatsResponse.UserStats(totalUsers, byRole, newUsers),
                 new AdminStatsResponse.ReaderStats(pendingApplications, activeProfiles),
                 new AdminStatsResponse.BookingStats(totalBookings, bookingByStatus),
                 new AdminStatsResponse.ModerationStats(pendingReports),
-                new AdminStatsResponse.ShopStats(activeProducts, clicks30d, clicksTotal)
+                new AdminStatsResponse.ShopStats(activeProducts, clicks30d, clicksTotal),
+                new AdminStatsResponse.AiStats(
+                        aiCalls,
+                        aiCalls30d,
+                        promptTokens,
+                        completionTokens,
+                        totalTokens,
+                        tokens30d,
+                        estimatedCostUsd,
+                        tokensByModel
+                )
         );
     }
 }

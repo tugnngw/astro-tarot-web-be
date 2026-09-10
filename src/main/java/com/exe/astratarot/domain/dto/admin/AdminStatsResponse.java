@@ -14,7 +14,8 @@ public record AdminStatsResponse(
         ReaderStats readers,
         BookingStats bookings,
         ModerationStats moderation,
-        ShopStats shop
+        ShopStats shop,
+        AiStats ai
 ) {
     /**
      * @param total    tổng tài khoản còn hiệu lực (chưa xoá mềm)
@@ -46,4 +47,27 @@ public record AdminStatsResponse(
      * @param clicksTotal      tổng lượt bấm sang sàn từ trước tới nay
      */
     public record ShopStats(long activeProducts, long clicksLast30Days, long clicksTotal) {}
+
+    /**
+     * Token tiêu thụ của Tarot AI (đọc từ {@code ai_usage_logs}).
+     *
+     * @param totalCalls           số lần gọi AI đã ghi nhận
+     * @param callsLast30Days      số lần gọi trong 30 ngày
+     * @param promptTokens         tổng token đầu vào
+     * @param completionTokens     tổng token đầu ra
+     * @param totalTokens          tổng token (prompt + completion khi API trả)
+     * @param tokensLast30Days     tổng token trong 30 ngày
+     * @param estimatedCostUsd     chi phí ước lượng (USD)
+     * @param tokensByModel        tổng token theo từng model (key = tên model)
+     */
+    public record AiStats(
+            long totalCalls,
+            long callsLast30Days,
+            long promptTokens,
+            long completionTokens,
+            long totalTokens,
+            long tokensLast30Days,
+            double estimatedCostUsd,
+            Map<String, Long> tokensByModel
+    ) {}
 }
