@@ -40,6 +40,10 @@ public class CustomUserDetails implements UserDetails {
             // STAFF gánh cả hai vai: hỗ trợ khách và Reader nhận booking.
             UserRole.STAFF, List.of(
                     SecurityPermissions.USER_BASIC,
+                    // Nhân viên cũng nộp đơn được: người được cất lên Nhân viên
+                    // từ trang quản lý chưa hề có hồ sơ Reader, và đây là đường
+                    // duy nhất để họ có. apply() tự chặn nếu đã có hồ sơ rồi.
+                    SecurityPermissions.READER_APPLY,
                     SecurityPermissions.READER_MANAGE_PROFILE,
                     SecurityPermissions.SUPPORT_VIEW,
                     SecurityPermissions.SUPPORT_RESPOND,

@@ -98,6 +98,12 @@ public class SecurityConfig {
                                 "/api/v1/readers",
                                 "/api/v1/readers/*",
                                 "/api/v1/readers/*/slots",
+                                // Mẫu một sao chỉ khớp ĐÚNG một đoạn, nên
+                                // /slots/next-available phải khai riêng. Thiếu
+                                // dòng này thì endpoint trả 403 dù đã có
+                                // @PreAuthorize("permitAll()") — đúng cái bẫy
+                                // mà chú thích bên trên đã cảnh báo.
+                                "/api/v1/readers/*/slots/next-available",
                                 "/api/v1/readers/*/reviews").permitAll()
                         // Ảnh đại diện đã tải lên — hiển thị công khai như mọi
                         // ảnh khác trên trang. Việc tải LÊN vẫn cần đăng nhập
