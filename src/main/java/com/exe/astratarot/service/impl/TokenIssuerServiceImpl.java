@@ -46,6 +46,7 @@ public class TokenIssuerServiceImpl implements TokenIssuerService {
                 user.getEmail(),
                 user.getFullName(),
                 user.getRole(),
+                user.getAvatar(),
                 com.exe.astratarot.security.CustomUserDetails.permissionsOf(user.getRole()),
                 accessToken,
                 refreshToken,

@@ -74,6 +74,25 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional(readOnly = true)
+    /**
+     * Dò từng ngày cho tới khi thấy ngày còn khung trống.
+     *
+     * Mỗi ngày là vài truy vấn nhỏ, và thực tế hầu như dừng ngay ở ngày đầu
+     * hoặc ngày thứ hai. Chặn trên horizonDays để một Reader không khai lịch
+     * bao giờ cũng không kéo dài vòng lặp vô ích.
+     */
+    public java.util.Optional<LocalDate> nextAvailableDate(
+            UUID readerProfileId, LocalDate from, int durationMinutes, int horizonDays) {
+        requireAllowedDuration(durationMinutes);
+        for (int i = 0; i < horizonDays; i++) {
+            LocalDate day = from.plusDays(i);
+            if (!availableSlots(readerProfileId, day, durationMinutes).isEmpty()) {
+                return java.util.Optional.of(day);
+            }
+        }
+        return java.util.Optional.empty();
+    }
+
     public List<SlotResponse> availableSlots(UUID readerProfileId, LocalDate date, int durationMinutes) {
         requireAllowedDuration(durationMinutes);
         ReaderProfile reader = findReader(readerProfileId);

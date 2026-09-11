@@ -1,5 +1,7 @@
 package com.exe.astratarot.service.impl;
 
+import com.exe.astratarot.config.PayOsConfig.PayOsClient;
+import com.exe.astratarot.config.PayOsProperties;
 import com.exe.astratarot.domain.dto.payment.PaymentInstructionResponse;
 import com.exe.astratarot.domain.dto.payment.PaymentTransactionResponse;
 import com.exe.astratarot.domain.entity.Booking;
@@ -16,6 +18,8 @@ import com.exe.astratarot.service.EscrowService;
 import com.exe.astratarot.service.NotificationService;
 import com.exe.astratarot.service.NotificationTypes;
 import com.exe.astratarot.service.PaymentService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,35 +28,38 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vn.payos.model.v2.paymentRequests.CreatePaymentLinkRequest;
+import vn.payos.model.v2.paymentRequests.CreatePaymentLinkResponse;
+import vn.payos.model.webhooks.WebhookData;
 
 import java.security.SecureRandom;
+import java.time.Instant;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * Thanh toán buổi xem bằng chuyển khoản ngân hàng có mã tham chiếu.
+ * Thanh toán buổi xem: PayOS (nếu cấu hình) hoặc chuyển khoản có mã tham chiếu.
  *
- * <p>Cố ý KHÔNG mô phỏng một cổng thanh toán tự động. Một endpoint "trả tiền"
- * bấm cái là thành công trông thì đủ, nhưng nó khiến cả luồng ký quỹ chạy trên
- * những khoản tiền chưa từng tồn tại — và đến lúc nối cổng thật thì toàn bộ số
- * liệu cũ phải bỏ đi.
- *
- * <p>Chuyển khoản kèm mã tham chiếu là cách nhiều sàn nhỏ ở Việt Nam đang chạy
- * thật: khách chuyển tiền với nội dung là mã, người trực đối chiếu sao kê rồi
- * xác nhận. Khi nối cổng tự động sau này, chỉ cần thay bước xác nhận thủ công
- * bằng webhook — phần còn lại giữ nguyên.
+ * <p>Webhook PayOS xác nhận tự động rồi gọi cùng luồng ký quỹ như admin confirm.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class PaymentServiceImpl implements PaymentService {
 
+    private static final String METHOD_BANK_TRANSFER = "BANK_TRANSFER";
+    private static final String METHOD_PAYOS = "PAYOS";
+
     private final PaymentTransactionRepository transactionRepository;
     private final BookingRepository bookingRepository;
     private final EscrowService escrowService;
     private final NotificationService notificationService;
     private final ActivityLogService activityLogService;
+    private final PayOsClient payOsClient;
+    private final PayOsProperties payOsProperties;
+    private final ObjectMapper objectMapper;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -65,7 +72,8 @@ public class PaymentServiceImpl implements PaymentService {
     @Value("${app.bank.account-holder:Chưa cấu hình}")
     private String bankAccountHolder;
 
-    private static final String METHOD_BANK_TRANSFER = "BANK_TRANSFER";
+    @Value("${app.frontend-url:http://localhost:8081}")
+    private String frontendUrl;
 
     // =========================================================
     // Khách trả tiền
@@ -87,31 +95,120 @@ public class PaymentServiceImpl implements PaymentService {
             throw new IllegalArgumentException("Lịch hẹn này đã thanh toán rồi");
         }
 
-        // Đã có lệnh chờ thì trả lại đúng lệnh đó thay vì sinh mã mới. Mỗi lần
-        // bấm lại mà ra một mã khác nhau thì người trực không biết sao kê ứng
-        // với lệnh nào.
         PaymentTransaction pending = transactionRepository
                 .findFirstByBookingIdAndStatus(bookingId, TransactionStatus.PENDING)
-                .orElseGet(() -> transactionRepository.save(PaymentTransaction.builder()
-                        .booking(booking)
-                        .user(booking.getUser())
-                        .amount(booking.getTotalAmount())
-                        .paymentMethod(METHOD_BANK_TRANSFER)
-                        .externalTransactionId(generateReference())
-                        .status(TransactionStatus.PENDING)
-                        .build()));
+                .orElse(null);
 
-        return PaymentInstructionResponse.builder()
-                .transactionId(pending.getId())
-                .bookingId(bookingId)
-                .amount(pending.getAmount())
-                .referenceCode(pending.getExternalTransactionId())
-                .bankName(bankName)
-                .bankAccountNumber(bankAccountNumber)
-                .bankAccountHolder(bankAccountHolder)
-                .transferContent(pending.getExternalTransactionId())
-                .status(pending.getStatus().name())
+        if (pending != null) {
+            return toInstruction(pending);
+        }
+
+        if (payOsClient.enabled()) {
+            return createPayOsIntent(booking);
+        }
+        return createBankTransferIntent(booking);
+    }
+
+    private PaymentInstructionResponse createBankTransferIntent(Booking booking) {
+        PaymentTransaction pending = transactionRepository.save(PaymentTransaction.builder()
+                .booking(booking)
+                .user(booking.getUser())
+                .amount(booking.getTotalAmount())
+                .paymentMethod(METHOD_BANK_TRANSFER)
+                .externalTransactionId(generateReference())
+                .status(TransactionStatus.PENDING)
+                .build());
+        return toInstruction(pending);
+    }
+
+    private PaymentInstructionResponse createPayOsIntent(Booking booking) {
+        long orderCode = nextOrderCode();
+        String returnUrl = firstNonBlank(payOsProperties.getReturnUrl(),
+                trimSlash(frontendUrl) + "/bookings?payment=success");
+        String cancelUrl = firstNonBlank(payOsProperties.getCancelUrl(),
+                trimSlash(frontendUrl) + "/bookings?payment=cancel");
+
+        // PayOS giới hạn mô tả ~25 ký tự.
+        String description = "Astra " + orderCode;
+        if (description.length() > 25) {
+            description = description.substring(0, 25);
+        }
+
+        CreatePaymentLinkRequest request = CreatePaymentLinkRequest.builder()
+                .orderCode(orderCode)
+                .amount(booking.getTotalAmount())
+                .description(description)
+                .returnUrl(returnUrl)
+                .cancelUrl(cancelUrl)
+                .buyerName(booking.getUser().getFullName())
+                .buyerEmail(booking.getUser().getEmail())
                 .build();
+
+        CreatePaymentLinkResponse link;
+        try {
+            link = payOsClient.sdk().paymentRequests().create(request);
+        } catch (Exception e) {
+            log.error("Tạo link PayOS thất bại cho booking {}: {}", booking.getId(), e.getMessage());
+            throw new IllegalStateException("Không tạo được link thanh toán PayOS: " + e.getMessage(), e);
+        }
+
+        Map<String, Object> meta = new HashMap<>();
+        meta.put("checkoutUrl", link.getCheckoutUrl());
+        meta.put("qrCode", link.getQrCode());
+        meta.put("paymentLinkId", link.getPaymentLinkId());
+        meta.put("bin", link.getBin());
+        meta.put("accountNumber", link.getAccountNumber());
+        meta.put("accountName", link.getAccountName());
+
+        PaymentTransaction pending = transactionRepository.save(PaymentTransaction.builder()
+                .booking(booking)
+                .user(booking.getUser())
+                .amount(booking.getTotalAmount())
+                .paymentMethod(METHOD_PAYOS)
+                .externalTransactionId(String.valueOf(orderCode))
+                .status(TransactionStatus.PENDING)
+                .metadata(writeJson(meta))
+                .build());
+
+        return toInstruction(pending, link);
+    }
+
+    // =========================================================
+    // Webhook PayOS
+    // =========================================================
+
+    @Override
+    @Transactional
+    public void handlePayOsWebhook(Object rawBody) {
+        if (!payOsClient.enabled()) {
+            throw new IllegalStateException("PayOS chưa cấu hình");
+        }
+        WebhookData data = payOsClient.sdk().webhooks().verify(rawBody);
+        if (data == null || data.getOrderCode() == null) {
+            throw new IllegalArgumentException("Webhook PayOS thiếu orderCode");
+        }
+        if (!"00".equals(data.getCode())) {
+            log.info("PayOS webhook không thành công code={} desc={} order={}",
+                    data.getCode(), data.getDesc(), data.getOrderCode());
+            return;
+        }
+
+        String orderKey = String.valueOf(data.getOrderCode());
+        PaymentTransaction tx = transactionRepository.findByExternalTransactionId(orderKey)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Không tìm thấy giao dịch PayOS orderCode=" + orderKey));
+
+        if (tx.getStatus() != TransactionStatus.PENDING) {
+            log.info("PayOS webhook trùng — giao dịch {} đã {}", tx.getId(), tx.getStatus());
+            return;
+        }
+        if (data.getAmount() != null && !data.getAmount().equals(tx.getAmount())) {
+            log.warn("PayOS amount lệch: webhook={} tx={} id={}", data.getAmount(), tx.getAmount(), tx.getId());
+            throw new IllegalArgumentException("Số tiền webhook không khớp giao dịch");
+        }
+
+        markPaid(null, tx);
+        log.info("PayOS xác nhận thanh toán {} (orderCode={})", tx.getId(), orderKey);
     }
 
     // =========================================================
@@ -131,33 +228,7 @@ public class PaymentServiceImpl implements PaymentService {
         if (tx.getStatus() != TransactionStatus.PENDING) {
             throw new IllegalArgumentException("Giao dịch này đã được xử lý rồi");
         }
-        Booking booking = tx.getBooking();
-        if (booking == null) {
-            throw new IllegalArgumentException("Giao dịch không gắn với lịch hẹn nào");
-        }
-
-        tx.setStatus(TransactionStatus.SUCCESS);
-        booking.setPaymentStatus(PaymentStatus.PAID);
-
-        // Tiền vào phần ĐANG GIỮ của Reader, chưa phải phần rút được. Chỉ nhả
-        // khi buổi xem hoàn tất — xem EscrowService.
-        escrowService.holdForBooking(booking);
-
-        activityLogService.record(actorId, AdminActions.PAYMENT_CONFIRM, AdminActions.ENTITY_PAYMENT,
-                transactionId, Map.of("amount", tx.getAmount(), "bookingId", booking.getId().toString()));
-
-        notificationService.push(booking.getUser(), NotificationTypes.PAYMENT_CONFIRMED,
-                "Đã nhận thanh toán",
-                "Buổi xem với " + booking.getReaderProfile().getUser().getFullName()
-                        + " đã được thanh toán.",
-                Map.of("bookingId", booking.getId().toString()));
-
-        notificationService.push(booking.getReaderProfile().getUser(), NotificationTypes.PAYMENT_CONFIRMED,
-                "Khách đã thanh toán",
-                "Tiền đang được giữ ở ký quỹ và sẽ vào số dư của bạn sau khi buổi xem hoàn tất.",
-                Map.of("bookingId", booking.getId().toString()));
-
-        log.info("Xác nhận thanh toán {} cho booking {}", transactionId, booking.getId());
+        markPaid(actorId, tx);
         return toResponse(tx);
     }
 
@@ -170,8 +241,6 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         tx.setStatus(TransactionStatus.FAILED);
-        // KHÔNG đụng tới ký quỹ: tiền chưa bao giờ được giữ vì giao dịch chưa
-        // từng thành công.
         activityLogService.record(actorId, AdminActions.PAYMENT_REJECT, AdminActions.ENTITY_PAYMENT,
                 transactionId, Map.of("reason", String.valueOf(reason)));
 
@@ -203,8 +272,6 @@ public class PaymentServiceImpl implements PaymentService {
                 .findFirst()
                 .ifPresent(t -> t.setStatus(TransactionStatus.CANCELLED));
 
-        // Hoàn tiền thật vẫn phải làm tay: hệ thống chưa nối cổng nào để tự
-        // chuyển lại. Báo cho khách biết chờ, thay vì im lặng.
         notificationService.push(booking.getUser(), NotificationTypes.PAYMENT_REFUNDED,
                 "Lịch hẹn đã huỷ, tiền sẽ được hoàn",
                 "Khoản " + booking.getTotalAmount()
@@ -218,12 +285,96 @@ public class PaymentServiceImpl implements PaymentService {
     // Tiện ích
     // =========================================================
 
-    /**
-     * Mã tham chiếu người chuyển khoản gõ vào nội dung.
-     *
-     * Chỉ dùng chữ và số không dễ đọc nhầm (bỏ O, 0, I, 1): khách gõ tay vào
-     * ứng dụng ngân hàng, một ký tự sai là người trực không tra ra.
-     */
+    private void markPaid(UUID actorId, PaymentTransaction tx) {
+        Booking booking = tx.getBooking();
+        if (booking == null) {
+            throw new IllegalArgumentException("Giao dịch không gắn với lịch hẹn nào");
+        }
+
+        tx.setStatus(TransactionStatus.SUCCESS);
+        booking.setPaymentStatus(PaymentStatus.PAID);
+        escrowService.holdForBooking(booking);
+
+        activityLogService.record(actorId, AdminActions.PAYMENT_CONFIRM, AdminActions.ENTITY_PAYMENT,
+                tx.getId(), Map.of(
+                        "amount", tx.getAmount(),
+                        "bookingId", booking.getId().toString(),
+                        "method", String.valueOf(tx.getPaymentMethod()),
+                        "source", actorId == null ? "payos_webhook" : "admin"));
+
+        notificationService.push(booking.getUser(), NotificationTypes.PAYMENT_CONFIRMED,
+                "Đã nhận thanh toán",
+                "Buổi xem với " + booking.getReaderProfile().getUser().getFullName()
+                        + " đã được thanh toán.",
+                Map.of("bookingId", booking.getId().toString()));
+
+        notificationService.push(booking.getReaderProfile().getUser(), NotificationTypes.PAYMENT_CONFIRMED,
+                "Khách đã thanh toán",
+                "Tiền đang được giữ ở ký quỹ và sẽ vào số dư của bạn sau khi buổi xem hoàn tất.",
+                Map.of("bookingId", booking.getId().toString()));
+
+        log.info("Xác nhận thanh toán {} cho booking {}", tx.getId(), booking.getId());
+    }
+
+    private PaymentInstructionResponse toInstruction(PaymentTransaction pending) {
+        if (METHOD_PAYOS.equals(pending.getPaymentMethod())) {
+            Map<String, Object> meta = readMeta(pending.getMetadata());
+            return PaymentInstructionResponse.builder()
+                    .transactionId(pending.getId())
+                    .bookingId(pending.getBooking().getId())
+                    .amount(pending.getAmount())
+                    .paymentMethod(METHOD_PAYOS)
+                    .referenceCode(pending.getExternalTransactionId())
+                    .bankName(stringOr(meta.get("bin"), bankName))
+                    .bankAccountNumber(stringOr(meta.get("accountNumber"), bankAccountNumber))
+                    .bankAccountHolder(stringOr(meta.get("accountName"), bankAccountHolder))
+                    .transferContent(pending.getExternalTransactionId())
+                    .checkoutUrl(stringOr(meta.get("checkoutUrl"), null))
+                    .qrCode(stringOr(meta.get("qrCode"), null))
+                    .status(pending.getStatus().name())
+                    .build();
+        }
+        return PaymentInstructionResponse.builder()
+                .transactionId(pending.getId())
+                .bookingId(pending.getBooking().getId())
+                .amount(pending.getAmount())
+                .paymentMethod(METHOD_BANK_TRANSFER)
+                .referenceCode(pending.getExternalTransactionId())
+                .bankName(bankName)
+                .bankAccountNumber(bankAccountNumber)
+                .bankAccountHolder(bankAccountHolder)
+                .transferContent(pending.getExternalTransactionId())
+                .status(pending.getStatus().name())
+                .build();
+    }
+
+    private PaymentInstructionResponse toInstruction(PaymentTransaction pending, CreatePaymentLinkResponse link) {
+        return PaymentInstructionResponse.builder()
+                .transactionId(pending.getId())
+                .bookingId(pending.getBooking().getId())
+                .amount(pending.getAmount())
+                .paymentMethod(METHOD_PAYOS)
+                .referenceCode(pending.getExternalTransactionId())
+                .bankName(firstNonBlank(link.getBin(), bankName))
+                .bankAccountNumber(firstNonBlank(link.getAccountNumber(), bankAccountNumber))
+                .bankAccountHolder(firstNonBlank(link.getAccountName(), bankAccountHolder))
+                .transferContent(pending.getExternalTransactionId())
+                .checkoutUrl(link.getCheckoutUrl())
+                .qrCode(link.getQrCode())
+                .status(pending.getStatus().name())
+                .build();
+    }
+
+    private long nextOrderCode() {
+        for (int i = 0; i < 8; i++) {
+            long code = Instant.now().getEpochSecond() * 1000L + secureRandom.nextInt(1000);
+            if (transactionRepository.findByExternalTransactionId(String.valueOf(code)).isEmpty()) {
+                return code;
+            }
+        }
+        throw new IllegalStateException("Không sinh được orderCode PayOS duy nhất");
+    }
+
     private String generateReference() {
         final String alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
         StringBuilder sb = new StringBuilder("ATB");
@@ -231,7 +382,6 @@ public class PaymentServiceImpl implements PaymentService {
             sb.append(alphabet.charAt(secureRandom.nextInt(alphabet.length())));
         }
         String code = sb.toString();
-        // Trùng mã là hỏng cả việc đối soát, nên thử lại cho tới khi duy nhất.
         return transactionRepository.findByExternalTransactionId(code).isPresent()
                 ? generateReference()
                 : code;
@@ -268,5 +418,47 @@ public class PaymentServiceImpl implements PaymentService {
                 .bookingStartTime(b == null ? null : b.getStartTime())
                 .createdAt(t.getCreatedAt())
                 .build();
+    }
+
+    private String writeJson(Map<String, Object> meta) {
+        try {
+            return objectMapper.writeValueAsString(meta);
+        } catch (Exception e) {
+            throw new IllegalStateException("Không ghi được metadata thanh toán", e);
+        }
+    }
+
+    private Map<String, Object> readMeta(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (Exception e) {
+            log.warn("metadata thanh toán không đọc được: {}", e.getMessage());
+            return Map.of();
+        }
+    }
+
+    private static String firstNonBlank(String a, String b) {
+        if (a != null && !a.isBlank()) {
+            return a;
+        }
+        return b;
+    }
+
+    private static String stringOr(Object value, String fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        String s = String.valueOf(value);
+        return s.isBlank() ? fallback : s;
+    }
+
+    private static String trimSlash(String url) {
+        if (url == null) {
+            return "";
+        }
+        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
 }

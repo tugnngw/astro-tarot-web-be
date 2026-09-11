@@ -41,6 +41,9 @@ public class UserProfileServiceImpl implements UserProfileService {
     private final UserSessionRepository userSessionRepository;
     private final PasswordEncoder passwordEncoder;
 
+    private final com.exe.astratarot.repository.UserAvatarRepository userAvatarRepository;
+
+    // Giu lai de doc anh cu con sot tren dia (neu co); anh moi khong dung toi.
     @Value("${app.upload.dir:uploads}")
     private String uploadDir;
 
@@ -116,15 +119,21 @@ public class UserProfileServiceImpl implements UserProfileService {
         String filename = userId + "_" + System.currentTimeMillis() + extension;
 
         try {
-            Path dir = Paths.get(uploadDir, "avatars").toAbsolutePath().normalize();
-            Files.createDirectories(dir);
-            Path target = dir.resolve(filename);
-            try (var in = file.getInputStream()) {
-                Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
-            }
+            // Luu thang vao CSDL. Ghi ra thu muc trong container thi moi lan
+            // deploy la mat, vi dia cua Render o goi free la tam — da xay ra
+            // that: users.avatar tro toi mot file tra ve 404.
+            byte[] bytes = file.getBytes();
+            userAvatarRepository.save(com.exe.astratarot.domain.entity.UserAvatar.builder()
+                    .userId(userId)
+                    .contentType(contentType.toLowerCase(Locale.ROOT))
+                    .data(bytes)
+                    .build());
+
             deleteOldAvatarFile(user.getAvatar());
-            user.setAvatar("/uploads/avatars/" + filename);
-            log.info("Đã cập nhật avatar cho user {}", userId);
+            // Dinh kem moc thoi gian de trinh duyet khong dung lai anh cu trong
+            // cache sau khi doi anh — duong dan khong doi thi anh cu nam lai.
+            user.setAvatar(avatarUrlFor(userId, System.currentTimeMillis()));
+            log.info("Đã cập nhật avatar cho user {} ({} byte)", userId, bytes.length);
         } catch (IOException e) {
             log.error("Lưu avatar cho user {} thất bại", userId, e);
             throw new IllegalStateException("Không lưu được ảnh, thử lại sau");
@@ -138,8 +147,14 @@ public class UserProfileServiceImpl implements UserProfileService {
     public ProfileResponse removeAvatar(UUID userId) {
         User user = findUser(userId);
         deleteOldAvatarFile(user.getAvatar());
+        userAvatarRepository.deleteById(userId);
         user.setAvatar(null);
         return toResponse(userRepository.save(user));
+    }
+
+    /** Duong dan cong khai cua anh, kem moc thoi gian de pha cache trinh duyet. */
+    public static String avatarUrlFor(UUID userId, long version) {
+        return "/api/v1/users/" + userId + "/avatar?v=" + version;
     }
 
     @Override
@@ -179,7 +194,12 @@ public class UserProfileServiceImpl implements UserProfileService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
     }
 
-    /** Xoá file avatar cũ để thư mục upload không phình theo mỗi lần đổi ảnh. */
+    /**
+     * Xoá file avatar CŨ còn sót trên đĩa.
+     *
+     * Ảnh mới nằm trong CSDL nên hàm này chỉ còn tác dụng với những đường dẫn
+     * /uploads/... từ trước. Giữ lại để dọn nốt, không phải đường đi chính.
+     */
     private void deleteOldAvatarFile(String avatarPath) {
         if (avatarPath == null || !avatarPath.startsWith("/uploads/avatars/")) {
             return; // avatar từ OAuth là URL ngoài, không đụng tới
