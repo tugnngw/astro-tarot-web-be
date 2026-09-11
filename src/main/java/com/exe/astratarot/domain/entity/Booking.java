@@ -52,7 +52,6 @@ public class Booking {
     @Column(name = "cancel_reason", columnDefinition = "TEXT")
     private String cancelReason;
 
-    @CreationTimestamp
     /**
      * Ghi chú Reader viết cho khách sau buổi xem.
      *
@@ -66,6 +65,7 @@ public class Booking {
     @Column(name = "reader_note_at")
     private Instant readerNoteAt;
 
+    @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 
