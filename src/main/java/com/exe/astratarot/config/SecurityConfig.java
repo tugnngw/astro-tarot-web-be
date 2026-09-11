@@ -122,6 +122,36 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
 //                .oauth2Login(oauth2 -> oauth2.successHandler(oAuth2LoginSuccessHandler))
+                // Phân biệt "chưa đăng nhập" với "không đủ quyền".
+                //
+                // Không khai hai handler này thì Spring Security dùng mặc định
+                // trả 403 cho CẢ HAI. Hệ quả không hề nhỏ: giao diện chỉ làm
+                // mới token khi gặp 401, nên hễ access token hết hạn là mọi
+                // danh sách chết cho tới khi người dùng tự đăng nhập lại — mà
+                // thông báo lại ghi "không có quyền", dẫn người ta đi sai
+                // hướng hoàn toàn.
+                //
+                // Đã bắt tận tay: token hết hạn 56 giây, GET /api/v1/me trả
+                // 403 với thân rỗng.
+                //
+                // Thân phản hồi là JSON để tầng gọi đọc được. Trả rỗng thì
+                // client.ts rơi vào nhánh "dữ liệu không đọc được", che mất
+                // nguyên nhân thật một lần nữa.
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((req, res, e) -> {
+                            res.setStatus(401);
+                            res.setContentType("application/json;charset=UTF-8");
+                            res.getWriter().write(
+                                    "{\"data\":null,\"error\":{\"code\":\"UNAUTHENTICATED\","
+                                    + "\"message\":\"Phiên đăng nhập đã hết hạn hoặc chưa đăng nhập.\"}}");
+                        })
+                        .accessDeniedHandler((req, res, e) -> {
+                            res.setStatus(403);
+                            res.setContentType("application/json;charset=UTF-8");
+                            res.getWriter().write(
+                                    "{\"data\":null,\"error\":{\"code\":\"FORBIDDEN\","
+                                    + "\"message\":\"Tài khoản của bạn không có quyền dùng chức năng này.\"}}");
+                        }))
                 .addFilterBefore(authRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
