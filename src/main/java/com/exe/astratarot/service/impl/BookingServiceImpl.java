@@ -272,6 +272,45 @@ public class BookingServiceImpl implements BookingService {
         return toResponse(b, false);
     }
 
+    /**
+     * Reader viết (hoặc sửa) ghi chú buổi xem.
+     *
+     * <p>Chỉ sau giờ hẹn. Ghi chú là bản tường thuật một buổi đã diễn ra; viết
+     * trước giờ hẹn thì nó là một lời hứa, không phải bản tường thuật, và
+     * chính nó sẽ trở thành bằng chứng sai lệch nếu buổi xem bị huỷ.
+     *
+     * <p>Cho sửa lại về sau chứ không khoá sau lần ghi đầu: sửa chính tả hay
+     * viết thêm một ý vừa nhớ ra là chuyện bình thường của người viết tay.
+     */
+    @Override
+    @Transactional
+    public BookingResponse saveReaderNote(UUID readerUserId, UUID bookingId, String note) {
+        Booking b = findBooking(bookingId);
+        requireReader(b, readerUserId);
+
+        if (b.getStatus() == BookingStatus.CANCELLED) {
+            throw new IllegalArgumentException("Buổi xem đã huỷ, không ghi chú được");
+        }
+        if (Instant.now().isBefore(b.getStartTime())) {
+            throw new IllegalArgumentException("Buổi xem chưa diễn ra, chưa ghi chú được");
+        }
+
+        String sach = note == null || note.isBlank() ? null : note.trim();
+        b.setReaderNote(sach);
+        b.setReaderNoteAt(sach == null ? null : Instant.now());
+
+        // Chỉ báo cho khách khi thật sự có nội dung. Xoá ghi chú mà vẫn gửi
+        // thông báo "Reader đã gửi ghi chú" là nói dối họ.
+        if (sach != null) {
+            notificationService.push(b.getUser(), NotificationTypes.BOOKING_COMPLETED,
+                    "Reader đã gửi ghi chú buổi xem",
+                    b.getReaderProfile().getUser().getFullName()
+                            + " vừa ghi lại nội dung buổi xem của bạn.",
+                    Map.of("bookingId", b.getId().toString()));
+        }
+        return toResponse(b, false);
+    }
+
     @Override
     @Transactional
     public BookingResponse cancel(UUID actorId, UUID bookingId, String reason) {
@@ -428,6 +467,8 @@ public class BookingServiceImpl implements BookingService {
                 .paymentStatus(b.getPaymentStatus().name())
                 .cancelReason(b.getCancelReason())
                 .reviewed(reviewed)
+                .readerNote(b.getReaderNote())
+                .readerNoteAt(b.getReaderNoteAt())
                 .createdAt(b.getCreatedAt())
                 .build();
     }

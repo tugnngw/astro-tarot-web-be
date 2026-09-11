@@ -47,6 +47,13 @@ public interface BookingService {
     /** Reader xác nhận đã xem xong. CONFIRMED -> COMPLETED, mở đường cho đánh giá. */
     BookingResponse complete(UUID readerUserId, UUID bookingId);
 
+    /**
+     * Reader ghi lại nội dung buổi xem cho khách đọc.
+     *
+     * <p>Truyền chuỗi rỗng để xoá ghi chú.
+     */
+    BookingResponse saveReaderNote(UUID readerUserId, UUID bookingId, String note);
+
     /** Cả khách lẫn Reader đều huỷ được, miễn là buổi xem chưa hoàn tất. */
     BookingResponse cancel(UUID actorId, UUID bookingId, String reason);
 }
