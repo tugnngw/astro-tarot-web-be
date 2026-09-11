@@ -30,8 +30,18 @@ public class UserAvatar {
     @Column(name = "content_type", nullable = false)
     private String contentType;
 
-    @Lob
-    @Column(name = "data", nullable = false)
+    /**
+     * KHÔNG dùng @Lob ở đây.
+     *
+     * Với Postgres, @Lob trên byte[] khiến Hibernate ánh xạ sang kiểu `oid`
+     * (large object nằm ngoài bảng), trong khi migration tạo cột `bytea`. Hai
+     * bên lệch nhau thì schema-validation chặn ngay lúc khởi động và cả ứng
+     * dụng không lên nổi — đã xảy ra thật trên production.
+     *
+     * byte[] trần ánh xạ thẳng sang `bytea`, đúng thứ migration tạo ra. Ảnh
+     * giới hạn 2MB nên không cần tới large object.
+     */
+    @Column(name = "data", nullable = false, columnDefinition = "bytea")
     private byte[] data;
 
     @UpdateTimestamp
