@@ -26,5 +26,8 @@ public class ReportResponse {
     private String handledByName;
     private Instant handledAt;
     private String resolutionNote;
+
+    /** Tiền đã trừ của người bị báo cáo. 0 = chỉ nhắc nhở. */
+    private Long penaltyAmount;
     private Instant createdAt;
 }

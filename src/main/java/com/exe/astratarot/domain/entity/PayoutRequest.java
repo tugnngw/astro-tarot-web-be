@@ -45,6 +45,17 @@ public class PayoutRequest {
     private String rejectReason;
 
     @CreationTimestamp
+    /**
+     * Mã BIN ngân hàng theo chuẩn VietQR (970436 = Vietcombank, …).
+     *
+     * <p>Tên ngân hàng dạng chữ tự do không dựng được mã QR: "Vietcombank",
+     * "VCB" và "ngân hàng ngoại thương" là ba cách viết của cùng một nơi mà máy
+     * không đoán được. Cho phép rỗng vì những lệnh rút tạo trước thay đổi này
+     * không có mã BIN, và không được vì thế mà hỏng.
+     */
+    @Column(name = "bank_bin", length = 20)
+    private String bankBin;
+
     @Column(name = "requested_at", updatable = false)
     private Instant requestedAt;
 

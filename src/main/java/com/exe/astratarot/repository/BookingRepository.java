@@ -2,6 +2,7 @@ package com.exe.astratarot.repository;
 
 import com.exe.astratarot.domain.entity.Booking;
 import com.exe.astratarot.domain.enums.BookingStatus;
+import com.exe.astratarot.domain.enums.PaymentStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,6 +14,25 @@ import java.util.List;
 import java.util.UUID;
 
 public interface BookingRepository extends JpaRepository<Booking, UUID> {
+
+    /**
+     * Các buổi xem đã kết thúc quá hạn mà vẫn đứng ở CONFIRMED.
+     *
+     * <p>Trả về ID chứ không phải entity: mỗi buổi sẽ được chốt trong một giao
+     * dịch riêng, nên nạp cả đối tượng ở đây rồi dùng lại ở giao dịch khác chỉ
+     * tạo ra thực thể lạc khỏi phiên làm việc.
+     */
+    @Query("""
+            SELECT b.id FROM Booking b
+            WHERE b.status = :status
+              AND b.paymentStatus = :paymentStatus
+              AND b.endTime < :truoc
+            ORDER BY b.endTime ASC
+            """)
+    List<UUID> findIdsDueForSettlement(@Param("status") BookingStatus status,
+                                       @Param("paymentStatus") PaymentStatus paymentStatus,
+                                       @Param("truoc") Instant truoc,
+                                       Pageable pageable);
 
     @Query("""
             SELECT b FROM Booking b

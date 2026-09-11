@@ -45,8 +45,10 @@ public class PayoutServiceImpl implements PayoutService {
     private final PayoutRequestRepository payoutRepository;
     private final ReaderProfileRepository readerProfileRepository;
     private final EscrowService escrowService;
+    private final com.exe.astratarot.repository.EscrowTransactionRepository escrowTransactionRepository;
     private final NotificationService notificationService;
     private final ActivityLogService activityLogService;
+    private final com.exe.astratarot.service.VietQrService vietQrService;
 
     /** Dưới mức này thì phí chuyển khoản ăn gần hết số tiền rút. */
     private static final long MIN_PAYOUT = 50_000L;
@@ -65,7 +67,26 @@ public class PayoutServiceImpl implements PayoutService {
                 .totalEarned(escrow.getTotalEarned())
                 .totalWithdrawn(escrow.getTotalWithdrawn())
                 .minimumPayout(MIN_PAYOUT)
+                .penaltyOwed(escrow.getPenaltyOwed())
                 .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<com.exe.astratarot.domain.dto.payout.EscrowTransactionResponse> myLedger(
+            UUID readerUserId, Pageable pageable) {
+        return escrowTransactionRepository
+                .findByAccountUserIdOrderByCreatedAtDesc(readerUserId, pageable)
+                .map(t -> com.exe.astratarot.domain.dto.payout.EscrowTransactionResponse.builder()
+                        .id(t.getId())
+                        .kind(t.getKind().name())
+                        .amount(t.getAmount())
+                        .balanceAfter(t.getBalanceAfter())
+                        .pendingAfter(t.getPendingAfter())
+                        .bookingId(t.getBooking() == null ? null : t.getBooking().getId())
+                        .note(t.getNote())
+                        .createdAt(t.getCreatedAt())
+                        .build());
     }
 
     @Override
@@ -89,6 +110,7 @@ public class PayoutServiceImpl implements PayoutService {
                 .bankName(request.getBankName().trim())
                 .bankAccount(request.getBankAccount().trim())
                 .accountHolder(request.getAccountHolder().trim())
+                .bankBin(emptyToNull(request.getBankBin()))
                 .status(PayoutStatus.PENDING)
                 .build());
 
@@ -109,7 +131,8 @@ public class PayoutServiceImpl implements PayoutService {
     @Override
     @Transactional(readOnly = true)
     public Page<PayoutResponse> list(String status, Pageable pageable) {
-        return payoutRepository.search(parseStatus(status), pageable).map(this::toResponse);
+        return payoutRepository.search(parseStatus(status), pageable)
+                .map(this::toResponseChoNguoiDuyet);
     }
 
     @Override
@@ -213,11 +236,43 @@ public class PayoutServiceImpl implements PayoutService {
                 // dùng chung, không cần phơi đủ số cho mọi người đi ngang nhìn.
                 .bankAccountMasked(mask(p.getBankAccount()))
                 .accountHolder(p.getAccountHolder())
+                .bankBin(p.getBankBin())
                 .status(p.getStatus().name())
                 .rejectReason(p.getRejectReason())
                 .requestedAt(p.getRequestedAt())
                 .processedAt(p.getProcessedAt())
                 .build();
+    }
+
+    /**
+     * Bản dành cho người duyệt chi: kèm chuỗi QR để quét là chuyển được ngay.
+     *
+     * <p>Tách hẳn khỏi {@link #toResponse} chứ không thêm một tham số boolean:
+     * chuỗi này quét một cái là tiền đi, nên chỗ nào trả nó ra phải nhìn thấy
+     * được từ tên hàm, không nằm ẩn sau một cờ true/false ở đầu gọi.
+     */
+    private PayoutResponse toResponseChoNguoiDuyet(PayoutRequest p) {
+        PayoutResponse res = toResponse(p);
+        // Chỉ lệnh còn chờ hoặc đã duyệt mới cần QR. Lệnh đã chi hay bị từ chối
+        // mà vẫn kèm mã quét được là một cái bẫy chuyển nhầm tiền lần hai.
+        boolean conPhaiChi = p.getStatus() == PayoutStatus.PENDING
+                || p.getStatus() == PayoutStatus.APPROVED;
+        if (conPhaiChi && p.getBankBin() != null && p.getBankAccount() != null) {
+            try {
+                res.setQrPayload(vietQrService.dungChuoi(
+                        p.getBankBin(), p.getBankAccount(), p.getAmount(),
+                        "ASTROTAROT tra thu nhap " + p.getReader().getUser().getFullName()));
+            } catch (RuntimeException e) {
+                // Dữ liệu ngân hàng hỏng thì bỏ mã QR, KHÔNG làm hỏng cả danh
+                // sách: người duyệt vẫn phải xem được lệnh để từ chối nó.
+                log.warn("Không dựng được QR cho lệnh rút {}: {}", p.getId(), e.getMessage());
+            }
+        }
+        return res;
+    }
+
+    private static String emptyToNull(String s) {
+        return s == null || s.isBlank() ? null : s.trim();
     }
 
     private static String mask(String account) {

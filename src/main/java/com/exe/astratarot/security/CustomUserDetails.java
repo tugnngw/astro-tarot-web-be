@@ -56,7 +56,19 @@ public class CustomUserDetails implements UserDetails {
                     SecurityPermissions.STAFF_MANAGE,
                     SecurityPermissions.ADMIN_READERS_VIEW,
                     SecurityPermissions.ADMIN_READERS_REVIEW,
-                    SecurityPermissions.REPORT_REVIEW),
+                    SecurityPermissions.REPORT_REVIEW,
+                    // Gian hàng là các liên kết tiếp thị: việc ở đây là chọn
+                    // bán gì, viết mô tả, xếp danh mục — công việc vận hành,
+                    // không phải công việc tài chính. Nên nó thuộc Quản lý.
+                    //
+                    // Cố ý KHÔNG trao cho Nhân viên: Nhân viên chính là Reader
+                    // đang tư vấn cho khách, và để họ tự chọn sản phẩm nào
+                    // được đẩy lên trước mặt chính những khách ấy là đặt họ
+                    // vào thế xung đột lợi ích.
+                    //
+                    // ORDERS_MANAGE và PAYMENTS_MANAGE thì không: động tới
+                    // tiền vẫn là việc của Quản trị viên.
+                    SecurityPermissions.CATALOG_MANAGE),
 
             UserRole.ADMIN, List.of(
                     SecurityPermissions.USER_BASIC,

@@ -18,4 +18,13 @@ public class EscrowSummaryResponse {
     private Long totalEarned;
     private Long totalWithdrawn;
     private Long minimumPayout;
+
+    /**
+     * Tiền phạt chưa thu được vì lúc xử lý vi phạm số dư không đủ.
+     *
+     * <p>Phải bày ra chứ không giấu: khoản này sẽ tự trừ vào các buổi xem sau,
+     * nên Reader thấy thu nhập hụt mà không hiểu vì sao là chuyện chắc chắn xảy
+     * ra nếu con số này chỉ nằm trong database.
+     */
+    private Long penaltyOwed;
 }

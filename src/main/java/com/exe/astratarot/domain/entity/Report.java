@@ -63,6 +63,15 @@ public class Report {
     private String resolutionNote;
 
     @CreationTimestamp
+    /**
+     * Số tiền trừ của người bị báo cáo khi kết luận là có vi phạm.
+     *
+     * <p>0 nghĩa là nhắc nhở suông — vẫn là một kết luận hợp lệ, và là mặc
+     * định: phạt tiền phải do người xử lý chủ động nhập, không tự sinh ra.
+     */
+    @Column(name = "penalty_amount", nullable = false)
+    private Long penaltyAmount = 0L;
+
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 }

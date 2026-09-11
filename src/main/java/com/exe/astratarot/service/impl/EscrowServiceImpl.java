@@ -2,9 +2,14 @@ package com.exe.astratarot.service.impl;
 
 import com.exe.astratarot.domain.entity.Booking;
 import com.exe.astratarot.domain.entity.EscrowAccount;
+import com.exe.astratarot.domain.entity.EscrowTransaction;
+import com.exe.astratarot.domain.entity.EscrowTransaction.Kind;
+import com.exe.astratarot.domain.entity.PayoutRequest;
+import com.exe.astratarot.domain.entity.Report;
 import com.exe.astratarot.domain.entity.User;
 import com.exe.astratarot.exception.ResourceNotFoundException;
 import com.exe.astratarot.repository.EscrowAccountRepository;
+import com.exe.astratarot.repository.EscrowTransactionRepository;
 import com.exe.astratarot.repository.UserRepository;
 import com.exe.astratarot.service.EscrowService;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +25,7 @@ import java.util.UUID;
 public class EscrowServiceImpl implements EscrowService {
 
     private final EscrowAccountRepository escrowAccountRepository;
+    private final EscrowTransactionRepository escrowTransactionRepository;
     private final UserRepository userRepository;
 
     /**
@@ -50,6 +56,33 @@ public class EscrowServiceImpl implements EscrowService {
     }
 
     // =========================================================
+    // Sổ cái
+    // =========================================================
+
+    /**
+     * Lưu tài khoản và ghi một dòng sổ.
+     *
+     * <p>Hai việc này luôn đi cặp, và luôn theo đúng thứ tự này: số dư phải
+     * đúng trước khi chép sang {@code balanceAfter}, nếu không dòng sổ nói dối.
+     */
+    private void ghiSo(EscrowAccount escrow, Kind kind, long amount,
+                       Booking booking, Report report, PayoutRequest payout,
+                       String note) {
+        escrowAccountRepository.save(escrow);
+        escrowTransactionRepository.save(EscrowTransaction.builder()
+                .account(escrow)
+                .kind(kind)
+                .amount(amount)
+                .balanceAfter(escrow.getBalance())
+                .pendingAfter(escrow.getPendingBalance())
+                .booking(booking)
+                .report(report)
+                .payout(payout)
+                .note(note)
+                .build());
+    }
+
+    // =========================================================
     // Theo lịch hẹn
     // =========================================================
 
@@ -58,7 +91,8 @@ public class EscrowServiceImpl implements EscrowService {
     public void holdForBooking(Booking booking) {
         EscrowAccount escrow = getOrCreate(booking.getReaderProfile().getUser());
         escrow.setPendingBalance(escrow.getPendingBalance() + booking.getTotalAmount());
-        escrowAccountRepository.save(escrow);
+        ghiSo(escrow, Kind.HOLD, booking.getTotalAmount(), booking, null, null,
+                "Khách đã thanh toán. Tiền được giữ tới khi buổi xem hoàn tất.");
         log.info("Ký quỹ giữ {} cho booking {}", booking.getTotalAmount(), booking.getId());
     }
 
@@ -83,9 +117,33 @@ public class EscrowServiceImpl implements EscrowService {
         escrow.setPendingBalance(escrow.getPendingBalance() - gross);
         escrow.setBalance(escrow.getBalance() + net);
         escrow.setTotalEarned(escrow.getTotalEarned() + net);
-        escrowAccountRepository.save(escrow);
+        ghiSo(escrow, Kind.RELEASE, net, booking, null, null,
+                "Buổi xem hoàn tất. Đã trừ phí nền tảng " + PLATFORM_FEE_PERCENT + "%.");
 
         log.info("Ký quỹ nhả {} (phí {}) cho booking {}", net, fee, booking.getId());
+
+        // Có nợ phạt thì thu ngay tại đây, trước khi Reader kịp rút. Thu sau
+        // mỗi lần nhả chứ không đợi tới lúc họ xin rút: đợi thì khoản nợ chỉ
+        // được thu khi chính người nợ tự nguyện đụng vào ví.
+        thuNoPhat(escrow, booking);
+    }
+
+    /** Trừ dần nợ phạt vào số dư vừa nhả. Không đụng tới phần đang giữ. */
+    private void thuNoPhat(EscrowAccount escrow, Booking booking) {
+        long no = escrow.getPenaltyOwed();
+        if (no <= 0) return;
+
+        long thu = Math.min(no, escrow.getBalance());
+        if (thu <= 0) return;
+
+        escrow.setBalance(escrow.getBalance() - thu);
+        escrow.setPenaltyOwed(no - thu);
+        ghiSo(escrow, Kind.DEBT_COLLECTED, thu, booking, null, null,
+                escrow.getPenaltyOwed() > 0
+                        ? "Thu một phần tiền phạt còn nợ. Còn lại "
+                                + escrow.getPenaltyOwed() + " đ sẽ trừ vào lần sau."
+                        : "Đã thu hết tiền phạt còn nợ.");
+        log.info("Thu {} tiền phạt còn nợ của tài khoản ký quỹ {}", thu, escrow.getId());
     }
 
     @Override
@@ -100,8 +158,49 @@ public class EscrowServiceImpl implements EscrowService {
                             + ". Cần đối soát thủ công.");
         }
         escrow.setPendingBalance(escrow.getPendingBalance() - amount);
-        escrowAccountRepository.save(escrow);
+        ghiSo(escrow, Kind.REFUND, amount, booking, null, null,
+                "Lịch hẹn bị huỷ sau khi khách đã trả. Tiền hoàn lại cho khách.");
         log.info("Ký quỹ hoàn {} cho booking {}", amount, booking.getId());
+    }
+
+    // =========================================================
+    // Vi phạm
+    // =========================================================
+
+    @Override
+    @Transactional
+    public long applyPenalty(UUID userId, long amount, Report report) {
+        if (amount <= 0) return 0L;
+        EscrowAccount escrow = getOrCreate(userId);
+
+        // Trừ được bao nhiêu thì trừ ngay; phần còn thiếu ghi nợ.
+        //
+        // KHÔNG đụng tới pendingBalance: đó là tiền của những buổi xem chưa
+        // xong, còn có thể phải hoàn lại cho khách. Lấy nó đi để trả nợ phạt là
+        // lấy tiền của người thứ ba.
+        long truNgay = Math.min(amount, escrow.getBalance());
+        long ghiNo = amount - truNgay;
+
+        if (truNgay > 0) {
+            escrow.setBalance(escrow.getBalance() - truNgay);
+            ghiSo(escrow, Kind.PENALTY, truNgay, null, report, null,
+                    "Trừ tiền do vi phạm: " + moTaViPham(report));
+        }
+        if (ghiNo > 0) {
+            escrow.setPenaltyOwed(escrow.getPenaltyOwed() + ghiNo);
+            ghiSo(escrow, Kind.PENALTY_DEBT, ghiNo, null, report, null,
+                    "Số dư không đủ để trừ hết. Phần còn lại sẽ trừ vào các khoản thu sau.");
+        }
+
+        log.info("Phạt {} (trừ ngay {}, ghi nợ {}) cho user {} theo báo cáo {}",
+                amount, truNgay, ghiNo, userId, report == null ? null : report.getId());
+        return truNgay;
+    }
+
+    private String moTaViPham(Report report) {
+        if (report == null) return "không rõ";
+        String loai = report.getReportType();
+        return loai == null || loai.isBlank() ? "vi phạm quy định" : loai;
     }
 
     // =========================================================
@@ -119,7 +218,8 @@ public class EscrowServiceImpl implements EscrowService {
             throw new IllegalArgumentException("Số dư rút được không đủ");
         }
         escrow.setBalance(escrow.getBalance() - amount);
-        escrowAccountRepository.save(escrow);
+        ghiSo(escrow, Kind.PAYOUT_RESERVE, amount, null, null, null,
+                "Đã tạo lệnh rút. Tiền được giữ chỗ trong lúc chờ duyệt.");
     }
 
     @Override
@@ -127,7 +227,8 @@ public class EscrowServiceImpl implements EscrowService {
     public void returnRejectedPayout(UUID readerUserId, long amount) {
         EscrowAccount escrow = getOrCreate(readerUserId);
         escrow.setBalance(escrow.getBalance() + amount);
-        escrowAccountRepository.save(escrow);
+        ghiSo(escrow, Kind.PAYOUT_RETURN, amount, null, null, null,
+                "Lệnh rút bị từ chối. Tiền trả về số dư.");
     }
 
     @Override
@@ -137,6 +238,7 @@ public class EscrowServiceImpl implements EscrowService {
         // Tiền đã bị trừ khỏi balance từ lúc tạo lệnh, nên ở đây chỉ ghi nhận
         // vào tổng đã rút — trừ thêm lần nữa là trừ hai lần.
         escrow.setTotalWithdrawn(escrow.getTotalWithdrawn() + amount);
-        escrowAccountRepository.save(escrow);
+        ghiSo(escrow, Kind.PAYOUT_SETTLE, amount, null, null, null,
+                "Đã chuyển khoản.");
     }
 }

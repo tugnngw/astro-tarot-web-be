@@ -39,6 +39,18 @@ public class EscrowAccount {
     private Long totalWithdrawn = 0L;
 
     @UpdateTimestamp
+    /**
+     * Tiền phạt chưa thu được vì lúc xử lý vi phạm số dư không đủ.
+     *
+     * <p>Ràng buộc ở database chặn số dư âm, nên một khoản phạt lớn hơn số dư
+     * sẽ làm giao dịch nổ. Bỏ qua phần thiếu thì Reader vi phạm đúng lúc ví
+     * rỗng lại thoát phạt — hoá ra thưởng cho việc rút sạch tiền trước khi bị
+     * xử lý. Ghi nợ rồi trừ dần vào các khoản nhả sau là cách duy nhất vừa giữ
+     * được ràng buộc vừa không tạo ra kẽ hở đó.
+     */
+    @Column(name = "penalty_owed", nullable = false)
+    private Long penaltyOwed = 0L;
+
     @Column(name = "updated_at")
     private Instant updatedAt;
 }

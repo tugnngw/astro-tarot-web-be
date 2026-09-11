@@ -12,6 +12,15 @@ public interface PayoutService {
 
     EscrowSummaryResponse mySummary(UUID readerUserId);
 
+    /**
+     * Sổ cái ký quỹ của chính mình, mới nhất trước.
+     *
+     * <p>Bốn con số tổng không trả lời được câu hỏi quan trọng nhất: "vì sao
+     * tháng này tôi nhận ít hơn?". Sổ cái thì trả lời được.
+     */
+    Page<com.exe.astratarot.domain.dto.payout.EscrowTransactionResponse> myLedger(
+            UUID readerUserId, Pageable pageable);
+
     PayoutResponse create(UUID readerUserId, CreatePayoutRequest request);
 
     Page<PayoutResponse> listMine(UUID readerUserId, Pageable pageable);
