@@ -195,8 +195,28 @@ public class PaymentServiceImpl implements PaymentService {
 
         String orderKey = String.valueOf(data.getOrderCode());
         PaymentTransaction tx = transactionRepository.findByExternalTransactionId(orderKey)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Không tìm thấy giao dịch PayOS orderCode=" + orderKey));
+                .orElse(null);
+
+        // Không tìm thấy giao dịch KHÔNG phải là lỗi của ta, và tuyệt đối không
+        // được trả 5xx.
+        //
+        // Đây chính là nguyên nhân "Webhook url invalid" mỗi lần khởi động:
+        // khi đăng ký webhook, PayOS gọi thử chính URL này bằng một gói tin giả
+        // mang orderCode = 123. Chữ ký của gói tin đó hợp lệ nên nó đi qua
+        // verify(), rồi chết ở đây vì làm gì có giao dịch nào số 123. Ngoại lệ
+        // bay lên controller và thành HTTP 500, PayOS thấy 500 thì kết luận URL
+        // hỏng và từ chối đăng ký — suốt thời gian qua webhook chưa từng được
+        // đăng ký thành công.
+        //
+        // Không bắt riêng số 123: một magic number là thứ sẽ mục đi lặng lẽ khi
+        // PayOS đổi gói tin thử. Lý lẽ đúng rộng hơn thế — orderCode lạ thì
+        // không có việc gì để làm, và gọi lại mười lần cũng không làm nó tồn
+        // tại, nên báo nhận rồi thôi.
+        if (tx == null) {
+            log.info("PayOS webhook cho orderCode={} không khớp giao dịch nào. "
+                    + "Thường là gói tin PayOS gửi thử lúc đăng ký webhook.", orderKey);
+            return;
+        }
 
         if (tx.getStatus() != TransactionStatus.PENDING) {
             log.info("PayOS webhook trùng — giao dịch {} đã {}", tx.getId(), tx.getStatus());
