@@ -103,6 +103,10 @@ public class SecurityConfig {
                         // ảnh khác trên trang. Việc tải LÊN vẫn cần đăng nhập
                         // (POST /api/v1/me/avatar).
                         .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
+                        // Ảnh đại diện lấy từ CSDL. Công khai như mọi ảnh đại
+                        // diện khác — tên và ảnh Reader hiện ở trang danh sách
+                        // mà khách chưa đăng nhập cũng xem được.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/*/avatar").permitAll()
                         // Docker va nginx goi endpoint nay de biet backend con
                         // song. Chi tra UP/DOWN, khong kem chi tiet.
                         .requestMatchers("/actuator/health").permitAll()
