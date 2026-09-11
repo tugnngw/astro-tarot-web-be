@@ -164,8 +164,21 @@ class AIReadingControllerStreamTest {
         log.info("Stream test completed successfully");
     }
 
+    /**
+     * Chưa đăng nhập thì phải là 401, KHÔNG phải 403.
+     *
+     * <p>Bài test này trước đây khẳng định 403 — tức là nó đang khoá lại đúng
+     * một lỗi. Khi SecurityConfig chưa khai authenticationEntryPoint, Spring
+     * Security trả 403 cho cả "chưa đăng nhập", và vì giao diện chỉ làm mới
+     * token khi gặp 401 nên hễ token hết hạn là mọi danh sách chết trong khi
+     * refresh token vẫn còn nguyên.
+     *
+     * <p>401 = chưa xác thực. 403 = đã xác thực nhưng không đủ quyền. Phân biệt
+     * hai thứ này không phải chuyện câu chữ: nó quyết định giao diện nên đưa
+     * người dùng đi làm mới phiên hay nên nói thẳng là không có quyền.
+     */
     @Test
-    void streamAiTarotReading_unauthenticated_returns403() throws Exception {
+    void streamAiTarotReading_unauthenticated_returns401() throws Exception {
         StartTarotReadingRequest request = StartTarotReadingRequest.builder()
                 .question("Will I succeed?")
                 .numberOfCards(3)
@@ -175,7 +188,7 @@ class AIReadingControllerStreamTest {
         mockMvc.perform(post("/api/ai-readings/stream")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(toJson(request)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(tarotReadingService);
     }

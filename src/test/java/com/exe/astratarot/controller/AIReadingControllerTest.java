@@ -153,7 +153,12 @@ class AIReadingControllerTest {
     }
 
     @Test
-    void startAiTarotReading_unauthenticatedRequest_returns403() throws Exception {
+    /**
+     * Chưa đăng nhập là 401, không phải 403 — xem chú thích cùng nội dung ở
+     * AIReadingControllerStreamTest. Bài test này trước đây khoá lại đúng cái
+     * lỗi khiến giao diện không bao giờ làm mới token hết hạn.
+     */
+    void startAiTarotReading_unauthenticatedRequest_returns401() throws Exception {
         StartTarotReadingRequest request = StartTarotReadingRequest.builder()
                 .question("Will I succeed?")
                 .numberOfCards(3)
@@ -163,7 +168,7 @@ class AIReadingControllerTest {
         mockMvc.perform(post("/api/ai-readings")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(toJson(request)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(tarotReadingService);
     }
