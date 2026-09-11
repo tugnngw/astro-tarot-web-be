@@ -62,7 +62,6 @@ public class Report {
     @Column(name = "resolution_note", columnDefinition = "TEXT")
     private String resolutionNote;
 
-    @CreationTimestamp
     /**
      * Số tiền trừ của người bị báo cáo khi kết luận là có vi phạm.
      *
@@ -72,6 +71,7 @@ public class Report {
     @Column(name = "penalty_amount", nullable = false)
     private Long penaltyAmount = 0L;
 
+    @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 }

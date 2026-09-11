@@ -44,7 +44,6 @@ public class PayoutRequest {
     @Column(name = "reject_reason", columnDefinition = "TEXT")
     private String rejectReason;
 
-    @CreationTimestamp
     /**
      * Mã BIN ngân hàng theo chuẩn VietQR (970436 = Vietcombank, …).
      *
@@ -56,6 +55,7 @@ public class PayoutRequest {
     @Column(name = "bank_bin", length = 20)
     private String bankBin;
 
+    @CreationTimestamp
     @Column(name = "requested_at", updatable = false)
     private Instant requestedAt;
 

@@ -38,7 +38,6 @@ public class EscrowAccount {
     @Column(name = "total_withdrawn")
     private Long totalWithdrawn = 0L;
 
-    @UpdateTimestamp
     /**
      * Tiền phạt chưa thu được vì lúc xử lý vi phạm số dư không đủ.
      *
@@ -51,6 +50,7 @@ public class EscrowAccount {
     @Column(name = "penalty_owed", nullable = false)
     private Long penaltyOwed = 0L;
 
+    @UpdateTimestamp
     @Column(name = "updated_at")
     private Instant updatedAt;
 }
