@@ -69,6 +69,10 @@ public class Report {
      * định: phạt tiền phải do người xử lý chủ động nhập, không tự sinh ra.
      */
     @Column(name = "penalty_amount", nullable = false)
+    // @Builder.Default là BẮT BUỘC ở đây: Lombok bỏ qua giá trị khởi
+    // tạo của trường khi dựng qua builder, nên thiếu nó là ghi null
+    // xuống một cột NOT NULL và cả lệnh insert nổ.
+    @Builder.Default
     private Long penaltyAmount = 0L;
 
     @CreationTimestamp

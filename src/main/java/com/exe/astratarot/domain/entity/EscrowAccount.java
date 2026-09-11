@@ -48,6 +48,10 @@ public class EscrowAccount {
      * được ràng buộc vừa không tạo ra kẽ hở đó.
      */
     @Column(name = "penalty_owed", nullable = false)
+    // @Builder.Default là BẮT BUỘC ở đây: Lombok bỏ qua giá trị khởi
+    // tạo của trường khi dựng qua builder, nên thiếu nó là ghi null
+    // xuống một cột NOT NULL và cả lệnh insert nổ.
+    @Builder.Default
     private Long penaltyOwed = 0L;
 
     @UpdateTimestamp
