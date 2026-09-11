@@ -143,6 +143,23 @@ public class BookingController {
                 bookingService.complete(me.getUser().getId(), id)));
     }
 
+    /**
+     * Reader ghi lại nội dung buổi xem cho khách đọc.
+     *
+     * <p>Trước khi có endpoint này, một buổi xem đã trả tiền không để lại gì
+     * trong hệ thống ngoài dòng trạng thái COMPLETED — khách không có gì để
+     * đọc lại, còn Reader không có gì để nhớ mình đã nói gì với ai.
+     */
+    @PatchMapping("/bookings/{id}/note")
+    @PreAuthorize("hasAuthority('READER_MANAGE_PROFILE')")
+    public ResponseEntity<ApiResponse<BookingResponse>> saveNote(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @PathVariable UUID id,
+            @Valid @RequestBody com.exe.astratarot.domain.dto.booking.SaveReaderNoteRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Đã lưu ghi chú",
+                bookingService.saveReaderNote(me.getUser().getId(), id, request.getNote())));
+    }
+
     // ---------- Cả hai bên ----------
 
     @GetMapping("/bookings/{id}")

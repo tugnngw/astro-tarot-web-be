@@ -45,5 +45,9 @@ public class BookingResponse {
     /** Đã có đánh giá chưa — quyết định hiện nút "Đánh giá" hay điểm đã chấm. */
     private Boolean reviewed;
 
+    /** Ghi chú Reader viết sau buổi xem. Cả khách và Reader đều đọc được. */
+    private String readerNote;
+    private Instant readerNoteAt;
+
     private Instant createdAt;
 }

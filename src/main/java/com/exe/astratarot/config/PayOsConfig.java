@@ -1,6 +1,5 @@
 package com.exe.astratarot.config;
 
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -33,27 +32,12 @@ public class PayOsConfig {
         return new PayOsClient(client);
     }
 
-    @PostConstruct
-    void registerWebhookIfConfigured() {
-        if (!properties.isConfigured()) {
-            return;
-        }
-        String webhook = properties.getWebhookUrl();
-        if (webhook == null || webhook.isBlank()) {
-            log.info("PAYOS_WEBHOOK_URL trống — đăng ký webhook thủ công trên my.payos.vn");
-            return;
-        }
-        try {
-            PayOS client = new PayOS(
-                    properties.getClientId().trim(),
-                    properties.getApiKey().trim(),
-                    properties.getChecksumKey().trim());
-            client.webhooks().confirm(webhook.trim());
-            log.info("Đã đăng ký PayOS webhook: {}", webhook.trim());
-        } catch (Exception e) {
-            log.warn("Không đăng ký được PayOS webhook ({}): {}", webhook, e.getMessage());
-        }
-    }
+    // Việc đăng ký webhook đã chuyển sang PayOsWebhookRegistrar.
+    //
+    // Trước đây nó nằm ngay đây trong một @PostConstruct, và đó chính là lý do
+    // nó chưa bao giờ thành công: PayOS gọi ngược lại URL để kiểm tra, mà lúc
+    // @PostConstruct chạy thì instance này còn cách lúc mở cổng cả phút, nên
+    // cú gọi ngược rơi vào instance CŨ. Xem chú thích đầy đủ ở lớp kia.
 
     private static String mask(String id) {
         if (id == null || id.length() < 6) {

@@ -53,6 +53,19 @@ public class Booking {
     private String cancelReason;
 
     @CreationTimestamp
+    /**
+     * Ghi chú Reader viết cho khách sau buổi xem.
+     *
+     * <p>Không phải nhật ký nội bộ: khách đọc được. Với đề tài Tarot thì đây
+     * chính là sản phẩm — trước khi có cột này, khách trả tiền xong là buổi
+     * xem không để lại gì ngoài một dòng trạng thái.
+     */
+    @Column(name = "reader_note", columnDefinition = "TEXT")
+    private String readerNote;
+
+    @Column(name = "reader_note_at")
+    private Instant readerNoteAt;
+
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 
