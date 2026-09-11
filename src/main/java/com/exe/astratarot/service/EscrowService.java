@@ -41,6 +41,18 @@ public interface EscrowService {
     /** Huỷ sau khi đã trả tiền: gỡ khỏi phần đang giữ để hoàn lại cho khách. */
     void refundForBooking(Booking booking);
 
+    /**
+     * Trừ tiền phạt khi một báo cáo vi phạm được kết luận là đúng.
+     *
+     * <p>Trừ được bao nhiêu thì trừ ngay, phần còn thiếu ghi vào
+     * {@code penaltyOwed} và thu dần ở những lần nhả tiền sau. Không đụng tới
+     * phần đang giữ: đó là tiền của các buổi xem chưa xong, còn có thể phải
+     * hoàn lại cho khách.
+     *
+     * @return số tiền trừ được ngay; phần còn lại đã thành nợ.
+     */
+    long applyPenalty(UUID userId, long amount, com.exe.astratarot.domain.entity.Report report);
+
     /** Giữ chỗ số tiền Reader xin rút, để họ không xin rút hai lần cùng một khoản. */
     void reserveForPayout(UUID readerUserId, long amount);
 

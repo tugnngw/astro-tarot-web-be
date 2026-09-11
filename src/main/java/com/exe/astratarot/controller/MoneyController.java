@@ -111,6 +111,22 @@ public class MoneyController {
         return ResponseEntity.ok(ApiResponse.success(payoutService.mySummary(me.getUser().getId())));
     }
 
+    /**
+     * Sổ cái ký quỹ của chính mình.
+     *
+     * <p>Bốn con số tổng ở {@code /me/escrow} không trả lời được câu hỏi mà
+     * Reader thật sự hỏi: "vì sao tháng này tôi nhận ít hơn?".
+     */
+    @GetMapping("/me/escrow/transactions")
+    @PreAuthorize("hasAuthority('PAYOUT_REQUEST')")
+    public ResponseEntity<ApiResponse<Page<com.exe.astratarot.domain.dto.payout.EscrowTransactionResponse>>> myLedger(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                payoutService.myLedger(me.getUser().getId(), PageRequest.of(page, size))));
+    }
+
     @PostMapping("/me/payouts")
     @PreAuthorize("hasAuthority('PAYOUT_REQUEST')")
     public ResponseEntity<ApiResponse<PayoutResponse>> createPayout(

@@ -12,6 +12,20 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface ReportRepository extends JpaRepository<Report, UUID> {
+    /**
+     * Buổi xem này có tố cáo nào chưa kết luận không?
+     *
+     * <p>PENDING và REVIEWED đều tính là "đang mở": REVIEWED mới chỉ là đã xem
+     * qua, chưa ai kết luận đúng sai, nên tiền vẫn phải nằm yên.
+     */
+    @Query("""
+            SELECT COUNT(r) > 0 FROM Report r
+            WHERE r.booking.id = :bookingId
+              AND r.status IN (com.exe.astratarot.domain.enums.ReportStatus.PENDING,
+                               com.exe.astratarot.domain.enums.ReportStatus.REVIEWED)
+            """)
+    boolean existsOpenForBooking(@Param("bookingId") UUID bookingId);
+
 
     @Query("""
             SELECT r FROM Report r

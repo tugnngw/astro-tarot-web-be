@@ -46,6 +46,7 @@ public class ReportServiceImpl implements ReportService {
     private final BookingRepository bookingRepository;
     private final NotificationService notificationService;
     private final ActivityLogService activityLogService;
+    private final com.exe.astratarot.service.EscrowService escrowService;
 
     @Override
     @Transactional
@@ -127,9 +128,32 @@ public class ReportServiceImpl implements ReportService {
                 ? null
                 : request.getResolutionNote().trim());
 
+        // Trừ tiền CHỈ khi kết luận là RESOLVED — tức là đã xác nhận có vi
+        // phạm. REVIEWED mới chỉ là "đã xem", REJECTED là bác đơn tố cáo; phạt
+        // tiền ở hai trạng thái đó là phạt người chưa bị kết luận sai.
+        long phat = request.getPenaltyAmount() == null ? 0L : request.getPenaltyAmount();
+        if (next == ReportStatus.RESOLVED && phat > 0) {
+            report.setPenaltyAmount(phat);
+            long truNgay = escrowService.applyPenalty(
+                    report.getReportedUser().getId(), phat, report);
+
+            // Báo cho NGƯỜI BỊ PHẠT. Trừ tiền của ai đó mà không nói với họ là
+            // cách nhanh nhất để biến một hình phạt đúng thành một tranh cãi.
+            notificationService.push(report.getReportedUser(),
+                    NotificationTypes.REPORT_RESOLVED,
+                    "Tài khoản bị trừ tiền do vi phạm",
+                    truNgay >= phat
+                            ? "Đã trừ " + phat + " đ từ số dư của bạn."
+                            : "Đã trừ " + truNgay + " đ; phần còn lại "
+                                    + (phat - truNgay)
+                                    + " đ sẽ trừ vào các khoản thu sau.",
+                    Map.of("reportId", reportId.toString()));
+        }
+
         activityLogService.record(actorId, AdminActions.REPORT_HANDLE, AdminActions.ENTITY_REPORT,
-                reportId, Map.of("status", next.name(), "reportedUserId",
-                        report.getReportedUser().getId().toString()));
+                reportId, Map.of("status", next.name(),
+                        "reportedUserId", report.getReportedUser().getId().toString(),
+                        "penaltyAmount", String.valueOf(report.getPenaltyAmount())));
 
         // Chỉ báo cho NGƯỜI TỐ CÁO: họ đang chờ kết quả. Người bị tố nhận hình
         // thức xử lý riêng (khoá tài khoản, nhắc nhở), không phải qua đây.
@@ -174,6 +198,7 @@ public class ReportServiceImpl implements ReportService {
                 .handledByName(r.getHandledBy() == null ? null : r.getHandledBy().getFullName())
                 .handledAt(r.getHandledAt())
                 .resolutionNote(r.getResolutionNote())
+                .penaltyAmount(r.getPenaltyAmount())
                 .createdAt(r.getCreatedAt())
                 .build();
     }
