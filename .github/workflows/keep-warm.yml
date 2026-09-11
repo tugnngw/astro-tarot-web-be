@@ -1,0 +1,42 @@
+# Giữ cho backend khỏi ngủ.
+#
+# Gói free của Render tắt dịch vụ sau 15 phút không có lượt gọi nào, và lần gọi
+# kế tiếp phải chờ nó khởi động lại — thường 50 giây trở lên. Đó là nguyên nhân
+# thật sự của "danh sách đôi khi không tải được hoặc tải rất lâu": phía trình
+# duyệt đã bỏ cuộc từ lâu trước khi máy chủ kịp dậy.
+#
+# Vì sao ping nhiều lần trong CÙNG một lần chạy: lịch `schedule` của GitHub chỉ
+# là mong muốn, không phải cam kết — lúc cao điểm nó trễ vài chục phút là
+# chuyện thường. Nếu mỗi lần chạy chỉ gọi một phát thì một lần trễ là đủ để
+# dịch vụ ngủ mất. Bốn phát cách nhau ba phút phủ được khoảng trống đó.
+#
+# Repo đang để công khai nên phút chạy Actions không mất phí.
+#
+# Lưu ý hạn mức: bản free của Render cho 750 giờ chạy mỗi tháng trên cả tài
+# khoản, mà một tháng có ~730 giờ. Tức là vừa đủ giữ thức MỘT dịch vụ. Thêm
+# dịch vụ thứ hai luôn thức là vượt hạn mức.
+name: Keep warm
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Gọi /actuator/health bốn lần, cách nhau ba phút
+        run: |
+          URL="https://astra-tarot-api.onrender.com/actuator/health"
+          for i in 1 2 3 4; do
+            # --max-time 90: máy chủ đang khởi động lại thì Render giữ kết nối
+            # chờ, nên phải cho nó đủ thời gian mới biết là thức hay hỏng.
+            code=$(curl -s -o /tmp/body.txt -w '%{http_code}' --max-time 90 "$URL" || echo 000)
+            echo "lần $i: HTTP $code — $(head -c 120 /tmp/body.txt)"
+            if [ "$i" -lt 4 ]; then sleep 180; fi
+          done
+          # Chỉ cần lần cuối thành công là đủ: những lần trước có thể rơi đúng
+          # lúc dịch vụ đang khởi động lại sau một đợt deploy.
+          test "$code" = "200"
