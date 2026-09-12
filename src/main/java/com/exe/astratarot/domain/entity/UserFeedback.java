@@ -29,9 +29,12 @@ public class UserFeedback {
     @Column(nullable = false, length = 40)
     private String source;
 
+    /** Khớp Flyway SMALLINT (int2) — Integer mặc định map INTEGER sẽ fail validate. */
+    @JdbcTypeCode(SqlTypes.SMALLINT)
     @Column(nullable = false)
     private Integer nps;
 
+    @JdbcTypeCode(SqlTypes.SMALLINT)
     private Integer rating;
 
     @Column(columnDefinition = "TEXT")
