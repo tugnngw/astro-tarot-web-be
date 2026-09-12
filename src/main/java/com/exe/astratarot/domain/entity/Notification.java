@@ -38,6 +38,11 @@ public class Notification {
     @Column(name = "is_read")
     private Boolean read = false;
 
+    /** Tin đã ghim nằm đầu danh sách và không bị xoá hàng loạt. */
+    @Builder.Default
+    @Column(nullable = false)
+    private Boolean pinned = false;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private String metadata;

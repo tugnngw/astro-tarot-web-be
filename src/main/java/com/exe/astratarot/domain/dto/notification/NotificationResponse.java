@@ -19,6 +19,8 @@ public class NotificationResponse {
     /** Quyết định biểu tượng và đường dẫn khi bấm vào. Xem NotificationTypes. */
     private String type;
     private Boolean read;
+    /** Tin đã ghim — lên đầu danh sách, không bị xoá hàng loạt. */
+    private Boolean pinned;
     /** JSON thô, thường chứa id của đối tượng liên quan để giao diện dựng link. */
     private String metadata;
     private Instant createdAt;

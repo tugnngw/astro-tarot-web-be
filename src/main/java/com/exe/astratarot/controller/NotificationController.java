@@ -1,18 +1,22 @@
 package com.exe.astratarot.controller;
 
 import com.exe.astratarot.domain.dto.common.ApiResponse;
+import com.exe.astratarot.domain.dto.notification.DeleteNotificationsRequest;
 import com.exe.astratarot.domain.dto.notification.NotificationResponse;
+import com.exe.astratarot.domain.dto.notification.PinNotificationRequest;
 import com.exe.astratarot.security.CustomUserDetails;
 import com.exe.astratarot.service.NotificationService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -59,6 +63,17 @@ public class NotificationController {
         return ResponseEntity.ok(ApiResponse.success("Đã đánh dấu đã đọc", null));
     }
 
+    @PatchMapping("/{id}/pin")
+    public ResponseEntity<ApiResponse<Void>> setPinned(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @PathVariable UUID id,
+            @Valid @RequestBody PinNotificationRequest request) {
+        notificationService.setPinned(me.getUser().getId(), id, request.pinned());
+        return ResponseEntity.ok(ApiResponse.success(
+                Boolean.TRUE.equals(request.pinned()) ? "Đã ghim thông báo" : "Đã bỏ ghim",
+                null));
+    }
+
     @PatchMapping("/read-all")
     public ResponseEntity<ApiResponse<Map<String, Integer>>> markAllRead(
             @AuthenticationPrincipal CustomUserDetails me) {
@@ -68,16 +83,26 @@ public class NotificationController {
     }
 
     /**
-     * Xoá hẳn mọi thông báo ĐÃ ĐỌC của chính mình.
-     *
-     * <p>Đánh dấu đã đọc chỉ làm tắt chấm tròn, danh sách vẫn dài ra mãi. Đây
-     * là đường dọn dẹp thật.
+     * Xoá hẳn mọi thông báo ĐÃ ĐỌC của chính mình (trừ tin đã ghim).
      */
     @DeleteMapping("/read")
     public ResponseEntity<ApiResponse<Map<String, Integer>>> deleteRead(
             @AuthenticationPrincipal CustomUserDetails me) {
         int soDong = notificationService.deleteAllRead(me.getUser().getId());
         return ResponseEntity.ok(ApiResponse.success("Đã xoá thông báo đã đọc",
+                Map.of("deleted", soDong)));
+    }
+
+    /**
+     * Xoá các thông báo đã chọn. Tin ghim bị bỏ qua — không cần (và không nên)
+     * chỉ xoá được tin đã đọc.
+     */
+    @DeleteMapping
+    public ResponseEntity<ApiResponse<Map<String, Integer>>> deleteSelected(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @Valid @RequestBody DeleteNotificationsRequest request) {
+        int soDong = notificationService.deleteByIds(me.getUser().getId(), request.ids());
+        return ResponseEntity.ok(ApiResponse.success("Đã xoá thông báo đã chọn",
                 Map.of("deleted", soDong)));
     }
 }

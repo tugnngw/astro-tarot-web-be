@@ -17,6 +17,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
 
@@ -52,9 +53,6 @@ public class NotificationServiceImpl implements NotificationService {
                     unread,
                     toResponse(saved)));
         } catch (Exception e) {
-            // Gửi thông báo hỏng KHÔNG được làm hỏng việc chính. Đặt lịch xong
-            // rồi rollback chỉ vì không ghi được thông báo là làm mất đúng thứ
-            // người dùng vừa yêu cầu.
             log.error("Không tạo được thông báo [{}] cho {}", type, recipient.getId(), e);
         }
     }
@@ -62,7 +60,8 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     @Transactional(readOnly = true)
     public Page<NotificationResponse> list(UUID userId, Pageable pageable) {
-        return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable)
+        return notificationRepository
+                .findByUserIdOrderByPinnedDescCreatedAtDesc(userId, pageable)
                 .map(this::toResponse);
     }
 
@@ -75,13 +74,7 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     @Transactional
     public void markRead(UUID userId, UUID notificationId) {
-        Notification n = notificationRepository.findById(notificationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thông báo"));
-        // Thông báo của người khác thì ngay cả việc biết nó tồn tại cũng là rò
-        // rỉ, nên chặn ở đây chứ không trông vào việc đoán id là khó.
-        if (!n.getUser().getId().equals(userId)) {
-            throw new AccessDeniedException("Thông báo này không thuộc về bạn");
-        }
+        Notification n = loadOwned(userId, notificationId);
         n.setRead(true);
     }
 
@@ -93,10 +86,37 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     @Transactional
+    public void setPinned(UUID userId, UUID notificationId, boolean pinned) {
+        Notification n = loadOwned(userId, notificationId);
+        n.setPinned(pinned);
+    }
+
+    @Override
+    @Transactional
     public int deleteAllRead(UUID userId) {
         int soDong = notificationRepository.deleteAllRead(userId);
         log.info("Đã xoá {} thông báo đã đọc của {}", soDong, userId);
         return soDong;
+    }
+
+    @Override
+    @Transactional
+    public int deleteByIds(UUID userId, Collection<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
+        int soDong = notificationRepository.deleteByIds(userId, ids);
+        log.info("Đã xoá {} thông báo đã chọn của {}", soDong, userId);
+        return soDong;
+    }
+
+    private Notification loadOwned(UUID userId, UUID notificationId) {
+        Notification n = notificationRepository.findById(notificationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thông báo"));
+        if (!n.getUser().getId().equals(userId)) {
+            throw new AccessDeniedException("Thông báo này không thuộc về bạn");
+        }
+        return n;
     }
 
     private NotificationResponse toResponse(Notification n) {
@@ -106,6 +126,7 @@ public class NotificationServiceImpl implements NotificationService {
                 .message(n.getMessage())
                 .type(n.getType())
                 .read(n.getRead())
+                .pinned(Boolean.TRUE.equals(n.getPinned()))
                 .metadata(n.getMetadata())
                 .createdAt(n.getCreatedAt())
                 .build();
