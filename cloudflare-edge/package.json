@@ -1,0 +1,16 @@
+{
+  "name": "astrotarot-edge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250917.0",
+    "typescript": "^5.9.2",
+    "wrangler": "^4.36.0"
+  }
+}

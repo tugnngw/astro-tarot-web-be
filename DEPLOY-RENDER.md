@@ -19,9 +19,12 @@ dựng nginx — ba thứ khó nhất của đường VPS biến mất.
 | | |
 |---|---|
 | Frontend | https://astro-tarot-web-fe.vercel.app |
-| Backend | https://astra-tarot-api.onrender.com |
+| Backend (origin) | https://astra-tarot-api.onrender.com |
+| Edge gateway (CF Worker) | https://astrotarot-edge.megalit2578.workers.dev |
 | Postgres | Neon, project `astrotarot`, Singapore |
 | Redis | Upstash, `astra-tarot-redis`, Singapore |
+
+Edge (rate limit / chống scanner / DDoS qua Cloudflare): xem [`docs/CLOUDFLARE.md`](docs/CLOUDFLARE.md). Muốn FE đi qua Edge thì đặt `VITE_API_BASE_URL` trên Vercel = URL Worker rồi Redeploy.
 
 Dựng ngày 2026-09-09. Đã kiểm chứng trên bản chạy thật: 13 migration áp sạch
 lên Neon (PostgreSQL 18.6), 12 sản phẩm hiện đúng ở `/shop` với giá và nhãn
