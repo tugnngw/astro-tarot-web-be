@@ -36,6 +36,12 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
+        <!-- STOMP over WebSocket — đẩy thông báo realtime tới từng user -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+
         <!--
             Health check cho Docker và nginx. Dockerfile đã gọi /actuator/health
             từ trước nhưng dependency này chưa có, nên endpoint đó luôn trả 404

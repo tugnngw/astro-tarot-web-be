@@ -5,11 +5,13 @@ import com.exe.astratarot.domain.entity.SupportTicket;
 import com.exe.astratarot.domain.entity.SupportTicketMessage;
 import com.exe.astratarot.domain.entity.User;
 import com.exe.astratarot.domain.enums.TicketStatus;
+import com.exe.astratarot.domain.enums.UserRole;
 import com.exe.astratarot.exception.ResourceNotFoundException;
 import com.exe.astratarot.repository.SupportTicketMessageRepository;
 import com.exe.astratarot.repository.SupportTicketRepository;
 import com.exe.astratarot.repository.UserRepository;
 import com.exe.astratarot.service.NotificationService;
+import com.exe.astratarot.service.NotificationTypes;
 import com.exe.astratarot.service.SupportService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -108,7 +110,7 @@ public class SupportServiceImpl implements SupportService {
             ticket.setStatus(TicketStatus.PENDING);
             notificationService.push(
                     ticket.getUser(),
-                    "SUPPORT_REPLY",
+                    NotificationTypes.SUPPORT_REPLY,
                     "Hỗ trợ đã phản hồi",
                     "Yêu cầu \"" + ticket.getSubject() + "\" vừa có phản hồi mới.",
                     Map.of("ticketId", ticket.getId().toString()));
@@ -117,10 +119,34 @@ public class SupportServiceImpl implements SupportService {
             if (ticket.getStatus() != TicketStatus.RESOLVED) {
                 ticket.setStatus(TicketStatus.OPEN);
             }
+            notifyStaffOfCustomerReply(ticket);
         }
 
         ticketRepository.save(ticket);
         return toDetail(ticket);
+    }
+
+    /** Báo người đang nhận ticket; chưa ai nhận thì báo toàn STAFF/MANAGER/ADMIN. */
+    private void notifyStaffOfCustomerReply(SupportTicket ticket) {
+        Map<String, String> meta = Map.of("ticketId", ticket.getId().toString());
+        String title = "Khách vừa trả lời hỗ trợ";
+        String body = "Yêu cầu \"" + ticket.getSubject() + "\" có tin nhắn mới từ khách.";
+
+        if (ticket.getAssignedTo() != null) {
+            notificationService.push(
+                    ticket.getAssignedTo(),
+                    NotificationTypes.SUPPORT_MESSAGE,
+                    title,
+                    body,
+                    meta);
+            return;
+        }
+
+        List<User> staff = userRepository.findByRoleInAndDeletedAtIsNull(
+                List.of(UserRole.STAFF, UserRole.MANAGER, UserRole.ADMIN));
+        for (User u : staff) {
+            notificationService.push(u, NotificationTypes.SUPPORT_MESSAGE, title, body, meta);
+        }
     }
 
     @Override

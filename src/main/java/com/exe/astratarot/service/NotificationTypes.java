@@ -23,6 +23,10 @@ public final class NotificationTypes {
     public static final String PAYOUT_REJECTED = "PAYOUT_REJECTED";
     public static final String PAYOUT_PAID = "PAYOUT_PAID";
     public static final String REPORT_RESOLVED = "REPORT_RESOLVED";
+    /** Nhân viên trả lời ticket → báo khách. */
+    public static final String SUPPORT_REPLY = "SUPPORT_REPLY";
+    /** Khách bổ sung tin → báo nhân viên phụ trách (hoặc hàng chờ). */
+    public static final String SUPPORT_MESSAGE = "SUPPORT_MESSAGE";
 
     private NotificationTypes() {}
 }

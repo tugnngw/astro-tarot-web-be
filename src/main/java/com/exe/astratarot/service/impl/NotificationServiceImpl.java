@@ -3,12 +3,14 @@ package com.exe.astratarot.service.impl;
 import com.exe.astratarot.domain.dto.notification.NotificationResponse;
 import com.exe.astratarot.domain.entity.Notification;
 import com.exe.astratarot.domain.entity.User;
+import com.exe.astratarot.domain.event.NotificationPushedEvent;
 import com.exe.astratarot.exception.ResourceNotFoundException;
 import com.exe.astratarot.repository.NotificationRepository;
 import com.exe.astratarot.service.NotificationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
@@ -25,6 +27,7 @@ public class NotificationServiceImpl implements NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final ObjectMapper objectMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -33,7 +36,7 @@ public class NotificationServiceImpl implements NotificationService {
             return;
         }
         try {
-            notificationRepository.save(Notification.builder()
+            Notification saved = notificationRepository.save(Notification.builder()
                     .user(recipient)
                     .type(type)
                     .title(title)
@@ -42,6 +45,12 @@ public class NotificationServiceImpl implements NotificationService {
                             ? null
                             : objectMapper.writeValueAsString(metadata))
                     .build());
+            long unread = notificationRepository.countByUserIdAndReadFalse(recipient.getId());
+            eventPublisher.publishEvent(new NotificationPushedEvent(
+                    recipient.getId(),
+                    type,
+                    unread,
+                    toResponse(saved)));
         } catch (Exception e) {
             // Gửi thông báo hỏng KHÔNG được làm hỏng việc chính. Đặt lịch xong
             // rồi rollback chỉ vì không ghi được thông báo là làm mất đúng thứ
