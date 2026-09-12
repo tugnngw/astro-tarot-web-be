@@ -16,8 +16,11 @@ import com.exe.astratarot.repository.ProductRepository;
 import com.exe.astratarot.repository.ReaderApplicationRepository;
 import com.exe.astratarot.repository.ReaderProfileRepository;
 import com.exe.astratarot.repository.ReportRepository;
+import com.exe.astratarot.repository.ReviewRepository;
 import com.exe.astratarot.repository.UserRepository;
 import com.exe.astratarot.service.AdminStatsService;
+import com.exe.astratarot.service.FeedbackService;
+import com.exe.astratarot.service.MarketingEventService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,12 +52,10 @@ public class AdminStatsServiceImpl implements AdminStatsService {
     private final AIUsageLogRepository aiUsageLogRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final PayoutRequestRepository payoutRequestRepository;
+    private final ReviewRepository reviewRepository;
+    private final FeedbackService feedbackService;
+    private final MarketingEventService marketingEventService;
 
-    /**
-     * Tỷ giá quy đổi chi phí AI (tính bằng USD) sang VND để so được với doanh
-     * thu. Cố định ở đây vì đây là con số ước lượng cho trang thống kê, không
-     * phải tỷ giá dùng để thu tiền của ai. Cần chính xác thì đưa ra cấu hình.
-     */
     private static final long USD_TO_VND = 25_000L;
 
     @Override
@@ -63,8 +64,6 @@ public class AdminStatsServiceImpl implements AdminStatsService {
         Instant now = Instant.now();
         Instant since30d = now.minus(30, ChronoUnit.DAYS);
 
-        // --- Tài khoản ---
-        // Giữ thứ tự vai trò cố định để giao diện luôn vẽ cùng một hàng.
         Map<String, Long> byRole = new LinkedHashMap<>();
         long totalUsers = 0;
         for (UserRole role : UserRole.values()) {
@@ -75,12 +74,10 @@ public class AdminStatsServiceImpl implements AdminStatsService {
         long newUsers = userRepository.countByCreatedAtAfterAndDeletedAtIsNull(
                 now.minus(7, ChronoUnit.DAYS));
 
-        // --- Reader ---
         long pendingApplications =
                 readerApplicationRepository.countByStatus(ReaderApplication.ApplicationStatus.PENDING);
         long activeProfiles = readerProfileRepository.count();
 
-        // --- Đặt lịch ---
         Map<String, Long> bookingByStatus = new LinkedHashMap<>();
         long totalBookings = 0;
         for (BookingStatus status : BookingStatus.values()) {
@@ -89,15 +86,12 @@ public class AdminStatsServiceImpl implements AdminStatsService {
             totalBookings += c;
         }
 
-        // --- Kiểm duyệt ---
         long pendingReports = reportRepository.countByStatus(ReportStatus.PENDING);
 
-        // --- Cửa hàng liên kết ---
         long activeProducts = productRepository.countByActiveTrueAndAffiliateUrlIsNotNull();
         long clicks30d = productClickRepository.countByCreatedAtAfter(since30d);
         long clicksTotal = productClickRepository.count();
 
-        // --- Tarot AI (token) ---
         long aiCalls = aiUsageLogRepository.count();
         long aiCalls30d = aiUsageLogRepository.countByCreatedAtGreaterThanEqual(since30d);
         long promptTokens = aiUsageLogRepository.sumPromptTokens();
@@ -107,7 +101,7 @@ public class AdminStatsServiceImpl implements AdminStatsService {
         BigDecimal cost = aiUsageLogRepository.sumEstimatedCostUsd();
         double estimatedCostUsd = cost != null ? cost.doubleValue() : 0d;
 
-        // --- Tiền ---
+        // Giữ seed trong doanh thu để môi trường demo/test có biểu đồ đầy đủ.
         long grossRevenue = paymentTransactionRepository.sumAmountByStatus(TransactionStatus.SUCCESS);
         long grossRevenue30d = paymentTransactionRepository.sumAmountByStatusSince(TransactionStatus.SUCCESS, since30d);
         int feePercent = com.exe.astratarot.service.impl.EscrowServiceImpl.PLATFORM_FEE_PERCENT;
@@ -132,6 +126,10 @@ public class AdminStatsServiceImpl implements AdminStatsService {
             tokensByModel.put(model, tokens);
         }
 
+        long feedbackCount = feedbackService.countAll();
+        long completedBookings = bookingByStatus.getOrDefault(BookingStatus.COMPLETED.name(), 0L);
+        long reviewsCount = reviewRepository.count();
+
         return new AdminStatsResponse(
                 new AdminStatsResponse.UserStats(totalUsers, byRole, newUsers),
                 new AdminStatsResponse.ReaderStats(pendingApplications, activeProfiles),
@@ -152,15 +150,20 @@ public class AdminStatsServiceImpl implements AdminStatsService {
                         grossRevenue, grossRevenue30d, feePercent, platformFee, readerShare,
                         paidOut, pendingPayout, estimatedCostUsd,
                         successfulPayments, pendingPayments, revenueByMonth
+                ),
+                new AdminStatsResponse.TractionStats(
+                        totalUsers,
+                        successfulPayments,
+                        completedBookings,
+                        reviewsCount,
+                        feedbackCount,
+                        feedbackCount >= 20,
+                        clicks30d,
+                        marketingEventService.countsLast30Days()
                 )
         );
     }
 
-    /**
-     * Lợi nhuận ở đây là phần phí nền tảng giữ lại TRỪ chi phí AI — không phải
-     * doanh thu gộp. Phần lớn tiền khách trả là của Reader, gọi đó là lợi nhuận
-     * thì trang thống kê sẽ nói dối một con số lớn gấp mấy lần sự thật.
-     */
     private AdminStatsResponse.RevenueStats buildRevenueStats(
             long grossRevenue, long grossRevenue30d, int feePercent, long platformFee, long readerShare,
             long paidOut, long pendingPayout, double estimatedCostUsd,

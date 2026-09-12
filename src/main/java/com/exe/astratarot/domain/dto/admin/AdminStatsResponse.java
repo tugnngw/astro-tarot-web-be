@@ -16,7 +16,8 @@ public record AdminStatsResponse(
         ModerationStats moderation,
         ShopStats shop,
         AiStats ai,
-        RevenueStats revenue
+        RevenueStats revenue,
+        TractionStats traction
 ) {
     /**
      * @param total    tổng tài khoản còn hiệu lực (chưa xoá mềm)
@@ -105,5 +106,21 @@ public record AdminStatsResponse(
             long tokensLast30Days,
             double estimatedCostUsd,
             Map<String, Long> tokensByModel
+    ) {}
+
+    /**
+     * Một hàng số liệu Pitch/EXE201 — chụp một lần là đủ slide Traction.
+     * Doanh thu seed vẫn nằm trong revenue (giữ để test); traction đếm
+     * reviews + feedback khảo sát + clicks affiliate.
+     */
+    public record TractionStats(
+            long registeredUsers,
+            long successfulPayments,
+            long completedBookings,
+            long reviewsCount,
+            long feedbackCount,
+            boolean feedbackGoalMet,
+            long affiliateClicks30d,
+            Map<String, Long> marketingEventsLast30Days
     ) {}
 }
