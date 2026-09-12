@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "astrotarot-edge",
+  "main": "src/index.js",
+  "compatibility_date": "2025-09-19",
+  "workers_dev": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "ORIGIN_API": "https://astra-tarot-api.onrender.com"
+  },
+  "ratelimits": [
+    {
+      "name": "API_RATE_LIMITER",
+      "namespace_id": "20101",
+      "simple": {
+        "limit": 120,
+        "period": 60
+      }
+    },
+    {
+      "name": "AUTH_RATE_LIMITER",
+      "namespace_id": "20102",
+      "simple": {
+        "limit": 30,
+        "period": 60
+      }
+    }
+  ]
+}
