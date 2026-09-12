@@ -23,4 +23,7 @@ public interface NotificationService {
     void markRead(UUID userId, UUID notificationId);
 
     int markAllRead(UUID userId);
+
+    /** Xoá hẳn các thông báo đã đọc. Trả về số dòng đã xoá. */
+    int deleteAllRead(UUID userId);
 }

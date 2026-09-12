@@ -82,6 +82,14 @@ public class NotificationServiceImpl implements NotificationService {
         return notificationRepository.markAllRead(userId);
     }
 
+    @Override
+    @Transactional
+    public int deleteAllRead(UUID userId) {
+        int soDong = notificationRepository.deleteAllRead(userId);
+        log.info("Đã xoá {} thông báo đã đọc của {}", soDong, userId);
+        return soDong;
+    }
+
     private NotificationResponse toResponse(Notification n) {
         return NotificationResponse.builder()
                 .id(n.getId())
