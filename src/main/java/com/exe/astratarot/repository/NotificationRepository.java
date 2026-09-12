@@ -23,4 +23,17 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE Notification n SET n.read = true WHERE n.user.id = :userId AND n.read = false")
     int markAllRead(@Param("userId") UUID userId);
+
+    /**
+     * Xoá hẳn những thông báo ĐÃ ĐỌC của một người.
+     *
+     * <p>Chỉ xoá tin đã đọc. Xoá cả tin chưa đọc là làm mất thứ người ta chưa
+     * kịp xem, và không có đường lấy lại.
+     *
+     * <p>Ràng buộc theo user.id ngay trong câu lệnh chứ không lọc ở tầng
+     * service: đây là lệnh xoá, nên phạm vi phải nằm trong chính câu truy vấn.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM Notification n WHERE n.user.id = :userId AND n.read = true")
+    int deleteAllRead(@Param("userId") UUID userId);
 }

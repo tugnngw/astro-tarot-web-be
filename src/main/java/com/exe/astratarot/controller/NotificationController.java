@@ -12,6 +12,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -64,5 +65,19 @@ public class NotificationController {
         int updated = notificationService.markAllRead(me.getUser().getId());
         return ResponseEntity.ok(ApiResponse.success("Đã đánh dấu tất cả đã đọc",
                 Map.of("updated", updated)));
+    }
+
+    /**
+     * Xoá hẳn mọi thông báo ĐÃ ĐỌC của chính mình.
+     *
+     * <p>Đánh dấu đã đọc chỉ làm tắt chấm tròn, danh sách vẫn dài ra mãi. Đây
+     * là đường dọn dẹp thật.
+     */
+    @DeleteMapping("/read")
+    public ResponseEntity<ApiResponse<Map<String, Integer>>> deleteRead(
+            @AuthenticationPrincipal CustomUserDetails me) {
+        int soDong = notificationService.deleteAllRead(me.getUser().getId());
+        return ResponseEntity.ok(ApiResponse.success("Đã xoá thông báo đã đọc",
+                Map.of("deleted", soDong)));
     }
 }
