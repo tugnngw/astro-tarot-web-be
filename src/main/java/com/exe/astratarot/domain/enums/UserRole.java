@@ -8,14 +8,19 @@ package com.exe.astratarot.domain.enums;
  * Phía giao diện có khái niệm guest để quyết định hiển thị gì, còn ở đây thêm
  * GUEST vào enum sẽ đẻ ra tài khoản khách đăng nhập được — thứ không tồn tại.
  *
- * <p>READER cũ đã gộp vào {@link #STAFF}: nhân viên hỗ trợ khách và Reader
- * nhận booking dùng chung một vai trò. Xem V2_0__roles_staff_manager.sql.
+ * <p>READER: chuyên gia Tarot nhận booking từ khách.
+ * STAFF: nhân viên hỗ trợ khách (không phải Reader).
+ * MANAGER: quản lý nhân sự.
+ * ADMIN: toàn quyền.
  */
 public enum UserRole {
     /** Khách đã đăng ký: mua hàng, đặt lịch, xem bài, nộp hồ sơ làm Reader. */
     USER,
 
-    /** Nhân viên hỗ trợ khách; đồng thời là Reader nhận booking (READER cũ). */
+    /** Chuyên gia Tarot nhận booking từ khách. */
+    READER,
+
+    /** Nhân viên hỗ trợ khách (không phải Reader). */
     STAFF,
 
     /** Quản lý nhân sự: xem và điều chỉnh đội ngũ, duyệt hồ sơ Reader. */

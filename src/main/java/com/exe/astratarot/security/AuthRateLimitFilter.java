@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
@@ -16,6 +17,7 @@ import java.time.Duration;
 import java.util.Map;
 
 @Component
+@Slf4j
 @RequiredArgsConstructor
 public class AuthRateLimitFilter extends OncePerRequestFilter {
     private static final Duration WINDOW = Duration.ofMinutes(1);
@@ -40,16 +42,21 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
         }
 
         String key = "rate:auth:" + DigestUtils.sha256Hex(request.getRequestURI() + ":" + clientIp(request));
-        Long count = redisTemplate.opsForValue().increment(key);
-        if (count != null && count == 1L) {
-            redisTemplate.expire(key, WINDOW);
-        }
+        try {
+            Long count = redisTemplate.opsForValue().increment(key);
+            if (count != null && count == 1L) {
+                redisTemplate.expire(key, WINDOW);
+            }
 
-        if (count != null && count > limit) {
-            response.setStatus(429);
-            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-            response.getWriter().write("{\"success\":false,\"message\":\"Too many requests\",\"data\":null}");
-            return;
+            if (count != null && count > limit) {
+                response.setStatus(429);
+                response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                response.getWriter().write("{\"success\":false,\"message\":\"Too many requests\",\"data\":null}");
+                return;
+            }
+        } catch (RuntimeException e) {
+            // Redis unavailable: allow request through (fail open)
+            log.debug("Redis unavailable for rate limiting, allowing request");
         }
 
         filterChain.doFilter(request, response);

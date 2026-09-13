@@ -12,7 +12,7 @@ CREATE TABLE users (
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL DEFAULT 'USER'
-        CHECK (role IN ('USER','READER','ADMIN')),
+        CHECK (role IN ('USER','READER','STAFF','MANAGER','ADMIN')),
     phone VARCHAR(20),
     avatar TEXT,
     status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'

@@ -48,13 +48,7 @@ public class ReaderServiceImpl implements ReaderService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // Hỏi "đã có hồ sơ Reader chưa", KHÔNG hỏi "có phải Nhân viên không".
-        //
-        // Hai câu đó không đồng nghĩa, và khoảng lệch giữa chúng từng tạo ra
-        // một lối cụt: tài khoản Nhân viên chưa có hồ sơ Reader thì không nộp
-        // đơn được (bị chặn ở đây), mà cũng không ai tạo hộ được — mắc kẹt
-        // vĩnh viễn ở màn "Bạn chưa có hồ sơ Reader".
-        if (readerProfileRepository.findByUserId(userId).isPresent()) {
+        if (user.getRole() == UserRole.READER) {
             throw new AlreadyReaderException();
         }
 
@@ -92,7 +86,7 @@ public class ReaderServiceImpl implements ReaderService {
             application.setReviewedAt(java.time.Instant.now());
 
             User user = application.getUser();
-            user.setRole(UserRole.STAFF);
+            user.setRole(UserRole.READER);
 
             ReaderProfile profile = ReaderProfile.builder()
                     .user(user)

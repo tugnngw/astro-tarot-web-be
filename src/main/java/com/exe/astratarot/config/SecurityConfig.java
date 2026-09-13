@@ -109,6 +109,20 @@ public class SecurityConfig {
                                 // mà chú thích bên trên đã cảnh báo.
                                 "/api/v1/readers/*/slots/next-available",
                                 "/api/v1/readers/*/reviews").permitAll()
+                        // Blog công khai: khách chưa đăng nhập phải đọc được danh
+                        // sách và bài viết. Hai endpoint này có @PreAuthorize
+                        // ("permitAll()") nhưng vẫn trả 401 vì .anyRequest()
+                        // .authenticated() chặn từ trước — đúng cái bẫy mà chú
+                        // thích ở phần Reader đã cảnh báo.
+                        //
+                        // /all có ý nghĩa riêng (toàn bộ bài cho Manager/Admin)
+                        // nên phải khóa TRƯỚC pattern một sao; first-match-wins,
+                        // đặt sau thì wildcard nuốt luôn và phơi cả bài nháp ra
+                        // ngoài. Method security vẫn giữ yêu cầu role MANAGER/ADMIN.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/blogs/all").authenticated()
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/blogs",
+                                "/api/v1/blogs/*").permitAll()
                         // Ảnh đại diện đã tải lên — hiển thị công khai như mọi
                         // ảnh khác trên trang. Việc tải LÊN vẫn cần đăng nhập
                         // (POST /api/v1/me/avatar).

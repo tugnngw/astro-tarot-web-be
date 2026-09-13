@@ -37,6 +37,13 @@ public class CustomUserDetails implements UserDetails {
                     SecurityPermissions.USER_BASIC,
                     SecurityPermissions.READER_APPLY),
 
+            // READER: chuyên gia Tarot nhận booking
+            UserRole.READER, List.of(
+                    SecurityPermissions.USER_BASIC,
+                    SecurityPermissions.READER_MANAGE_PROFILE,
+                    SecurityPermissions.SUPPORT_VIEW,
+                    SecurityPermissions.PAYOUT_REQUEST),
+
             // STAFF gánh cả hai vai: hỗ trợ khách và Reader nhận booking.
             UserRole.STAFF, List.of(
                     SecurityPermissions.USER_BASIC,
@@ -47,7 +54,9 @@ public class CustomUserDetails implements UserDetails {
                     SecurityPermissions.READER_MANAGE_PROFILE,
                     SecurityPermissions.SUPPORT_VIEW,
                     SecurityPermissions.SUPPORT_RESPOND,
-                    SecurityPermissions.PAYOUT_REQUEST),
+                    SecurityPermissions.PAYOUT_REQUEST,
+                    SecurityPermissions.ADMIN_READERS_VIEW,
+                    SecurityPermissions.ADMIN_READERS_REVIEW),
 
             UserRole.MANAGER, List.of(
                     SecurityPermissions.USER_BASIC,

@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -48,6 +49,7 @@ public class ChatController {
      * @return ChatResponse with the AI reply and token usage
      */
     @PostMapping
+    @PreAuthorize("hasAuthority('USER_BASIC')")
     public ResponseEntity<ApiResponse<ChatResponse>> sendMessage(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @Valid @RequestBody ChatRequest request) {
@@ -75,6 +77,7 @@ public class ChatController {
      * @return SSE emitter
      */
     @PostMapping("/stream")
+    @PreAuthorize("hasAuthority('USER_BASIC')")
     public SseEmitter sendMessageStream(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @Valid @RequestBody ChatRequest request) {
