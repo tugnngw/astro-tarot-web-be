@@ -1,2 +1,2 @@
-/mvnw text eol=lf
-*.cmd text eol=crlf
+# Flyway checksums byte-for-byte — keep SQL as LF everywhere (Windows + Render).
+*.sql text eol=lf
