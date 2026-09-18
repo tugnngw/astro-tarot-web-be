@@ -4,6 +4,13 @@
   "main": "src/index.js",
   "compatibility_date": "2025-09-19",
   "workers_dev": true,
+
+  // Custom Domain da gan tren dashboard. Khai o day de `wrangler deploy`
+  // dung lai dung hostname thay vi chi con workers.dev.
+  // custom_domain: true => Cloudflare tu tao DNS record va cap cert.
+  "routes": [
+    { "pattern": "api.astrotarot.date", "custom_domain": true }
+  ],
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1

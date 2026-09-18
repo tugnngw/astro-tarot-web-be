@@ -11,6 +11,8 @@ import com.exe.astratarot.domain.dto.auth.ResendVerificationRequest;
 import com.exe.astratarot.domain.dto.auth.ResetPasswordRequest;
 import com.exe.astratarot.domain.dto.common.ApiResponse;
 import com.exe.astratarot.service.AuthService;
+import com.exe.astratarot.service.TurnstileService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -27,10 +29,13 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    private final TurnstileService turnstileService;
 
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<RegisterResponse>> register(
-            @Valid @RequestBody RegisterRequest request) {
+            @Valid @RequestBody RegisterRequest request,
+            HttpServletRequest http) {
+        turnstileService.verify(http.getHeader("X-Turnstile-Token"), clientIp(http));
         return ResponseEntity.ok(ApiResponse.success(
                 "Đã gửi email xác minh. Vui lòng kiểm tra hộp thư để kích hoạt tài khoản.",
                 authService.register(request)));
@@ -38,7 +43,9 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(
-            @Valid @RequestBody LoginRequest request) {
+            @Valid @RequestBody LoginRequest request,
+            HttpServletRequest http) {
+        turnstileService.verify(http.getHeader("X-Turnstile-Token"), clientIp(http));
         return ResponseEntity.ok(ApiResponse.success("Đăng nhập thành công",
                 authService.login(request)));
     }
@@ -67,7 +74,9 @@ public class AuthController {
 
     @PostMapping("/forgot-password")
     public ResponseEntity<ApiResponse<Void>> forgotPassword(
-            @Valid @RequestBody ForgotPasswordRequest request) {
+            @Valid @RequestBody ForgotPasswordRequest request,
+            HttpServletRequest http) {
+        turnstileService.verify(http.getHeader("X-Turnstile-Token"), clientIp(http));
         authService.forgotPassword(request);
         // Luôn trả cùng một câu bất kể email có tồn tại hay không — nếu phân
         // biệt, trang này thành công cụ dò xem ai có tài khoản ở đây.
@@ -94,5 +103,25 @@ public class AuthController {
             @Valid @RequestBody LogoutRequest request) {
         authService.logout(request);
         return ResponseEntity.ok(ApiResponse.success("Đã đăng xuất", null));
+    }
+
+    /**
+     * IP thật của người gọi, gửi kèm cho Cloudflare đối chiếu.
+     *
+     * <p>{@code getRemoteAddr()} ở đây luôn là IP của Cloudflare chứ không phải
+     * của người dùng, vì mọi request đều đi qua Worker rồi mới tới Render. Gửi
+     * nhầm IP đó sang siteverify thì Cloudflare thấy IP không khớp với lúc sinh
+     * token và có thể từ chối người thật.
+     */
+    private static String clientIp(HttpServletRequest http) {
+        String cf = http.getHeader("CF-Connecting-IP");
+        if (cf != null && !cf.isBlank()) {
+            return cf;
+        }
+        String fwd = http.getHeader("X-Forwarded-For");
+        if (fwd != null && !fwd.isBlank()) {
+            return fwd.split(",")[0].trim();
+        }
+        return http.getRemoteAddr();
     }
 }

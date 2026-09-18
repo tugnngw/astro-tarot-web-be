@@ -2,15 +2,24 @@
 
 ## Hiện trạng (EXE201 / free tier)
 
+Cập nhật **18/09/2026** — đã có domain riêng, nên phần "khi có domain" ở cuối file này đã làm xong một nửa.
+
 | Thành phần | Trạng thái |
 |---|---|
-| FE | `https://astro-tarot-web-fe.vercel.app` (không gắn CF được — hostname thuộc Vercel) |
-| BE origin | `https://astra-tarot-api.onrender.com` (không gắn CF được — hostname thuộc Render) |
-| Edge gateway | **Live:** `https://astrotarot-edge.megalit2578.workers.dev` (proxy + rate limit + chặn scanner) |
-| Zone / DNS riêng | **Chưa có** — tài khoản CF hiện không có zone nào |
-| Cloudflare Load Balancing | **Paid** — cần ≥2 origin + custom hostname trên CF |
+| Domain | `astrotarot.date` — Cloudflare Registrar, hết hạn 18/09/2027, **auto-renew đã tắt** (chủ ý: chỉ đăng ký 1 năm) |
+| Zone / DNS | **Có** — NS `martin.ns.cloudflare.com` / `tara.ns.cloudflare.com` |
+| FE | `https://astrotarot.date` (Vercel). `www` → 308 về apex. Cả hai record để **DNS only** (grey cloud) vì Vercel tự cấp cert Let's Encrypt |
+| BE origin | `https://astra-tarot-api.onrender.com` (vẫn không orange-cloud được — hostname thuộc Render) |
+| Edge gateway | **Live:** `https://api.astrotarot.date` — Worker Custom Domain, **proxied** qua zone. `astrotarot-edge.megalit2578.workers.dev` vẫn bật, giữ làm đường dự phòng |
+| Cloudflare Load Balancing | **Paid**, chưa mua — và với đúng 1 origin Render thì mua cũng không có failover thật |
 
-Không thể “orange-cloud” `*.vercel.app` hay `*.onrender.com`. Muốn CDN + DDoS unmetered + WAF đầy đủ → **mua domain riêng** rồi trỏ nameserver về Cloudflare.
+Đường đi của một request API hiện tại:
+
+```text
+Browser → api.astrotarot.date (CF zone, proxied) → Worker astrotarot-edge → Render
+```
+
+Vẫn không thể orange-cloud `*.vercel.app` hay `*.onrender.com` — đó là lý do FE để grey cloud còn API thì đi qua Worker.
 
 ---
 
@@ -40,48 +49,60 @@ npm run deploy
 URL production hiện tại:
 
 ```text
-https://astrotarot-edge.megalit2578.workers.dev
+https://api.astrotarot.date                        ← dùng cái này
+https://astrotarot-edge.megalit2578.workers.dev    ← vẫn sống, để dự phòng
 ```
+
+`api.astrotarot.date` được gắn bằng **Workers → astrotarot-edge → Domains → Add Domain**, không phải bằng cách tự tạo DNS record. Cloudflare tự tạo record và tự cấp cert; đừng thêm CNAME `api` bằng tay, sẽ chọi nhau.
 
 ### Trỏ FE sang Edge
 
 Trên Vercel đặt:
 
 ```text
-VITE_API_BASE_URL=https://astrotarot-edge.megalit2578.workers.dev
+VITE_API_BASE_URL=https://api.astrotarot.date
 ```
 
-Rồi **Redeploy** FE (biến này được nhúng lúc build).
+Rồi **Redeploy** FE — biến này được nhúng lúc build, sửa biến mà không build lại thì bundle cũ vẫn gọi URL cũ.
 
-Giữ CORS origin FE trên BE (`CORS_ALLOWED_ORIGINS`) như cũ — Worker forward `Origin` tới Spring.
+`CORS_ALLOWED_ORIGINS` trên BE phải chứa **origin của trình duyệt**, không phải URL của Worker. Worker forward nguyên `Origin` sang Spring, nên giá trị đúng là domain FE:
+
+```text
+CORS_ALLOWED_ORIGINS=https://astrotarot.date,https://www.astrotarot.date,https://astro-tarot-web-fe.vercel.app
+FRONTEND_URL=https://astrotarot.date
+```
+
+Quên bước này thì Spring trả **403 text/plain** cho mọi request từ domain mới, và giao diện trông y như server sập (danh sách rỗng + banner "đang khởi động" chạy mãi) dù `/ping` gọi bằng curl vẫn 200. Triệu chứng đánh lừa, nhớ để khỏi mất thời gian đi tìm nhầm chỗ.
 
 ### Kiểm tra nhanh
 
 ```bash
-curl.exe -s https://astrotarot-edge.megalit2578.workers.dev/__edge/health
-curl.exe -s https://astrotarot-edge.megalit2578.workers.dev/api/v1/readers
+curl.exe -s https://api.astrotarot.date/__edge/health
+curl.exe -s https://api.astrotarot.date/api/v1/readers
+
+# CORS: phải 200, KHÔNG phải 403
+curl.exe -s -o NUL -w "%{http_code}" https://api.astrotarot.date/ping -H "Origin: https://astrotarot.date"
 ```
 
 ---
 
-## Khi có domain riêng (bước tiếp theo)
+## Khi có domain riêng — **đã làm, 18/09/2026**
 
-Giả sử domain `astrotarot.vn`:
+Domain thật: `astrotarot.date`.
 
-### 1. DNS (proxied = orange cloud)
+### 1. DNS
 
-| Type | Name | Target | Proxy |
-|---|---|---|---|
-| CNAME | `api` | `astra-tarot-api.onrender.com` **hoặc** Worker custom domain | ✅ Proxied |
-| CNAME | `@` / `www` | `cname.vercel-dns.com` (Vercel) | ✅ Proxied (hoặc chỉ DNS nếu dùng Vercel SSL riêng) |
+| Type | Name | Target | Proxy | Trạng thái |
+|---|---|---|---|---|
+| CNAME | `@` | `5c87ea28bf49d3b5.vercel-dns-017.com` | ❌ DNS only | ✅ xong |
+| CNAME | `www` | `5c87ea28bf49d3b5.vercel-dns-017.com` | ❌ DNS only | ✅ xong |
+| — | `api` | Worker Custom Domain (CF tự quản) | ✅ Proxied | ✅ xong |
 
-Khuyến nghị EXE201:
+Vì sao FE để **DNS only** chứ không orange-cloud: Vercel tự cấp và tự gia hạn cert cho `astrotarot.date`. Bật proxy vào sẽ thành hai lớp CDN chồng nhau và dễ vòng lặp cert. Muốn WAF/cache của Cloudflare cho FE thì phải chuyển hẳn sang Cloudflare Pages, không phải bật nút.
 
-- `api.astrotarot.vn` → **Worker route** `astrotarot-edge` (giữ rate limit), Worker vẫn proxy Render  
-  **hoặc** CNAME thẳng Render (mất rate-limit Worker trừ khi gắn Worker route)
-- `www` / apex → Vercel theo docs Vercel + Cloudflare
+DDoS + WAF của zone hiện **chỉ áp cho `api.astrotarot.date`**, vì đó là hostname duy nhất đang proxied.
 
-SSL/TLS mode: **Full (strict)** sau khi origin có cert hợp lệ.
+SSL/TLS mode: giữ mặc định. Render đã có cert hợp lệ nên chuyển sang **Full (strict)** được, nhưng vì FE grey-cloud nên setting này chỉ ảnh hưởng nhánh `api`.
 
 ### 2. DDoS (tự động khi Proxied)
 
@@ -109,43 +130,49 @@ Cấu hình khái niệm:
 
 1. Create Pool `astrotarot-api` — origins: primary Render, standby thứ 2  
 2. Health check: `GET /ping` kỳ vọng 200  
-3. LB hostname: `api.astrotarot.vn` → pool  
+3. LB hostname: `api.astrotarot.date` → pool  
 4. Steering: Off (failover) hoặc Dynamic
 
 Với **1 origin Render free**, LB **không mang lại failover thật** — chỉ tốn tiền. Edge Worker + KeepAwake đủ cho demo EXE201.
 
 ---
 
-## Kiến trúc khuyến nghị theo giai đoạn
+## Kiến trúc hiện tại
 
 ```text
-[Browser]
-    │
-    ▼
-[Vercel FE]  ──API──►  [CF Worker Edge]  ──►  [Render Spring Boot]
-                            │
-                     rate limit / block
-                     DDoS (workers.dev /
-                     hoặc zone khi có domain)
+                    astrotarot.date / www          api.astrotarot.date
+[Browser] ──────────────┬──────────────────────────────────┬──────────────
+                        │ DNS only (grey)                  │ Proxied (orange)
+                        ▼                                  ▼
+                   [Vercel FE]                      [CF Zone: DDoS + WAF]
+                                                            │
+                                                            ▼
+                                                 [Worker astrotarot-edge]
+                                                   rate limit / chặn scanner
+                                                            │
+                                                            ▼
+                                                 [Render Spring Boot]
 ```
 
-Sau khi có domain + budget:
+Bước còn thiếu để "đủ bộ" (chỉ làm khi có nhu cầu thật):
 
 ```text
-[Browser] → [CF Zone: WAF + DDoS]
-                ├─ www → Vercel
-                └─ api → (Worker hoặc LB pool) → origin(s)
+[CF Zone] ─ api → [LB pool] ─┬─ Render   (primary)
+                             └─ origin 2 (standby)   ← cần Load Balancing trả phí
 ```
 
 ---
 
 ## Checklist vận hành
 
-- [x] Deploy Worker `astrotarot-edge` → `https://astrotarot-edge.megalit2578.workers.dev`
-- [ ] Đổi `VITE_API_BASE_URL` → URL Worker, redeploy FE
-- [ ] Xác nhận login, PayOS webhook, WebSocket chat qua Edge
-- [ ] (Tuỳ chọn) Mua domain → add zone CF → `api` + `www`
-- [ ] SSL Full (strict) + Bot Fight Mode
+- [x] Deploy Worker `astrotarot-edge`
+- [x] Mua domain → add zone CF → `@`, `www` (Vercel) + `api` (Worker Custom Domain)
+- [x] Tắt auto-renew domain (chủ ý chỉ 1 năm — nhớ set nhắc trước 18/09/2027 nếu muốn giữ)
+- [x] Đổi `VITE_API_BASE_URL` → `https://api.astrotarot.date`, redeploy FE
+- [ ] **Đổi `CORS_ALLOWED_ORIGINS` + `FRONTEND_URL` trên Render** — chưa làm, đang là thứ chặn cuối cùng
+- [ ] Xác nhận login, PayOS webhook, WebSocket chat qua Edge domain mới
+- [ ] Bot Fight Mode (Security → Bots) — chỉ có tác dụng cho `api`, vì FE grey-cloud
+- [ ] Đổi `PAYOS_RETURN_URL` / `PAYOS_CANCEL_URL` nếu chúng đang trỏ `.vercel.app` (để trống thì tự lấy `FRONTEND_URL`, không cần đụng)
 - [ ] Chỉ mua Load Balancing khi có origin thứ 2
 
 ---
@@ -154,4 +181,5 @@ Sau khi có domain + budget:
 
 - Worker vẫn phụ thuộc cold start Render — Edge **không** thay KeepAwake / warm banner.
 - Rate limit Workers là per-colo (mỗi PoP); đủ cho EXE201, không phải quota global cứng.
-- `workers.dev` đã nằm sau mạng CF (có lớp chống abuse), nhưng branding/SEO nên dùng domain riêng.
+- WAF / Bot Fight Mode / Rate Limiting rules của zone **không áp được cho FE**, vì `astrotarot.date` để DNS only. Chỉ nhánh `api` được bảo vệ ở tầng zone.
+- `workers.dev` vẫn bật. Ai biết URL đó vẫn gọi API thẳng được, bỏ qua mọi rule của zone. Muốn đóng thì tắt toggle Production ở **Workers → astrotarot-edge → Domains**, nhưng làm vậy là mất luôn đường dự phòng khi zone có sự cố.
