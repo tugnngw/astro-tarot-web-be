@@ -83,7 +83,8 @@ public class GlobalExceptionHandler {
             AlreadyAppliedException.class,
             InvalidApplicationStatusException.class,
             AvailabilityConflictException.class,
-            InvalidAvailabilityTimeException.class
+            InvalidAvailabilityTimeException.class,
+            TurnstileVerificationException.class
     })
     public ResponseEntity<ApiResponse<Void>> handleConflictAndBadRequests(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)

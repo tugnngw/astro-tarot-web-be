@@ -92,6 +92,13 @@ services:
       - key: CORS_ALLOWED_ORIGINS
         sync: false
 
+      # ---------- Chống bot ở màn đăng nhập / đăng ký ----------
+      # Secret key của widget Turnstile "astrotarot-auth" (Cloudflare →
+      # Turnstile). ĐỂ TRỐNG LÀ TẮT tính năng, không phải là chặn hết — xem
+      # TurnstileService để biết vì sao chọn như vậy.
+      - key: TURNSTILE_SECRET
+        sync: false
+
       # ---------- Khoá bí mật ----------
       # generateValue: Render tự sinh chuỗi ngẫu nhiên ở lần dựng đầu rồi giữ
       # nguyên. Đổi JWT_SECRET là mọi người đang đăng nhập bị đăng xuất.
