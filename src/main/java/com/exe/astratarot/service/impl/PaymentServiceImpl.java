@@ -315,6 +315,12 @@ public class PaymentServiceImpl implements PaymentService {
         booking.setPaymentStatus(PaymentStatus.PAID);
         escrowService.holdForBooking(booking);
 
+        if (booking.getStatus() == BookingStatus.CANCELLED) {
+            refundIfPaid(booking);
+            log.info("Late payment for cancelled booking {} processed and immediately marked for refund", booking.getId());
+            return;
+        }
+
         activityLogService.record(actorId, AdminActions.PAYMENT_CONFIRM, AdminActions.ENTITY_PAYMENT,
                 tx.getId(), Map.of(
                         "amount", tx.getAmount(),

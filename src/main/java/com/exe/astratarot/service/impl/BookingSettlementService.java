@@ -40,7 +40,7 @@ public class BookingSettlementService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean chotMotBuoi(UUID bookingId) {
-        Booking b = bookingRepository.findById(bookingId).orElse(null);
+        Booking b = bookingRepository.findByIdForUpdate(bookingId).orElse(null);
         if (b == null) return false;
 
         // Đọc lại trạng thái trong giao dịch này. Giữa lúc chọn việc và lúc

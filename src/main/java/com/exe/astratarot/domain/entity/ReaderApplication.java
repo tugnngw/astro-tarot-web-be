@@ -36,7 +36,6 @@ public class ReaderApplication {
 
     @Builder.Default
     @JdbcTypeCode(SqlTypes.ARRAY)
-    @Column(columnDefinition = "text[]")
     private String[] specialties = {};
 
     @Builder.Default

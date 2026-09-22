@@ -6,6 +6,7 @@ import com.exe.astratarot.domain.dto.blog.CreateBlogRequest;
 import com.exe.astratarot.domain.dto.blog.UpdateBlogRequest;
 import com.exe.astratarot.domain.dto.common.ApiResponse;
 import com.exe.astratarot.security.CustomUserDetails;
+import com.exe.astratarot.security.SecurityPermissions;
 import com.exe.astratarot.service.BlogService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +29,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/staff/blogs")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('STAFF')")
+@PreAuthorize("hasAuthority('" + SecurityPermissions.BLOG_CREATE + "')")
 public class StaffBlogController {
 
     private final BlogService blogService;

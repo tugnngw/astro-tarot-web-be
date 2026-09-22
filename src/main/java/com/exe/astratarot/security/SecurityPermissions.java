@@ -24,6 +24,12 @@ public final class SecurityPermissions {
     /** Trả lời khách. Quản lý chỉ giám sát nên không có quyền này. */
     public static final String SUPPORT_RESPOND = "SUPPORT_RESPOND";
 
+    // ----- Quản lý bài viết (Blog) -----
+    /** Tạo và chỉnh sửa bài viết nháp. */
+    public static final String BLOG_CREATE = "BLOG_CREATE";
+    /** Duyệt, từ chối, xuất bản và xóa bài viết. */
+    public static final String BLOG_REVIEW = "BLOG_REVIEW";
+
     // ----- Quản lý nhân sự -----
     /** Xem danh sách nhân sự (STAFF, MANAGER) và thông tin liên hệ của họ. */
     public static final String STAFF_VIEW = "STAFF_VIEW";

@@ -114,6 +114,14 @@ public class BlogServiceImpl implements BlogService {
             blog.setThumbnailUrl(request.getThumbnailUrl());
         }
 
+        // PENDING blog updated -> reset to DRAFT and clear rejectionReason if any
+        if (blog.getStatus() == BlogStatus.PENDING) {
+            blog.setStatus(BlogStatus.DRAFT);
+            blog.setRejectionReason(null);
+        } else if (blog.getStatus() == BlogStatus.REJECTED || blog.getStatus() == BlogStatus.DRAFT) {
+            blog.setRejectionReason(null);
+        }
+
         blog = blogRepository.save(blog);
 
         log.info("Blog updated: id={}, actorId={}", blog.getId(), actorId);
@@ -167,8 +175,8 @@ public class BlogServiceImpl implements BlogService {
     public BlogResponse review(UUID actorId, UUID blogId, ReviewBlogRequest request) {
         Blog blog = findBlog(blogId);
 
-        if (!isStaffOrAdmin(actorId)) {
-            throw new AccessDeniedException("Chỉ Staff/Manager/Admin mới duyệt được bài viết");
+        if (!isManagerOrAdmin(actorId)) {
+            throw new AccessDeniedException("Chỉ Manager/Admin mới duyệt được bài viết");
         }
 
         String action = request.getAction().trim().toUpperCase(java.util.Locale.ROOT);
@@ -259,6 +267,11 @@ public class BlogServiceImpl implements BlogService {
     private boolean isStaffOrAdmin(UUID userId) {
         User user = findUser(userId);
         return Set.of("STAFF", "MANAGER", "ADMIN").contains(user.getRole().name());
+    }
+
+    private boolean isManagerOrAdmin(UUID userId) {
+        User user = findUser(userId);
+        return Set.of("MANAGER", "ADMIN").contains(user.getRole().name());
     }
 
     private Blog findBlogBySlug(String slug) {

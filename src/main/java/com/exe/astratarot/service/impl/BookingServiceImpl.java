@@ -247,7 +247,8 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional
     public BookingResponse complete(UUID readerUserId, UUID bookingId) {
-        Booking b = findBooking(bookingId);
+        Booking b = bookingRepository.findByIdForUpdate(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy buổi xem"));
         requireReader(b, readerUserId);
         requireStatus(b, BookingStatus.CONFIRMED, "Chỉ hoàn tất được lịch đã xác nhận");
 
@@ -314,7 +315,8 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional
     public BookingResponse cancel(UUID actorId, UUID bookingId, String reason) {
-        Booking b = findBooking(bookingId);
+        Booking b = bookingRepository.findByIdForUpdate(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy buổi xem"));
         requireParty(b, actorId);
 
         if (b.getStatus() == BookingStatus.COMPLETED) {

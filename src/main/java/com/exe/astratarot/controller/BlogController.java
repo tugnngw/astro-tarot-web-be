@@ -6,6 +6,7 @@ import com.exe.astratarot.domain.dto.blog.ReviewBlogRequest;
 import com.exe.astratarot.domain.dto.common.ApiResponse;
 import com.exe.astratarot.domain.enums.BlogStatus;
 import com.exe.astratarot.security.CustomUserDetails;
+import com.exe.astratarot.security.SecurityPermissions;
 import com.exe.astratarot.service.BlogService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -65,7 +66,7 @@ public class BlogController {
      * - Manager/Admin xem toàn bộ bài viết.
      */
     @GetMapping("/all")
-    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+    @PreAuthorize("hasAuthority('" + SecurityPermissions.BLOG_REVIEW + "')")
     public ResponseEntity<ApiResponse<BlogListResponse>> listAll(
             @RequestParam(required = false) BlogStatus status,
             @RequestParam(defaultValue = "0") int page,
@@ -80,7 +81,7 @@ public class BlogController {
      * - Chỉ Manager/Admin được duyệt.
      */
     @PatchMapping("/{id}/review")
-    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+    @PreAuthorize("hasAuthority('" + SecurityPermissions.BLOG_REVIEW + "')")
     public ResponseEntity<ApiResponse<BlogResponse>> review(
             @AuthenticationPrincipal CustomUserDetails adminDetails,
             @PathVariable UUID id,
@@ -95,7 +96,7 @@ public class BlogController {
      * - Chỉ Manager/Admin được publish.
      */
     @PatchMapping("/{id}/publish")
-    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+    @PreAuthorize("hasAuthority('" + SecurityPermissions.BLOG_REVIEW + "')")
     public ResponseEntity<ApiResponse<BlogResponse>> publish(
             @AuthenticationPrincipal CustomUserDetails adminDetails,
             @PathVariable UUID id) {
@@ -112,7 +113,7 @@ public class BlogController {
      * - Chỉ Manager/Admin được xóa.
      */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+    @PreAuthorize("hasAuthority('" + SecurityPermissions.BLOG_REVIEW + "')")
     public ResponseEntity<ApiResponse<Void>> delete(
             @AuthenticationPrincipal CustomUserDetails adminDetails,
             @PathVariable UUID id) {

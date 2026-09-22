@@ -56,7 +56,8 @@ public class CustomUserDetails implements UserDetails {
                     SecurityPermissions.SUPPORT_RESPOND,
                     SecurityPermissions.PAYOUT_REQUEST,
                     SecurityPermissions.ADMIN_READERS_VIEW,
-                    SecurityPermissions.ADMIN_READERS_REVIEW),
+                    SecurityPermissions.ADMIN_READERS_REVIEW,
+                    SecurityPermissions.BLOG_CREATE),
 
             UserRole.MANAGER, List.of(
                     SecurityPermissions.USER_BASIC,
@@ -66,6 +67,8 @@ public class CustomUserDetails implements UserDetails {
                     SecurityPermissions.ADMIN_READERS_VIEW,
                     SecurityPermissions.ADMIN_READERS_REVIEW,
                     SecurityPermissions.REPORT_REVIEW,
+                    SecurityPermissions.BLOG_CREATE,
+                    SecurityPermissions.BLOG_REVIEW,
                     // Gian hàng là các liên kết tiếp thị: việc ở đây là chọn
                     // bán gì, viết mô tả, xếp danh mục — công việc vận hành,
                     // không phải công việc tài chính. Nên nó thuộc Quản lý.
@@ -88,6 +91,8 @@ public class CustomUserDetails implements UserDetails {
                     SecurityPermissions.STAFF_MANAGE,
                     SecurityPermissions.ADMIN_READERS_VIEW,
                     SecurityPermissions.ADMIN_READERS_REVIEW,
+                    SecurityPermissions.BLOG_CREATE,
+                    SecurityPermissions.BLOG_REVIEW,
                     SecurityPermissions.CATALOG_MANAGE,
                     SecurityPermissions.ORDERS_MANAGE,
                     SecurityPermissions.USERS_MANAGE,

@@ -1,4 +1,4 @@
-package com.exe.astratarot.controller.test;
+package com.exe.astratarot.controller;
 
 import com.exe.astratarot.domain.dto.common.ApiResponse;
 import com.exe.astratarot.domain.dto.llm.LLMResponse;

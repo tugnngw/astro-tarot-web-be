@@ -9,6 +9,9 @@ import java.util.UUID;
 
 public interface EscrowTransactionRepository extends JpaRepository<EscrowTransaction, UUID> {
 
+    /** Kiểm tra xem một booking đã có dòng sổ cái với loại tương ứng hay chưa (dùng cho idempotency). */
+    boolean existsByBookingIdAndKind(UUID bookingId, EscrowTransaction.Kind kind);
+
     /** Sổ của một người, mới nhất trước — đúng thứ tự tab "Thu nhập" cần. */
     Page<EscrowTransaction> findByAccountUserIdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 }

@@ -99,6 +99,11 @@ public class EscrowServiceImpl implements EscrowService {
     @Override
     @Transactional
     public void releaseForBooking(Booking booking) {
+        if (escrowTransactionRepository.existsByBookingIdAndKind(booking.getId(), Kind.RELEASE)) {
+            log.info("Booking {} đã có giao dịch RELEASE, bỏ qua để đảm bảo idempotency.", booking.getId());
+            return;
+        }
+
         EscrowAccount escrow = getOrCreate(booking.getReaderProfile().getUser());
         long gross = booking.getTotalAmount();
 
@@ -149,6 +154,11 @@ public class EscrowServiceImpl implements EscrowService {
     @Override
     @Transactional
     public void refundForBooking(Booking booking) {
+        if (escrowTransactionRepository.existsByBookingIdAndKind(booking.getId(), Kind.REFUND)) {
+            log.info("Booking {} đã có giao dịch REFUND, bỏ qua để đảm bảo idempotency.", booking.getId());
+            return;
+        }
+
         EscrowAccount escrow = getOrCreate(booking.getReaderProfile().getUser());
         long amount = booking.getTotalAmount();
 
