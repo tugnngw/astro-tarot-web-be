@@ -9,7 +9,15 @@ import java.util.UUID;
 
 public interface ReaderService {
 
-    void apply(UUID userId, ApplyReaderRequest request);
+    /** Kết quả của một lần nộp hồ sơ Reader. */
+    enum ApplyOutcome {
+        /** Người ngoài nộp đơn — vào hàng chờ duyệt. */
+        SUBMITTED,
+        /** Nhân viên tạo hồ sơ — có ngay, không qua hàng chờ. */
+        APPROVED_IMMEDIATELY
+    }
+
+    ApplyOutcome apply(UUID userId, ApplyReaderRequest request);
 
     void review(UUID reviewerId, UUID applicationId, ReviewReaderRequest request);
 

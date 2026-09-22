@@ -38,13 +38,6 @@ public class CustomUserDetails implements UserDetails {
                     SecurityPermissions.READER_APPLY),
 
             // READER: chuyên gia Tarot nhận booking
-            UserRole.READER, List.of(
-                    SecurityPermissions.USER_BASIC,
-                    SecurityPermissions.READER_MANAGE_PROFILE,
-                    SecurityPermissions.SUPPORT_VIEW,
-                    SecurityPermissions.PAYOUT_REQUEST),
-
-            // STAFF gánh cả hai vai: hỗ trợ khách và Reader nhận booking.
             UserRole.STAFF, List.of(
                     SecurityPermissions.USER_BASIC,
                     // Nhân viên cũng nộp đơn được: người được cất lên Nhân viên
