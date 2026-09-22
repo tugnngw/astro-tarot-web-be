@@ -43,12 +43,30 @@ public class ReaderServiceImpl implements ReaderService {
                 .map(readerApplicationMapper::toResponse);
     }
 
+    /**
+     * Nộp hồ sơ Reader.
+     *
+     * <h3>Nhân viên không phải xếp hàng</h3>
+     *
+     * <p>Người đã là STAFF thì chính bạn đã cất họ lên làm nhân viên — bắt họ
+     * nộp đơn để lại chính bạn duyệt là thủ tục rỗng. Họ điền form và có hồ sơ
+     * ngay. Người ngoài (USER) vẫn phải qua duyệt: đây là sàn có ký quỹ và
+     * tiền thật, ai cũng tự xưng Reader rồi nhận tiền khách là rủi ro.
+     *
+     * <p>Vẫn LƯU một bản ghi đơn ở trạng thái APPROVED cho trường hợp nhân
+     * viên, chứ không bỏ qua bảng đơn: nó là dấu vết kiểm toán trả lời "hồ sơ
+     * này có từ đâu, ai duyệt, lúc nào" — câu hỏi sẽ được hỏi khi có tranh
+     * chấp tiền, và lúc đó không có gì để tra là tệ.
+     */
     @Transactional
-    public void apply(UUID userId, ApplyReaderRequest request) {
+    public ApplyOutcome apply(UUID userId, ApplyReaderRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        if (user.getRole() == UserRole.READER) {
+        // Hỏi đúng câu: "đã có hồ sơ Reader chưa?", không phải "vai trò có
+        // phải READER không". Hai câu đó từng bị coi là một, và khoảng lệch
+        // giữa chúng chính là chỗ nhân viên bị kẹt không nộp đơn được.
+        if (readerProfileRepository.existsByUserId(userId)) {
             throw new AlreadyReaderException();
         }
 
@@ -57,15 +75,58 @@ public class ReaderServiceImpl implements ReaderService {
             throw new AlreadyAppliedException();
         }
 
+        boolean laNhanVien = user.getRole() == UserRole.STAFF;
+
         ReaderApplication application = ReaderApplication.builder()
                 .user(user)
                 .bio(request.getBio())
                 .experience(request.getExperience() != null ? request.getExperience() : 0)
                 .specialties(request.getSpecialties() != null ? request.getSpecialties() : new String[]{})
-                .status(ReaderApplication.ApplicationStatus.PENDING)
+                .status(laNhanVien
+                        ? ReaderApplication.ApplicationStatus.APPROVED
+                        : ReaderApplication.ApplicationStatus.PENDING)
                 .build();
 
+        if (laNhanVien) {
+            application.setReviewedBy(user);
+            application.setReviewedAt(java.time.Instant.now());
+        }
         readerApplicationRepository.save(application);
+
+        if (!laNhanVien) {
+            return ApplyOutcome.SUBMITTED;
+        }
+
+        taoHoSoReader(user, application);
+        return ApplyOutcome.APPROVED_IMMEDIATELY;
+    }
+
+    /**
+     * Dựng ReaderProfile từ nội dung đơn.
+     *
+     * <p>Tách ra vì có HAI lối vào (nhân viên tự tạo, và quản trị duyệt đơn
+     * người ngoài). Để hai lối tự dựng lấy thì sớm muộn một lối quên gán
+     * verifiedAt hoặc quên nâng vai trò, và người dùng rơi vào trạng thái nửa
+     * vời không ai gỡ được.
+     */
+    private void taoHoSoReader(User user, ReaderApplication application) {
+        // Nâng lên STAFF — KHÔNG phải READER. Vai trò READER là tập con thật
+        // sự của STAFF: nó không thêm quyền nào, chỉ bớt SUPPORT_RESPOND. Gán
+        // READER cho một nhân viên vừa được duyệt là giáng quyền họ, khiến họ
+        // vẫn nhìn thấy hàng chờ hỗ trợ mà không trả lời khách được nữa.
+        // "Là Reader" được thể hiện bằng SỰ TỒN TẠI của ReaderProfile, không
+        // phải bằng vai trò — xem migration V2_15.
+        user.setRole(UserRole.STAFF);
+
+        readerProfileRepository.save(ReaderProfile.builder()
+                .user(user)
+                .bio(application.getBio())
+                .yearsExperience(application.getExperience())
+                .specialties(application.getSpecialties())
+                .verifiedAt(java.time.Instant.now())
+                .build());
+
+        userRepository.save(user);
     }
 
     @Transactional
@@ -86,18 +147,7 @@ public class ReaderServiceImpl implements ReaderService {
             application.setReviewedAt(java.time.Instant.now());
 
             User user = application.getUser();
-            user.setRole(UserRole.READER);
-
-            ReaderProfile profile = ReaderProfile.builder()
-                    .user(user)
-                    .bio(application.getBio())
-                    .yearsExperience(application.getExperience())
-                    .specialties(application.getSpecialties())
-                    .verifiedAt(java.time.Instant.now())
-                    .build();
-
-            readerProfileRepository.save(profile);
-            userRepository.save(user);
+            taoHoSoReader(user, application);
 
             notificationService.push(user,
                     com.exe.astratarot.service.NotificationTypes.READER_APPLICATION_APPROVED,

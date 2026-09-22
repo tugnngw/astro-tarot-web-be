@@ -37,8 +37,15 @@ public class ReaderController {
     public ResponseEntity<ApiResponse<String>> apply(@AuthenticationPrincipal CustomUserDetails userDetails,
                                                    @Valid @RequestBody ApplyReaderRequest request) {
         User user = userDetails.getUser();
-        readerService.apply(user.getId(), request);
-        return ResponseEntity.ok(ApiResponse.success("Application submitted"));
+        // Nhân viên có hồ sơ ngay, người ngoài vào hàng chờ. Câu trả về phải
+        // nói đúng chuyện vừa xảy ra, nếu không nhân viên sẽ ngồi đợi một lần
+        // duyệt không bao giờ tới.
+        ReaderService.ApplyOutcome ketQua = readerService.apply(user.getId(), request);
+        return ResponseEntity.ok(ketQua == ReaderService.ApplyOutcome.APPROVED_IMMEDIATELY
+                ? ApiResponse.success("Đã tạo hồ sơ Reader. Khai báo khung giờ rảnh để khách đặt được.",
+                        ketQua.name())
+                : ApiResponse.success("Đã gửi hồ sơ. Quản trị viên sẽ duyệt và báo lại qua thông báo.",
+                        ketQua.name()));
     }
 
     /**
