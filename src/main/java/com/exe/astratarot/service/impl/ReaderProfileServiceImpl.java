@@ -64,7 +64,7 @@ public class ReaderProfileServiceImpl implements ReaderProfileService {
     @Override
     @Transactional(readOnly = true)
     public ApiResponse<List<ReaderProfileResponse>> getAllVerifiedReaders() {
-        List<ReaderProfile> profiles = readerProfileRepository.findAllByVerifiedAtIsNotNull();
+        List<ReaderProfile> profiles = readerProfileRepository.findBookable();
         List<ReaderProfileResponse> responses = profiles.stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
