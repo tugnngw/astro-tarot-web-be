@@ -165,7 +165,21 @@ public class BookingChatService {
         User sender = userRepository.findById(senderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng"));
 
-        BookingMessage saved = messageRepository.save(BookingMessage.builder()
+        // saveAndFlush chứ không phải save, và đây không phải thói quen thừa.
+        //
+        // Id là @GeneratedValue(UUID) nên Hibernate sinh được ngay trong bộ nhớ,
+        // không cần hỏi cơ sở dữ liệu — và vì thế nó HOÃN câu INSERT tới lúc
+        // flush cuối giao dịch. Mà @CreationTimestamp chỉ được gán đúng lúc
+        // INSERT chạy. Không flush thì createdAt của thực thể vừa save vẫn là
+        // null, DTO dựng từ nó mang null đi, và gói đẩy realtime tới hai trình
+        // duyệt không có thời gian.
+        //
+        // Đọc lại bằng REST thì lại đúng, vì lúc đó dữ liệu đã nằm trong bảng.
+        // Nên lỗi chỉ hiện ở tin nhắn VỪA gửi và tự lành khi tải lại trang —
+        // đúng kiểu dễ bị bỏ qua nhất. Bắt được trên production: tin mới hiện
+        // "08:00 01-01" (new Date(null) ở múi giờ Asia/Saigon), F5 phát thì
+        // thành "13:40 22-09".
+        BookingMessage saved = messageRepository.saveAndFlush(BookingMessage.builder()
                 .booking(p.booking())
                 .sender(sender)
                 .body(body.trim())

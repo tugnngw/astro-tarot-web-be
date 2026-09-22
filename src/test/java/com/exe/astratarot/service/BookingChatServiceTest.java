@@ -1,6 +1,7 @@
 package com.exe.astratarot.service;
 
 import com.exe.astratarot.domain.entity.Booking;
+import com.exe.astratarot.domain.entity.BookingMessage;
 import com.exe.astratarot.domain.entity.ReaderProfile;
 import com.exe.astratarot.domain.entity.User;
 import com.exe.astratarot.domain.enums.BookingStatus;
@@ -26,8 +27,10 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 
 /**
@@ -84,6 +87,24 @@ class BookingChatServiceTest {
         booking.setEndTime(Instant.now().minus(Duration.ofHours(1)));
 
         lenient().when(bookingRepository.findById(bookingId)).thenReturn(Optional.of(booking));
+        lenient().when(userRepository.findById(customerId)).thenReturn(Optional.of(customer));
+        lenient().when(userRepository.findById(readerUserId)).thenReturn(Optional.of(readerUser));
+
+        // Hai stub dưới đây mô phỏng ĐÚNG chỗ Hibernate khác nhau, vì chính
+        // khoảng khác ấy là lỗi đã gặp trên production.
+        //
+        // save(): id là @GeneratedValue(UUID) nên sinh được trong bộ nhớ, câu
+        // INSERT bị hoãn tới cuối giao dịch, và @CreationTimestamp chưa gán —
+        // createdAt còn null. Trả về nguyên vật thể, không đụng gì.
+        lenient().when(messageRepository.save(any(BookingMessage.class)))
+                .thenAnswer(inv -> inv.getArgument(0));
+        // saveAndFlush(): INSERT chạy ngay, nên createdAt có giá trị.
+        lenient().when(messageRepository.saveAndFlush(any(BookingMessage.class)))
+                .thenAnswer(inv -> {
+                    BookingMessage m = inv.getArgument(0);
+                    m.setCreatedAt(Instant.now());
+                    return m;
+                });
     }
 
     // ---------- Ai được vào ----------
@@ -166,6 +187,23 @@ class BookingChatServiceTest {
         IllegalStateException e = assertThrows(IllegalStateException.class,
                 () -> service.send(bookingId, customerId, "xin chào"));
         assertTrue(e.getMessage().contains("đóng"), e.getMessage());
+    }
+
+    // ---------- Tin vừa gửi phải dùng được ngay ----------
+
+    @Test
+    @DisplayName("Tin vừa gửi đã có thời gian, không chờ tải lại trang")
+    void tinVuaGuiPhaiCoThoiGian() {
+        var dto = service.send(bookingId, customerId, "xin chào");
+
+        // Gói này đẩy thẳng sang trình duyệt hai bên. Thiếu createdAt thì giao
+        // diện gọi new Date(null) và vẽ ra mốc 1970 — trên production hiện
+        // "08:00 01-01", rồi tự lành khi F5 vì lúc đó đọc lại từ bảng. Lỗi tự
+        // lành là lỗi khó thấy nhất, nên chặn ngay ở đây.
+        assertNotNull(dto.getCreatedAt(),
+                "Tin nhắn đẩy đi mà không có thời gian. Rất có thể save() đã "
+                        + "thay chỗ saveAndFlush(): INSERT bị hoãn nên "
+                        + "@CreationTimestamp chưa kịp gán.");
     }
 
     @Test
