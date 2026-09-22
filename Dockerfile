@@ -40,4 +40,22 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
 # Dạng shell chứ không phải exec: dạng exec không khai triển biến, nên
 # $JAVA_OPTS mà render.yaml khai báo từ trước tới nay chưa từng có tác dụng.
 # `exec` để java thành tiến trình chính và nhận được tín hiệu dừng của Render.
-ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -XX:MaxRAMPercentage=35 -XX:MaxMetaspaceSize=192m -XX:+UseSerialGC -Xss512k -XX:+ExitOnOutOfMemoryError -jar app.jar"]
+#
+# ---- Vì sao có thêm MaxDirectMemorySize và ReservedCodeCacheSize ----
+#
+# Render giết container theo TỔNG bộ nhớ, còn MaxRAMPercentage chỉ chặn heap.
+# Trước bản này có ba vùng không ai chặn, cộng lại vượt xa 512MB:
+#
+#   - Bộ nhớ ngoài heap (direct): mặc định bằng ĐÚNG kích thước heap, tức
+#     ~179MB nữa. Tomcat NIO và WebSocket cấp phát ByteBuffer ở đây. Đây là
+#     kiểu hỏng khó đoán nhất: container bị giết mà Java không hề báo
+#     OutOfMemoryError, vì với JVM thì heap vẫn còn chỗ.
+#   - Vùng mã đã biên dịch (code cache): mặc định đặt trước 240MB.
+#   - Ngăn xếp luồng: Tomcat mặc định tối đa 200 luồng, mỗi luồng 512k là
+#     100MB. Chặn ở application.properties (server.tomcat.threads.max).
+#
+# GIỮ NGUYÊN MaxMetaspaceSize=192m. Có vẻ thừa so với nhu cầu thật (~120MB),
+# nhưng hạ xuống 128m đã từng gây OutOfMemoryError: Metaspace ở chính dịch vụ
+# này. Metaspace là mức TRẦN chứ không phải phần đặt trước, nên để rộng không
+# tốn gì; hạ xuống mới là đánh đổi thật.
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -XX:MaxRAMPercentage=35 -XX:MaxMetaspaceSize=192m -XX:ReservedCodeCacheSize=48m -XX:MaxDirectMemorySize=32m -XX:+UseSerialGC -Xss512k -XX:+ExitOnOutOfMemoryError -jar app.jar"]
