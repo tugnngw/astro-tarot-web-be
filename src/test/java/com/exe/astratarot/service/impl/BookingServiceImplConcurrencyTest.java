@@ -41,6 +41,18 @@ class BookingServiceImplConcurrencyTest {
     @Mock
     private NotificationService notificationService;
 
+    /**
+     * Không phải mock thừa: BookingResponse mang cờ {@code chatOpen}, và
+     * BookingServiceImpl hỏi BookingChatService để tính cờ đó mỗi lần dựng DTO.
+     *
+     * <p>Thiếu khai báo ở đây thì @InjectMocks để nguyên trường null, và MỌI
+     * test nào đi tới bước dựng DTO đều ném NullPointerException — đúng thứ đã
+     * làm CI đỏ. Lỗi khó đoán vì câu báo nói về chat trong một bộ test tên là
+     * "Concurrency", chẳng liên quan gì tới khoá bi quan đang được kiểm.
+     */
+    @Mock
+    private com.exe.astratarot.service.BookingChatService bookingChatService;
+
     @InjectMocks
     private BookingServiceImpl bookingService;
 
@@ -79,9 +91,16 @@ class BookingServiceImplConcurrencyTest {
     void complete_UsesFindByIdForUpdate() {
         when(bookingRepository.findByIdForUpdate(bookingId)).thenReturn(Optional.of(booking));
 
+        when(bookingChatService.chatOpen(booking)).thenReturn(true);
+
         BookingResponse response = bookingService.complete(readerUserId, bookingId);
 
         assertEquals(BookingStatus.COMPLETED.name(), response.getStatus());
+        // Cờ này là thứ giao diện dùng để hiện hay giấu nút "Nhắn tin / Gọi".
+        // Khẳng định nó đi được từ BookingChatService ra tới DTO, để ai lỡ bỏ
+        // .chatOpen(...) khỏi hàm dựng DTO thì đỏ ở đây chứ không phải im lặng
+        // làm nút biến mất trên production.
+        assertEquals(Boolean.TRUE, response.getChatOpen());
         verify(bookingRepository).findByIdForUpdate(bookingId);
         verify(escrowService).releaseForBooking(booking);
     }
@@ -91,9 +110,12 @@ class BookingServiceImplConcurrencyTest {
     void cancel_UsesFindByIdForUpdate() {
         when(bookingRepository.findByIdForUpdate(bookingId)).thenReturn(Optional.of(booking));
 
+        when(bookingChatService.chatOpen(booking)).thenReturn(false);
+
         BookingResponse response = bookingService.cancel(customerId, bookingId, "Need to cancel");
 
         assertEquals(BookingStatus.CANCELLED.name(), response.getStatus());
+        assertEquals(Boolean.FALSE, response.getChatOpen());
         verify(bookingRepository).findByIdForUpdate(bookingId);
     }
 
