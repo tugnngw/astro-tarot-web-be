@@ -53,6 +53,7 @@ public class BookingServiceImpl implements BookingService {
     private final NotificationService notificationService;
     private final com.exe.astratarot.service.EscrowService escrowService;
     private final com.exe.astratarot.service.PaymentService paymentService;
+    private final com.exe.astratarot.service.BookingChatService bookingChatService;
 
     /**
      * Lịch rảnh của Reader khai báo bằng giờ địa phương (LocalTime + thứ trong
@@ -447,7 +448,7 @@ public class BookingServiceImpl implements BookingService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lịch hẹn"));
     }
 
-    private static BookingResponse toResponse(Booking b, boolean reviewed) {
+    private BookingResponse toResponse(Booking b, boolean reviewed) {
         User reader = b.getReaderProfile().getUser();
         User customer = b.getUser();
         return BookingResponse.builder()
@@ -469,6 +470,7 @@ public class BookingServiceImpl implements BookingService {
                 .reviewed(reviewed)
                 .readerNote(b.getReaderNote())
                 .readerNoteAt(b.getReaderNoteAt())
+                .chatOpen(bookingChatService.chatOpen(b))
                 .createdAt(b.getCreatedAt())
                 .build();
     }

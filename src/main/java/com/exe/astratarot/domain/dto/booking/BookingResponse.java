@@ -49,5 +49,14 @@ public class BookingResponse {
     private String readerNote;
     private Instant readerNoteAt;
 
+    /**
+     * Hộp trao đổi có đang mở không.
+     *
+     * <p>Luật (đã trả tiền chưa, còn trong hạn không) do máy chủ quyết và
+     * trả sẵn xuống, để giao diện không phải chép lại. Chép luật sang hai
+     * nơi là sớm muộn hai nơi nói khác nhau — mà đây là luật về doanh thu.
+     */
+    private Boolean chatOpen;
+
     private Instant createdAt;
 }
