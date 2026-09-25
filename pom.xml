@@ -244,6 +244,56 @@
                 </configuration>
             </plugin>
 
+            <!--
+                JaCoCo: đo độ phủ test.
+
+                Không có nó thì không ai biết độ phủ là bao nhiêu, và "chúng
+                ta có 220 test" nghe rất yên tâm trong khi thật ra mới phủ
+                được một phần ba mã. Đo lần đầu ngày 2026-09-25: 34,5%.
+
+                Báo cáo sinh ở target/site/jacoco/ sau `mvn test`, và cũng là
+                thứ SonarQube đọc để tính coverage — Sonar KHÔNG tự chạy test,
+                nó chỉ đọc báo cáo có sẵn.
+
+                CỐ Ý CHƯA đặt ngưỡng làm đỏ build. Đặt ngưỡng 80% ngay bây giờ
+                thì mọi nhánh đều đỏ và cả nhóm sẽ học cách bỏ qua CI — tệ hơn
+                hẳn so với không có ngưỡng. Nâng dần, và chỉ khoá lại khi con
+                số đã thực sự ở đó.
+            -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <configuration>
+                    <excludes>
+                        <!--
+                            MapStruct sinh ra các lớp *MapperImpl vào
+                            target/generated-sources. Chúng chiếm 90 trong 92
+                            dòng của gói mapper và không ai viết được test có
+                            ý nghĩa cho mã máy sinh.
+                        -->
+                        <exclude>**/*MapperImpl.class</exclude>
+                        <!-- Lớp khởi động Spring Boot: chỉ có main(). -->
+                        <exclude>**/AstraTarotWebBeApplication.class</exclude>
+                    </excludes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>gan-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>bao-cao</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
         </plugins>
     </build>
 
