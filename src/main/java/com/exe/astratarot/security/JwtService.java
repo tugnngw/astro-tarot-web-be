@@ -82,6 +82,17 @@ public class JwtService {
             throw new InvalidTokenException("JWT signature invalid");
         } catch (JwtException e) {
             throw new InvalidTokenException("JWT token invalid");
+        } catch (IllegalArgumentException e) {
+            // Chuỗi rỗng hoặc null KHÔNG phải JwtException — thư viện coi đó là
+            // lỗi tham số nên nó lọt qua cả năm nhánh trên. Header
+            // "Authorization: Bearer " (thiếu hẳn token) đi thẳng vào đây.
+            //
+            // Bộ lọc HTTP hiện bắt kèm IllegalArgumentException nên ngoài kia
+            // vẫn ra 401 đúng. Nhưng đó là miếng vá ở nơi gọi, và nó chỉ đúng
+            // chừng nào mọi nơi gọi đều nhớ vá giống thế — StompAuthChannel
+            // Interceptor là nơi gọi thứ hai, và nó không vá. Tên phương thức
+            // đã hứa "safely", nên chỗ giữ lời hứa phải là ở đây.
+            throw new InvalidTokenException("JWT token missing or empty");
         }
     }
 
