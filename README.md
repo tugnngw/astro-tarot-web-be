@@ -30,3 +30,60 @@ Công nghệ sử dụng
 
 
 
+
+---
+
+## Kiểm thử và độ phủ
+
+```bash
+./mvnw test
+```
+
+**863 kiểm**, độ phủ dòng **82,7%** (báo cáo ở `target/site/jacoco/index.html`).
+
+### Chạy SonarQube
+
+Cấu hình đã khai sẵn trong `pom.xml`, nên chỉ cần một token:
+
+```bash
+docker run -d --name sonarqube -p 9000:9000 sonarqube:community
+```
+
+Mở http://localhost:9000, đăng nhập, vào **My Account → Security** tạo token, rồi:
+
+```bash
+./mvnw clean test
+./mvnw sonar:sonar -Dsonar.host.url=http://localhost:9000 -Dsonar.token=THAY_TOKEN_VAO_DAY
+```
+
+### Ba điều dễ nhầm
+
+**Sonar không tự chạy test.** Nó chỉ đọc báo cáo JaCoCo đã có, nên `mvn test`
+phải chạy **trước**. Đảo thứ tự thì Sonar báo 0% và người đọc tưởng bộ kiểm
+không tồn tại.
+
+**Sonar không dùng độ phủ dòng.** Công thức của nó là
+`(CT + CF + LC) / (2B + EL)` — gộp cả nhánh vào. Nên **82,7% dòng** ở đây quy
+ra khoảng **80,3%** trên Sonar, và đó mới là con số Quality Gate đọc. Hai con
+số khác nhau là bình thường, không phải lỗi cấu hình.
+
+**Bộ kiểm cố tình đi vào nhánh lỗi.** `PayOsWebhookRegistrarTest` kiểm nhánh
+"đã thử sáu lần vẫn không đăng ký được webhook", nên log build có một dòng
+`ERROR ... không đăng ký được PayOS webhook`. Đó là mã sản xuất đang chạy đúng
+kịch bản được kiểm, không phải bản dựng hỏng.
+
+### Quy ước của bộ kiểm
+
+Không viết kiểm cho mọi nhánh. Chọn những bất biến mà nếu vỡ thì **mất tiền
+hoặc rò dữ liệu**, và mỗi phép kiểm nói rõ hậu quả nếu nó đỏ — để người sửa
+sau biết mình đang phá cái gì, chứ không chỉ thấy một dòng đỏ không rõ nghĩa.
+
+Vài ví dụ:
+
+| Bất biến | Hậu quả nếu vỡ |
+|---|---|
+| Bấm "Thanh toán" hai lần trả lại **cùng một** mã chuyển khoản | Hai lần đối soát, một lần thu trùng |
+| Webhook PayOS mang `orderCode` lạ **không** được thành 5xx | PayOS kết luận URL hỏng và từ chối đăng ký webhook |
+| Không hoàn tất buổi xem **trước** giờ hẹn | Nhận tiền cho một buổi chưa từng diễn ra |
+| Tiền phạt **không** đụng `pendingBalance` | Lấy tiền của người thứ ba (khách chưa xong buổi) |
+| "Quên mật khẩu" trả **cùng một câu** dù email có thật hay không | Trang này thành công cụ dò xem ai có tài khoản |
