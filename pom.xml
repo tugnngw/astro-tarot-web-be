@@ -22,6 +22,37 @@
 
     <properties>
         <java.version>21</java.version>
+
+        <!--
+            SonarQube.
+
+            Sonar KHÔNG tự chạy test và KHÔNG tự đo độ phủ — nó chỉ đọc báo cáo
+            JaCoCo đã có. Nên thứ tự bắt buộc là `mvn test` trước, `mvn
+            sonar:sonar` sau; đảo lại thì Sonar báo 0% và người đọc tưởng bộ
+            test không tồn tại.
+
+                mvn clean test
+                mvn sonar:sonar -Dsonar.host.url=http://localhost:9000 -Dsonar.token=...
+
+            Lưu ý về con số: Sonar không dùng độ phủ DÒNG mà dùng
+            (CT + CF + LC) / (2B + EL) — gộp cả nhánh vào. Nên 82,7% dòng của
+            repo này quy ra khoảng 80,3% ở Sonar, và đó mới là con số Quality
+            Gate đọc.
+        -->
+        <sonar.projectKey>astrotarot-backend</sonar.projectKey>
+        <sonar.projectName>AstroTarot Backend</sonar.projectName>
+        <sonar.coverage.jacoco.xmlReportPaths>
+            ${project.build.directory}/site/jacoco/jacoco.xml
+        </sonar.coverage.jacoco.xmlReportPaths>
+        <!--
+            Loại đúng những thứ đã loại khỏi phép đo JaCoCo, để hai con số nói
+            cùng một chuyện: mã sinh tự động (MapStruct) và lớp khởi động.
+        -->
+        <sonar.coverage.exclusions>
+            **/*MapperImpl.java,
+            **/AstraTarotWebBeApplication.java,
+            **/config/**
+        </sonar.coverage.exclusions>
     </properties>
 
     <dependencies>
