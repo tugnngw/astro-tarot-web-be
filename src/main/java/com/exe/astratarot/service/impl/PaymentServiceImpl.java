@@ -168,9 +168,9 @@ public class PaymentServiceImpl implements PaymentService {
 
     private boolean isWithinDeadline(Booking booking) {
         if (booking.getPaymentDeadline() == null) {
-            // Không có deadline → đặt sát giờ, nhưng đã ở UNPAID → tính theo DEPOSIT
-            // (trường hợp backfill từ migration cũ)
-            return true;
+            // create() để trống hạn đúng khi buổi cách lúc đặt chưa đủ 12 tiếng:
+            // không còn cửa sổ đặt cọc, phải trả đủ ngay.
+            return false;
         }
         return Instant.now().isBefore(booking.getPaymentDeadline());
     }
