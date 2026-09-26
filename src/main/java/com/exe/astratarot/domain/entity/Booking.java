@@ -48,6 +48,12 @@ public class Booking {
     @Column(name = "payment_deadline")
     private Instant paymentDeadline;
 
+    // @Builder.Default là BẮT BUỘC ở đây, không phải tuỳ chọn. Thiếu nó thì
+    // Lombok bỏ qua giá trị khởi tạo và builder ghi null xuống một cột
+    // `nullable = false` — mọi lượt đặt lịch đổ ở tầng database, và đổ tại chỗ
+    // ghi chứ không tại chỗ sai, nên rất khó lần ra. BuilderDefaultTest chốt
+    // luật này cho toàn bộ entity.
+    @Builder.Default
     @Column(name = "forfeited_amount", nullable = false)
     private Long forfeitedAmount = 0L;
 

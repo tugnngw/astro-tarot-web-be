@@ -172,7 +172,7 @@ class EscrowServiceImplLedgerTest {
         @Test
         @DisplayName("Giữ tiền: vào phần ĐANG GIỮ, không vào phần rút được")
         void giuTien() {
-            service.holdForBooking(lichHen(1_000_000L));
+            service.holdForBooking(lichHen(1_000_000L), 1_000_000L);
 
             // Vào thẳng balance là Reader rút được tiền của buổi xem chưa diễn
             // ra, và khách huỷ thì không còn gì để hoàn.
@@ -221,7 +221,7 @@ class EscrowServiceImplLedgerTest {
                     () -> assertThrows(IllegalStateException.class,
                             () -> service.releaseForBooking(lichHen(1_000_000L))),
                     () -> assertThrows(IllegalStateException.class,
-                            () -> service.refundForBooking(lichHen(1_000_000L))));
+                            () -> service.refundForBooking(lichHen(1_000_000L), 1_000_000L)));
             assertEquals(500_000L, viKyQuy.getPendingBalance());
         }
 
@@ -248,7 +248,7 @@ class EscrowServiceImplLedgerTest {
             viKyQuy.setPendingBalance(1_000_000L);
             viKyQuy.setBalance(300_000L);
 
-            service.refundForBooking(lichHen(1_000_000L));
+            service.refundForBooking(lichHen(1_000_000L), 1_000_000L);
 
             assertAll(
                     () -> assertEquals(0L, viKyQuy.getPendingBalance()),

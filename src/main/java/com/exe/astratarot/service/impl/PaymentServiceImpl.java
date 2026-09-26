@@ -311,7 +311,9 @@ public class PaymentServiceImpl implements PaymentService {
                 reason == null || reason.isBlank()
                         ? "Chúng tôi chưa tìm thấy khoản chuyển khớp với mã của bạn. Kiểm tra lại giúp nhé."
                         : reason,
-                tx.getBooking() == null ? Map.of() : Map.of("bookingId", tx.getBooking().getId().toString()));
+                tx.getBooking() == null
+                        ? Map.of()
+                        : Map.of("bookingId", tx.getBooking().getId().toString(), NotificationTypes.SIDE, NotificationTypes.SIDE_CUSTOMER));
 
         return toResponse(tx);
     }
@@ -344,7 +346,7 @@ public class PaymentServiceImpl implements PaymentService {
         notificationService.push(booking.getUser(), NotificationTypes.PAYMENT_REFUNDED,
                 "Lịch hẹn đã huỷ, tiền sẽ được hoàn",
                 "Khoản " + amount + " ₫ sẽ được chuyển lại trong 1-3 ngày làm việc.",
-                Map.of("bookingId", booking.getId().toString()));
+                Map.of("bookingId", booking.getId().toString(), NotificationTypes.SIDE, NotificationTypes.SIDE_CUSTOMER));
 
         log.info("Hoàn tiền {} cho booking {}", amount, booking.getId());
     }
@@ -371,14 +373,14 @@ public class PaymentServiceImpl implements PaymentService {
                 "Mất tiền đặt cọc",
                 "Bạn đã hủy muộn hoặc quá hạn thanh toán. Khoản đặt cọc "
                         + forfeitedAmount + " ₫ được chuyển cho reader.",
-                Map.of("bookingId", booking.getId().toString()));
+                Map.of("bookingId", booking.getId().toString(), NotificationTypes.SIDE, NotificationTypes.SIDE_CUSTOMER));
 
         notificationService.push(booking.getReaderProfile().getUser(), NotificationTypes.PAYMENT_FORFEITED,
                 "Nhận tiền bù do khách hủy muộn",
                 "Khách đã hủy muộn hoặc quá hạn. Khoản bù "
                         + (forfeitedAmount - (long)(forfeitedAmount * 0.15))
                         + " ₫ (đã trừ phí nền tảng) được cộng vào tài khoản.",
-                Map.of("bookingId", booking.getId().toString()));
+                Map.of("bookingId", booking.getId().toString(), NotificationTypes.SIDE, NotificationTypes.SIDE_READER));
 
         log.info("Mất cọc {} cho booking {}", forfeitedAmount, booking.getId());
     }
@@ -424,23 +426,23 @@ public class PaymentServiceImpl implements PaymentService {
                     "Bạn đã đặt cọc cho buổi xem với "
                             + booking.getReaderProfile().getUser().getFullName()
                             + ". Vui lòng thanh toán nốt trước giờ hẹn.",
-                    Map.of("bookingId", booking.getId().toString()));
+                    Map.of("bookingId", booking.getId().toString(), NotificationTypes.SIDE, NotificationTypes.SIDE_CUSTOMER));
 
             notificationService.push(booking.getReaderProfile().getUser(), NotificationTypes.PAYMENT_CONFIRMED,
                     "Khách đã đặt cọc",
                     "Khách đã đặt cọc " + tx.getAmount() + " ₫. Tiền sẽ vào ký quỹ khi thanh toán xong.",
-                    Map.of("bookingId", booking.getId().toString()));
+                    Map.of("bookingId", booking.getId().toString(), NotificationTypes.SIDE, NotificationTypes.SIDE_READER));
         } else {
             notificationService.push(booking.getUser(), NotificationTypes.PAYMENT_CONFIRMED,
                     "Đã thanh toán xong",
                     "Bạn đã thanh toán đầy đủ cho buổi xem với "
                             + booking.getReaderProfile().getUser().getFullName() + ".",
-                    Map.of("bookingId", booking.getId().toString()));
+                    Map.of("bookingId", booking.getId().toString(), NotificationTypes.SIDE, NotificationTypes.SIDE_CUSTOMER));
 
             notificationService.push(booking.getReaderProfile().getUser(), NotificationTypes.PAYMENT_CONFIRMED,
                     "Khách đã thanh toán đủ",
                     "Tiền đang được giữ ở ký quỹ và sẽ vào số dư của bạn sau khi buổi xem hoàn tất.",
-                    Map.of("bookingId", booking.getId().toString()));
+                    Map.of("bookingId", booking.getId().toString(), NotificationTypes.SIDE, NotificationTypes.SIDE_READER));
         }
 
         log.info("Xác nhận thanh toán {} cho booking {}", tx.getId(), booking.getId());
