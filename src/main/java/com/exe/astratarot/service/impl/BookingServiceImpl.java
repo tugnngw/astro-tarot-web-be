@@ -1,11 +1,17 @@
 package com.exe.astratarot.service.impl;
 
 import com.exe.astratarot.domain.dto.booking.BookingResponse;
+import com.exe.astratarot.domain.dto.booking.CalendarSlotResponse;
 import com.exe.astratarot.domain.dto.booking.CreateBookingRequest;
+import com.exe.astratarot.domain.dto.booking.DayCalendarResponse;
+import com.exe.astratarot.domain.dto.booking.MonthCalendarResponse;
 import com.exe.astratarot.domain.dto.booking.SlotResponse;
+import com.exe.astratarot.domain.enums.CalendarDayKind;
+import com.exe.astratarot.domain.enums.CalendarSlotState;
 import com.exe.astratarot.domain.entity.Booking;
 import com.exe.astratarot.domain.entity.ReaderAvailability;
 import com.exe.astratarot.domain.entity.ReaderProfile;
+import com.exe.astratarot.domain.entity.ReaderUnavailableDate;
 import com.exe.astratarot.domain.entity.User;
 import com.exe.astratarot.domain.enums.BookingStatus;
 import com.exe.astratarot.domain.enums.PaymentPhase;
@@ -29,11 +35,13 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -41,6 +49,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -91,6 +100,145 @@ public class BookingServiceImpl implements BookingService {
             }
         }
         return java.util.Optional.empty();
+    }
+
+    /** Khách đặt xem được tháng này và hai tháng tới. Xa hơn thì lịch Reader còn đổi. */
+    private static final int PUBLIC_MONTHS_AHEAD = 2;
+
+    /** Lịch riêng (của khách hoặc của Reader) nhìn lại một năm và tới nửa năm. */
+    private static final int PRIVATE_MONTHS_BACK = 12;
+    private static final int PRIVATE_MONTHS_AHEAD = 6;
+
+    @Override
+    @Transactional(readOnly = true)
+    public MonthCalendarResponse monthCalendar(UUID readerProfileId, int year, int month, int durationMinutes) {
+        requireAllowedDuration(durationMinutes);
+        YearMonth requested = requireMonth(year, month, 0, PUBLIC_MONTHS_AHEAD);
+
+        ReaderProfile reader = findReader(readerProfileId);
+        long price = priceFor(reader, durationMinutes);
+
+        LocalDate first = requested.atDay(1);
+        LocalDate last = requested.atEndOfMonth();
+
+        Map<Short, List<ReaderAvailability>> byDow = availabilityRepository
+                .findByReaderIdAndActiveTrue(readerProfileId)
+                .stream()
+                .collect(Collectors.groupingBy(ReaderAvailability::getDayOfWeek));
+
+        Set<LocalDate> off = unavailableDateRepository
+                .findByReaderIdAndUnavailableDateBetween(readerProfileId, first, last)
+                .stream()
+                .map(ReaderUnavailableDate::getUnavailableDate)
+                .collect(Collectors.toSet());
+
+        Instant rangeStart = first.atStartOfDay(ZONE).toInstant();
+        Instant rangeEnd = last.plusDays(1).atStartOfDay(ZONE).toInstant();
+        // Một truy vấn cho cả tháng. Khung đã huỷ không nằm trong kết quả,
+        // nên huỷ xong thì ô đó mở lại cho người khác ngay lần xem kế tiếp.
+        List<Booking> taken = bookingRepository.findOverlapping(readerProfileId, rangeStart, rangeEnd);
+
+        Instant now = Instant.now();
+        LocalDate today = LocalDate.now(ZONE);
+        List<DayCalendarResponse> days = new ArrayList<>();
+        for (LocalDate date = first; !date.isAfter(last); date = date.plusDays(1)) {
+            days.add(buildDay(date, today, now, durationMinutes, price, byDow, off, taken));
+        }
+        return MonthCalendarResponse.builder()
+                .year(year)
+                .month(month)
+                .durationMinutes(durationMinutes)
+                .days(days)
+                .build();
+    }
+
+    private DayCalendarResponse buildDay(
+            LocalDate date,
+            LocalDate today,
+            Instant now,
+            int durationMinutes,
+            long price,
+            Map<Short, List<ReaderAvailability>> byDow,
+            Set<LocalDate> off,
+            List<Booking> taken) {
+        if (off.contains(date)) {
+            return DayCalendarResponse.builder()
+                    .date(date).kind(CalendarDayKind.OFF).slots(List.of()).build();
+        }
+        short dow = (short) (date.getDayOfWeek().getValue() % 7);
+        List<ReaderAvailability> windows = byDow.getOrDefault(dow, List.of());
+        if (windows.isEmpty()) {
+            return DayCalendarResponse.builder()
+                    .date(date).kind(CalendarDayKind.CLOSED).slots(List.of()).build();
+        }
+        if (date.isBefore(today)) {
+            return DayCalendarResponse.builder()
+                    .date(date).kind(CalendarDayKind.PAST).slots(List.of()).build();
+        }
+
+        List<CalendarSlotResponse> slots = new ArrayList<>();
+        boolean anyFree = false;
+        boolean anyTakenAhead = false;
+        for (ReaderAvailability window : windows) {
+            LocalTime cursor = window.getStartTime();
+            while (!cursor.plusMinutes(durationMinutes).isAfter(window.getEndTime())) {
+                Instant start = LocalDateTime.of(date, cursor).atZone(ZONE).toInstant();
+                Instant end = start.plus(durationMinutes, ChronoUnit.MINUTES);
+                CalendarSlotState state;
+                if (!start.isAfter(now)) {
+                    state = CalendarSlotState.PAST;
+                } else if (taken.stream().anyMatch(b -> overlaps(b, start, end))) {
+                    state = CalendarSlotState.TAKEN;
+                    anyTakenAhead = true;
+                } else {
+                    state = CalendarSlotState.FREE;
+                    anyFree = true;
+                }
+                slots.add(CalendarSlotResponse.builder()
+                        .startTime(start).endTime(end).price(price).state(state).build());
+                cursor = cursor.plusMinutes(SLOT_STEP_MINUTES);
+            }
+        }
+
+        CalendarDayKind kind = anyFree
+                ? CalendarDayKind.OPEN
+                : anyTakenAhead ? CalendarDayKind.FULL : CalendarDayKind.OVER;
+        return DayCalendarResponse.builder().date(date).kind(kind).slots(slots).build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BookingResponse> listForCustomerInMonth(UUID customerId, int year, int month) {
+        YearMonth requested = requireMonth(year, month, PRIVATE_MONTHS_BACK, PRIVATE_MONTHS_AHEAD);
+        Instant start = requested.atDay(1).atStartOfDay(ZONE).toInstant();
+        Instant end = requested.plusMonths(1).atDay(1).atStartOfDay(ZONE).toInstant();
+        return withReviewFlags(bookingRepository.findForUserBetween(customerId, start, end));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BookingResponse> listForReaderInMonth(UUID readerUserId, int year, int month) {
+        YearMonth requested = requireMonth(year, month, PRIVATE_MONTHS_BACK, PRIVATE_MONTHS_AHEAD);
+        Instant start = requested.atDay(1).atStartOfDay(ZONE).toInstant();
+        Instant end = requested.plusMonths(1).atDay(1).atStartOfDay(ZONE).toInstant();
+        return withReviewFlags(bookingRepository.findForReaderBetween(readerUserId, start, end));
+    }
+
+    private static YearMonth requireMonth(int year, int month, int monthsBack, int monthsAhead) {
+        if (month < 1 || month > 12) {
+            throw new IllegalArgumentException("Tháng không hợp lệ");
+        }
+        YearMonth requested;
+        try {
+            requested = YearMonth.of(year, month);
+        } catch (DateTimeException e) {
+            throw new IllegalArgumentException("Tháng không hợp lệ");
+        }
+        YearMonth now = YearMonth.now(ZONE);
+        if (requested.isBefore(now.minusMonths(monthsBack)) || requested.isAfter(now.plusMonths(monthsAhead))) {
+            throw new IllegalArgumentException("Tháng này nằm ngoài khoảng xem được");
+        }
+        return requested;
     }
 
     public List<SlotResponse> availableSlots(UUID readerProfileId, LocalDate date, int durationMinutes) {
@@ -482,6 +630,12 @@ public class BookingServiceImpl implements BookingService {
         List<UUID> ids = page.getContent().stream().map(Booking::getId).toList();
         Set<UUID> reviewed = ids.isEmpty() ? Set.of() : reviewRepository.findReviewedBookingIds(ids);
         return page.map(b -> toResponse(b, reviewed.contains(b.getId())));
+    }
+
+    private List<BookingResponse> withReviewFlags(List<Booking> rows) {
+        List<UUID> ids = rows.stream().map(Booking::getId).toList();
+        Set<UUID> reviewed = ids.isEmpty() ? Set.of() : reviewRepository.findReviewedBookingIds(ids);
+        return rows.stream().map(b -> toResponse(b, reviewed.contains(b.getId()))).toList();
     }
 
     private ReaderProfile findReader(UUID readerProfileId) {

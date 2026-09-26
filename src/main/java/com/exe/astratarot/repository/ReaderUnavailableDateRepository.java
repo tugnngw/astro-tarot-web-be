@@ -9,4 +9,8 @@ import java.util.UUID;
 public interface ReaderUnavailableDateRepository extends JpaRepository<ReaderUnavailableDate, UUID> {
     List<ReaderUnavailableDate> findByReaderId(UUID readerId);
     boolean existsByReaderIdAndUnavailableDate(UUID readerId, LocalDate date);
+
+    /** Ngày nghỉ nằm trong một tháng. Inclusive cả hai đầu. */
+    List<ReaderUnavailableDate> findByReaderIdAndUnavailableDateBetween(
+            UUID readerId, LocalDate start, LocalDate end);
 }
