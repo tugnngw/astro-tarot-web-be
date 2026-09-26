@@ -66,6 +66,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final PayOsClient payOsClient;
     private final PayOsProperties payOsProperties;
     private final ObjectMapper objectMapper;
+    private final com.exe.astratarot.service.VietQrService vietQrService;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -77,6 +78,16 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Value("${app.bank.account-holder:Chưa cấu hình}")
     private String bankAccountHolder;
+
+    /**
+     * Mã BIN sáu chữ số của ngân hàng thụ hưởng — VietQR cần con số này, không
+     * dùng được tên ngân hàng.
+     *
+     * <p>Để trống thì không dựng QR, và khách quay về cách cũ: đọc số tài
+     * khoản rồi gõ tay. Thà không có mã còn hơn có một mã quét ra sai người.
+     */
+    @Value("${app.bank.bin:}")
+    private String bankBin;
 
     @Value("${app.frontend-url:http://localhost:8081}")
     private String frontendUrl;
@@ -478,8 +489,45 @@ public class PaymentServiceImpl implements PaymentService {
                 .bankAccountNumber(bankAccountNumber)
                 .bankAccountHolder(bankAccountHolder)
                 .transferContent(pending.getExternalTransactionId())
+                .qrCode(maQrChuyenKhoan(pending))
                 .status(pending.getStatus().name())
                 .build();
+    }
+
+    /**
+     * Mã VietQR đã điền sẵn SỐ TIỀN và NỘI DUNG.
+     *
+     * <p>Không có mã thì khách phải tự gõ ba thứ: số tài khoản, số tiền, và
+     * một mã đối soát chữ-số lẫn lộn. Gõ sai số tiền thì giao dịch không khớp
+     * và treo lại chờ người đối soát tay; gõ sai mã đối soát thì tiền tới nơi
+     * mà không ai biết nó của lượt đặt nào.
+     *
+     * <p>Trả null khi chưa cấu hình ngân hàng, hoặc khi chuỗi dựng hỏng — lúc
+     * ấy giao diện quay về cách cũ. Một lỗi ở đây KHÔNG được làm hỏng cả màn
+     * hướng dẫn thanh toán: không có mã thì vẫn chuyển khoản được, còn không
+     * có màn hướng dẫn thì không.
+     */
+    // Để mức gói (không private) cho kiểm được thẳng. Đây là chỗ quyết định
+    // khách phải gõ tay hay chỉ cần quét, và cả bốn nhánh của nó đều im lặng —
+    // không nhánh nào báo lỗi ra màn hình, nên không có phép kiểm thì không
+    // cách nào biết nó còn chạy đúng.
+    String maQrChuyenKhoan(PaymentTransaction pending) {
+        if (bankBin == null || bankBin.isBlank()
+                || bankAccountNumber == null || bankAccountNumber.isBlank()
+                || "Chưa cấu hình".equals(bankAccountNumber)) {
+            return null;
+        }
+        try {
+            return vietQrService.dungChuoi(
+                    bankBin.trim(),
+                    bankAccountNumber.trim(),
+                    pending.getAmount(),
+                    pending.getExternalTransactionId());
+        } catch (RuntimeException e) {
+            log.warn("Không dựng được QR chuyển khoản cho giao dịch {}: {}",
+                    pending.getId(), e.getMessage());
+            return null;
+        }
     }
 
     private PaymentInstructionResponse toInstruction(PaymentTransaction pending, CreatePaymentLinkResponse link) {
