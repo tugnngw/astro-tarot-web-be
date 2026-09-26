@@ -159,4 +159,35 @@ class BookingServiceImplConcurrencyTest {
         verify(paymentService).forfeitDeposit(booking);
         verify(paymentService).refund(booking, 0L);
     }
+
+    @Test
+    @DisplayName("quá hạn trả nốt: job hệ thống huỷ và mất cọc dù không có người bấm")
+    void cancel_QuaHan_HeThongMatCoc() {
+        booking.setPaymentStatus(PaymentStatus.DEPOSIT_PAID);
+        booking.setDepositAmount(50000L);
+        booking.setStartTime(Instant.now().plusSeconds(3600));
+        when(bookingRepository.findByIdForUpdate(bookingId)).thenReturn(Optional.of(booking));
+        when(bookingChatService.chatOpen(booking)).thenReturn(false);
+
+        bookingService.cancel(null, bookingId, "Quá hạn thanh toán. Tự động hủy.", ActorType.SYSTEM);
+
+        assertEquals(BookingStatus.CANCELLED, booking.getStatus());
+        verify(paymentService).forfeitDeposit(booking);
+        verify(paymentService, never()).refund(any(), anyLong());
+    }
+
+    @Test
+    @DisplayName("Reader huỷ sát giờ thì hoàn hết, không lấy cọc của khách")
+    void cancel_ReaderHuyMuon_HoanHet() {
+        booking.setPaymentStatus(PaymentStatus.DEPOSIT_PAID);
+        booking.setDepositAmount(50000L);
+        booking.setStartTime(Instant.now().plusSeconds(3600));
+        when(bookingRepository.findByIdForUpdate(bookingId)).thenReturn(Optional.of(booking));
+        when(bookingChatService.chatOpen(booking)).thenReturn(false);
+
+        bookingService.cancel(readerUserId, bookingId, "Bận", ActorType.USER);
+
+        verify(paymentService).refund(booking, 50000L);
+        verify(paymentService, never()).forfeitDeposit(booking);
+    }
 }

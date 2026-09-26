@@ -482,6 +482,11 @@ class BookingServiceImplTest {
                     () -> assertEquals(BookingStatus.PENDING.name(), kq.getStatus()),
                     () -> assertEquals(PaymentStatus.UNPAID.name(), kq.getPaymentStatus()),
                     () -> assertEquals(180_000L, kq.getTotalAmount()),
+                    () -> assertEquals(90_000L, kq.getDepositAmount()),
+                    () -> assertEquals(90_000L, kq.getRemainingAmount()),
+                    () -> assertEquals(
+                            kq.getStartTime().minus(12, ChronoUnit.HOURS),
+                            kq.getPaymentDeadline()),
                     () -> assertEquals(30, kq.getDurationMinutes()),
                     () -> assertEquals("Reader", kq.getReaderName()),
                     () -> assertEquals("Khách", kq.getCustomerName()),

@@ -1,6 +1,7 @@
 package com.exe.astratarot.service.impl;
 
 import com.exe.astratarot.config.PayOsConfig.PayOsClient;
+import com.exe.astratarot.domain.dto.payment.PaymentInstructionResponse;
 import com.exe.astratarot.domain.dto.payment.PaymentTransactionResponse;
 import com.exe.astratarot.domain.entity.Booking;
 import com.exe.astratarot.domain.entity.PaymentTransaction;
@@ -10,6 +11,7 @@ import com.exe.astratarot.domain.enums.BookingStatus;
 import com.exe.astratarot.domain.enums.PaymentPhase;
 import com.exe.astratarot.domain.enums.PaymentStatus;
 import com.exe.astratarot.domain.enums.TransactionStatus;
+import com.exe.astratarot.repository.BookingRepository;
 import com.exe.astratarot.repository.PaymentTransactionRepository;
 import com.exe.astratarot.service.ActivityLogService;
 import com.exe.astratarot.service.EscrowService;
@@ -24,7 +26,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import vn.payos.PayOS;
 import vn.payos.model.webhooks.WebhookData;
 
-import java.util.List;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -37,6 +40,9 @@ class PaymentServiceImplTest {
 
     @Mock
     private PaymentTransactionRepository transactionRepository;
+
+    @Mock
+    private BookingRepository bookingRepository;
 
     @Mock
     private EscrowService escrowService;
@@ -165,6 +171,54 @@ class PaymentServiceImplTest {
         assertEquals(PaymentStatus.PAID, booking.getPaymentStatus());
         verify(escrowService).holdForBooking(booking, 100000L);
         verify(escrowService, never()).releaseForBooking(any());
+    }
+
+    @Test
+    @DisplayName("còn hơn 12 tiếng thì thu cọc đúng một nửa")
+    void intent_Hon12Gio_ThuCoc() {
+        PaymentInstructionResponse huongDan = taoYeuCauTra(
+                Instant.now().plus(24, ChronoUnit.HOURS), PaymentStatus.UNPAID);
+
+        assertEquals("DEPOSIT", huongDan.getPaymentPhase());
+        assertEquals(50_000L, huongDan.getAmount());
+    }
+
+    @Test
+    @DisplayName("dưới 12 tiếng thì thu đủ, không chia cọc")
+    void intent_Duoi12Gio_ThuDu() {
+        PaymentInstructionResponse huongDan = taoYeuCauTra(null, PaymentStatus.UNPAID);
+
+        assertEquals("FULL", huongDan.getPaymentPhase());
+        assertEquals(100_000L, huongDan.getAmount());
+    }
+
+    @Test
+    @DisplayName("đã cọc thì lần sau chỉ thu phần còn lại")
+    void intent_DaCoc_ThuNot() {
+        PaymentInstructionResponse huongDan = taoYeuCauTra(
+                Instant.now().plus(20, ChronoUnit.HOURS), PaymentStatus.DEPOSIT_PAID);
+
+        assertEquals("REMAINING", huongDan.getPaymentPhase());
+        assertEquals(50_000L, huongDan.getAmount());
+    }
+
+    private PaymentInstructionResponse taoYeuCauTra(Instant han, PaymentStatus trangThai) {
+        booking.setPaymentStatus(trangThai);
+        booking.setStatus(BookingStatus.CONFIRMED);
+        booking.setDepositAmount(50_000L);
+        booking.setRemainingAmount(50_000L);
+        booking.setTotalAmount(100_000L);
+        booking.setPaymentDeadline(han);
+        booking.setStartTime(Instant.now().plus(48, ChronoUnit.HOURS));
+
+        when(bookingRepository.findByIdWithParties(bookingId)).thenReturn(Optional.of(booking));
+        when(transactionRepository.findFirstByBookingIdAndStatusAndPhase(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(transactionRepository.findByExternalTransactionId(any())).thenReturn(Optional.empty());
+        when(transactionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(payOsClient.enabled()).thenReturn(false);
+
+        return paymentService.createPaymentIntent(customerId, bookingId);
     }
 }
 

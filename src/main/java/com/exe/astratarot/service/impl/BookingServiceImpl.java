@@ -479,7 +479,9 @@ public class BookingServiceImpl implements BookingService {
     public BookingResponse cancel(UUID actorId, UUID bookingId, String reason, ActorType actorType) {
         Booking b = bookingRepository.findByIdForUpdate(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy buổi xem"));
-        requireParty(b, actorId);
+        if (actorType != ActorType.SYSTEM) {
+            requireParty(b, actorId);
+        }
 
         if (b.getStatus() == BookingStatus.COMPLETED) {
             throw new IllegalArgumentException("Buổi xem đã hoàn tất, không huỷ được");
@@ -491,9 +493,16 @@ public class BookingServiceImpl implements BookingService {
         b.setStatus(BookingStatus.CANCELLED);
 
         long hoursUntilStart = Duration.between(Instant.now(), b.getStartTime()).toHours();
-        boolean isUserCancel = (actorType == ActorType.USER);
         boolean isEarlyCancel = hoursUntilStart >= CANCELLATION_DEADLINE_HOURS;
-        boolean isReaderOrAdminCancel = (actorType == ActorType.READER || actorType == ActorType.ADMIN);
+        // API huỷ luôn gắn ActorType.USER, kể cả khi người bấm là Reader.
+        // Nhận Reader theo buổi hẹn, không theo nhãn, kẻo Reader huỷ bị tính
+        // là khách huỷ muộn và khách mất cọc.
+        boolean isSystem = actorType == ActorType.SYSTEM;
+        boolean isReaderOrAdminCancel = !isSystem && (
+                actorType == ActorType.READER
+                        || actorType == ActorType.ADMIN
+                        || b.getReaderProfile().getUser().getId().equals(actorId));
+        boolean isUserCancel = !isSystem && !isReaderOrAdminCancel;
 
         if (isReaderOrAdminCancel) {
             // Reader hoặc admin hủy → hoàn 100% số đã trả
@@ -521,21 +530,34 @@ public class BookingServiceImpl implements BookingService {
 
         b.setCancelReason(reason == null || reason.isBlank() ? null : reason.trim());
 
-        // Báo cho BÊN KIA, không phải cho người vừa bấm huỷ.
-        boolean cancelledByCustomer = b.getUser().getId().equals(actorId);
-        User recipient = cancelledByCustomer ? b.getReaderProfile().getUser() : b.getUser();
-        String who = cancelledByCustomer
-                ? b.getUser().getFullName()
-                : b.getReaderProfile().getUser().getFullName();
-        notificationService.push(recipient, NotificationTypes.BOOKING_CANCELLED,
-                "Lịch hẹn đã bị huỷ",
-                who + " đã huỷ buổi xem"
-                        + (b.getCancelReason() == null ? "." : ": " + b.getCancelReason()),
-                Map.of("bookingId", b.getId().toString(),
-                        NotificationTypes.SIDE,
-                        cancelledByCustomer
-                                ? NotificationTypes.SIDE_READER
-                                : NotificationTypes.SIDE_CUSTOMER));
+        if (actorType == ActorType.SYSTEM) {
+            notificationService.push(b.getUser(), NotificationTypes.BOOKING_CANCELLED,
+                    "Quá hạn trả nốt",
+                    "Bạn chưa trả nốt trước buổi xem 12 tiếng nên lịch bị huỷ và khoản đặt cọc không được hoàn.",
+                    Map.of("bookingId", b.getId().toString(),
+                            NotificationTypes.SIDE, NotificationTypes.SIDE_CUSTOMER));
+            notificationService.push(b.getReaderProfile().getUser(), NotificationTypes.BOOKING_CANCELLED,
+                    "Khách quá hạn trả nốt",
+                    "Lịch hẹn đã tự huỷ vì khách không trả nốt đúng hạn. Tiền đặt cọc được chuyển cho bạn.",
+                    Map.of("bookingId", b.getId().toString(),
+                            NotificationTypes.SIDE, NotificationTypes.SIDE_READER));
+        } else {
+            // Báo cho BÊN KIA, không phải cho người vừa bấm huỷ.
+            boolean cancelledByCustomer = b.getUser().getId().equals(actorId);
+            User recipient = cancelledByCustomer ? b.getReaderProfile().getUser() : b.getUser();
+            String who = cancelledByCustomer
+                    ? b.getUser().getFullName()
+                    : b.getReaderProfile().getUser().getFullName();
+            notificationService.push(recipient, NotificationTypes.BOOKING_CANCELLED,
+                    "Lịch hẹn đã bị huỷ",
+                    who + " đã huỷ buổi xem"
+                            + (b.getCancelReason() == null ? "." : ": " + b.getCancelReason()),
+                    Map.of("bookingId", b.getId().toString(),
+                            NotificationTypes.SIDE,
+                            cancelledByCustomer
+                                    ? NotificationTypes.SIDE_READER
+                                    : NotificationTypes.SIDE_CUSTOMER));
+        }
 
         return toResponse(b, false);
     }

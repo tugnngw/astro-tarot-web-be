@@ -133,6 +133,8 @@ services:
         sync: false
       - key: GEMINI_API_ENDPOINT
         sync: false
+      - key: BANK_BIN
+        value: "970436"
       - key: BANK_NAME
         sync: false
       - key: BANK_ACCOUNT_NUMBER
