@@ -20,8 +20,20 @@ public interface PaymentService {
 
     PaymentTransactionResponse reject(UUID actorId, UUID transactionId, String reason);
 
-    /** Huỷ lịch đã trả tiền: gỡ khỏi ký quỹ và đánh dấu chờ hoàn. Không làm gì nếu chưa trả. */
-    void refundIfPaid(Booking booking);
+    /**
+     * Huỷ lịch: hoàn tiền hoặc xử lý mất cọc. Số tiền hoàn do caller quyết định.
+     *
+     * <p>amount = 0 thì không gọi cổng thanh toán (chỉ cập nhật trạng thái).
+     * Nếu booking ở trạng thái DEPOSIT_PAID và user hủy sớm (≥12h),
+     * amount sẽ bằng depositAmount (hoàn cọc). Nếu hủy muộn (<12h),
+     * amount = 0 và forfeitedAmount được chuyển cho reader.
+     */
+    void refund(Booking booking, long amount);
+
+    /**
+     * Xử lý mất cọc khi booking bị hủy. Chuyển forfeitedAmount cho reader.
+     */
+    void forfeitDeposit(Booking booking);
 
     /**
      * Webhook PayOS (đã verify chữ ký). Body thô từ cổng — SDK tự kiểm checksum.

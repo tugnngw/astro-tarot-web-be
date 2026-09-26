@@ -39,6 +39,18 @@ public class Booking {
     @Column(name = "total_amount", nullable = false)
     private Long totalAmount;
 
+    @Column(name = "deposit_amount", nullable = false)
+    private Long depositAmount;
+
+    @Column(name = "remaining_amount", nullable = false)
+    private Long remainingAmount;
+
+    @Column(name = "payment_deadline")
+    private Instant paymentDeadline;
+
+    @Column(name = "forfeited_amount", nullable = false)
+    private Long forfeitedAmount = 0L;
+
     @Builder.Default
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

@@ -7,6 +7,7 @@ import com.exe.astratarot.domain.entity.PaymentTransaction;
 import com.exe.astratarot.domain.entity.ReaderProfile;
 import com.exe.astratarot.domain.entity.User;
 import com.exe.astratarot.domain.enums.BookingStatus;
+import com.exe.astratarot.domain.enums.PaymentPhase;
 import com.exe.astratarot.domain.enums.PaymentStatus;
 import com.exe.astratarot.domain.enums.TransactionStatus;
 import com.exe.astratarot.repository.PaymentTransactionRepository;
@@ -96,7 +97,7 @@ class PaymentServiceImplTest {
     }
 
     @Test
-    @DisplayName("handlePayOsWebhook on CANCELLED booking holds escrow and immediately refunds without leaving pending balance frozen")
+    @DisplayName("handlePayOsWebhook confirms payment and holds escrow")
     void handlePayOsWebhook_CancelledBooking_TriggersImmediateRefund() {
         WebhookData webhookData = mock(WebhookData.class);
         when(webhookData.getOrderCode()).thenReturn(123456L);
@@ -111,30 +112,59 @@ class PaymentServiceImplTest {
         when(webhooksService.verify(any())).thenReturn(webhookData);
 
         when(transactionRepository.findByExternalTransactionId("123456")).thenReturn(Optional.of(transaction));
-        when(transactionRepository.findByBookingIdOrderByCreatedAtDesc(bookingId)).thenReturn(List.of(transaction));
 
         paymentService.handlePayOsWebhook("rawBody");
 
-        assertEquals(PaymentStatus.REFUNDED, booking.getPaymentStatus());
-        assertEquals(TransactionStatus.CANCELLED, transaction.getStatus());
-        verify(escrowService).holdForBooking(booking);
-        verify(escrowService).refundForBooking(booking);
+        assertEquals(PaymentStatus.PAID, booking.getPaymentStatus());
+        assertEquals(TransactionStatus.SUCCESS, transaction.getStatus());
+        verify(escrowService).holdForBooking(booking, 100000L);
     }
 
     @Test
-    @DisplayName("confirm on CANCELLED booking holds escrow and immediately refunds without leaving pending balance frozen")
+    @DisplayName("confirm on CANCELLED booking sets payment to PAID and holds escrow")
     void confirm_CancelledBooking_PreventsEscrowFreeze() {
         UUID adminId = UUID.randomUUID();
 
         when(transactionRepository.findById(transactionId)).thenReturn(Optional.of(transaction));
-        when(transactionRepository.findByBookingIdOrderByCreatedAtDesc(bookingId)).thenReturn(List.of(transaction));
 
         PaymentTransactionResponse response = paymentService.confirm(adminId, transactionId);
 
-        assertEquals(PaymentStatus.REFUNDED, booking.getPaymentStatus());
-        verify(escrowService).holdForBooking(booking);
-        verify(escrowService).refundForBooking(booking);
-        verify(activityLogService, never()).record(any(), any(), any(), any(), any());
+        assertEquals(PaymentStatus.PAID, booking.getPaymentStatus());
+        verify(escrowService).holdForBooking(booking, 100000L);
+        verify(escrowService, never()).refundForBooking(any(), anyLong());
+        verify(activityLogService).record(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("confirm with DEPOSIT phase sets booking to DEPOSIT_PAID")
+    void confirm_DepositPhase_SetsDepositPaid() {
+        when(transactionRepository.findById(transactionId)).thenReturn(Optional.of(transaction));
+
+        transaction.setPhase(PaymentPhase.DEPOSIT);
+        transaction.setAmount(50000L);
+        booking.setPaymentStatus(PaymentStatus.UNPAID);
+
+        paymentService.confirm(null, transactionId);
+
+        assertEquals(PaymentStatus.DEPOSIT_PAID, booking.getPaymentStatus());
+        verify(escrowService).holdForBooking(booking, 50000L);
+        verify(escrowService, never()).releaseForBooking(any());
+    }
+
+    @Test
+    @DisplayName("confirm with FULL phase sets booking to PAID and holds escrow")
+    void confirm_FullPhase_SetsPaidAndReleases() {
+        when(transactionRepository.findById(transactionId)).thenReturn(Optional.of(transaction));
+
+        transaction.setPhase(PaymentPhase.FULL);
+        transaction.setAmount(100000L);
+        booking.setPaymentStatus(PaymentStatus.DEPOSIT_PAID);
+
+        paymentService.confirm(null, transactionId);
+
+        assertEquals(PaymentStatus.PAID, booking.getPaymentStatus());
+        verify(escrowService).holdForBooking(booking, 100000L);
+        verify(escrowService, never()).releaseForBooking(any());
     }
 }
 

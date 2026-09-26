@@ -30,7 +30,7 @@ public interface EscrowService {
     EscrowAccount getOrCreate(UUID userId);
 
     /** Khách trả tiền: cộng vào phần đang giữ của Reader. */
-    void holdForBooking(Booking booking);
+    void holdForBooking(Booking booking, long amount);
 
     /**
      * Buổi xem hoàn tất: chuyển từ đang giữ sang rút được, sau khi trừ phí
@@ -39,7 +39,15 @@ public interface EscrowService {
     void releaseForBooking(Booking booking);
 
     /** Huỷ sau khi đã trả tiền: gỡ khỏi phần đang giữ để hoàn lại cho khách. */
-    void refundForBooking(Booking booking);
+    void refundForBooking(Booking booking, long amount);
+
+    /**
+     * Nhả một phần tiền cho Reader khi user hủy muộn (mất cọc).
+     *
+     * <p>Phần bị mất ({@code amount}) chuyển cho reader, đã trừ
+     * phí nền tảng 15%.
+     */
+    void releasePartialForBooking(Booking booking, long amount);
 
     /**
      * Trừ tiền phạt khi một báo cáo vi phạm được kết luận là đúng.

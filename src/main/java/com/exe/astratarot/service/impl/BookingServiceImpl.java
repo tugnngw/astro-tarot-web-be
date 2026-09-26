@@ -8,6 +8,8 @@ import com.exe.astratarot.domain.entity.ReaderAvailability;
 import com.exe.astratarot.domain.entity.ReaderProfile;
 import com.exe.astratarot.domain.entity.User;
 import com.exe.astratarot.domain.enums.BookingStatus;
+import com.exe.astratarot.domain.enums.PaymentPhase;
+import com.exe.astratarot.domain.enums.PaymentStatus;
 import com.exe.astratarot.exception.ResourceNotFoundException;
 import com.exe.astratarot.repository.BookingRepository;
 import com.exe.astratarot.repository.ReaderAvailabilityRepository;
@@ -18,6 +20,7 @@ import com.exe.astratarot.repository.UserRepository;
 import com.exe.astratarot.service.BookingService;
 import com.exe.astratarot.service.NotificationService;
 import com.exe.astratarot.service.NotificationTypes;
+import com.exe.astratarot.service.BookingService.ActorType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -69,19 +72,15 @@ public class BookingServiceImpl implements BookingService {
     /** Bước nhảy khi sinh khung giờ gợi ý. */
     private static final int SLOT_STEP_MINUTES = 15;
 
+    /** Mốc 12 giờ trước giờ hẹn — dùng chung cho cả hạn nộp tiền và hủy miễn phí. */
+    private static final int CANCELLATION_DEADLINE_HOURS = 12;
+
     // =========================================================
     // Khung giờ trống
     // =========================================================
 
     @Override
     @Transactional(readOnly = true)
-    /**
-     * Dò từng ngày cho tới khi thấy ngày còn khung trống.
-     *
-     * Mỗi ngày là vài truy vấn nhỏ, và thực tế hầu như dừng ngay ở ngày đầu
-     * hoặc ngày thứ hai. Chặn trên horizonDays để một Reader không khai lịch
-     * bao giờ cũng không kéo dài vòng lặp vô ích.
-     */
     public java.util.Optional<LocalDate> nextAvailableDate(
             UUID readerProfileId, LocalDate from, int durationMinutes, int horizonDays) {
         requireAllowedDuration(durationMinutes);
@@ -99,13 +98,10 @@ public class BookingServiceImpl implements BookingService {
         ReaderProfile reader = findReader(readerProfileId);
         long price = priceFor(reader, durationMinutes);
 
-        // Ngày Reader báo bận thì không sinh khung nào, kể cả khi lịch tuần có.
         if (unavailableDateRepository.existsByReaderIdAndUnavailableDate(readerProfileId, date)) {
             return List.of();
         }
 
-        // ReaderAvailability dùng 0 = Chủ nhật (quy ước của JS/Postgres), còn
-        // java.time.DayOfWeek đánh 7 cho Chủ nhật — nên phải lấy phần dư.
         short dayOfWeek = (short) (date.getDayOfWeek().getValue() % 7);
 
         List<ReaderAvailability> windows = availabilityRepository
@@ -127,8 +123,6 @@ public class BookingServiceImpl implements BookingService {
                 Instant start = LocalDateTime.of(date, cursor).atZone(ZONE).toInstant();
                 Instant end = start.plus(durationMinutes, ChronoUnit.MINUTES);
 
-                // Khung đã qua thì không gợi ý nữa — hiện ra chỉ để người dùng
-                // bấm vào rồi nhận lỗi.
                 boolean inFuture = start.isAfter(now);
                 boolean free = taken.stream().noneMatch(b -> overlaps(b, start, end));
                 if (inFuture && free) {
@@ -177,11 +171,24 @@ public class BookingServiceImpl implements BookingService {
             throw new IllegalArgumentException("Khung giờ này nằm ngoài lịch làm việc của Reader");
         }
 
-        // Kiểm tra chồng lấn NGAY TRƯỚC khi ghi. Hai người bấm cùng lúc vẫn có
-        // thể lọt qua khe này; hàng rào cuối cùng phải là một ràng buộc ở tầng
-        // database — ghi lại ở README để không quên.
         if (!bookingRepository.findOverlapping(reader.getId(), start, end).isEmpty()) {
             throw new IllegalArgumentException("Khung giờ này vừa có người đặt mất rồi");
+        }
+
+        long totalAmount = priceFor(reader, duration);
+        long depositAmount = totalAmount / 2;
+        long remainingAmount = totalAmount - depositAmount;
+
+        // Xác định payment_deadline và paymentPhase
+        Instant paymentDeadline = null;
+        boolean withinDeadline = true;
+        Instant twelveHoursBeforeStart = start.minus(CANCELLATION_DEADLINE_HOURS, ChronoUnit.HOURS);
+        if (Instant.now().isAfter(twelveHoursBeforeStart)) {
+            // Còn < 12h → không có deadline, đặt cọc không áp dụng
+            withinDeadline = false;
+            paymentDeadline = null;
+        } else {
+            paymentDeadline = twelveHoursBeforeStart;
         }
 
         Booking booking = bookingRepository.save(Booking.builder()
@@ -189,8 +196,13 @@ public class BookingServiceImpl implements BookingService {
                 .readerProfile(reader)
                 .startTime(start)
                 .endTime(end)
-                .totalAmount(priceFor(reader, duration))
+                .totalAmount(totalAmount)
+                .depositAmount(depositAmount)
+                .remainingAmount(remainingAmount)
+                .paymentDeadline(paymentDeadline)
                 .status(BookingStatus.PENDING)
+                .paymentStatus(withinDeadline ? PaymentStatus.UNPAID : PaymentStatus.UNPAID)
+                // Lưu ý: paymentStatus vẫn là UNPAID; phase được xác định khi tạo intent
                 .build());
 
         notificationService.push(reader.getUser(), NotificationTypes.BOOKING_CREATED,
@@ -198,7 +210,8 @@ public class BookingServiceImpl implements BookingService {
                 customer.getFullName() + " vừa đặt một buổi xem " + duration + " phút.",
                 Map.of("bookingId", booking.getId().toString()));
 
-        log.info("Booking {} : {} đặt lịch với reader {}", booking.getId(), customerId, reader.getId());
+        log.info("Booking {} : {} đặt lịch với reader {}, depositAmount={}, remainingAmount={}, withinDeadline={}",
+                booking.getId(), customerId, reader.getId(), depositAmount, remainingAmount, withinDeadline);
         return toResponse(booking, reviewRepository.existsByBookingId(booking.getId()));
     }
 
@@ -253,18 +266,18 @@ public class BookingServiceImpl implements BookingService {
         requireReader(b, readerUserId);
         requireStatus(b, BookingStatus.CONFIRMED, "Chỉ hoàn tất được lịch đã xác nhận");
 
-        // Không cho đánh dấu hoàn tất trước giờ hẹn: đó là con đường để nhận
-        // tiền cho một buổi xem chưa diễn ra.
         if (Instant.now().isBefore(b.getStartTime())) {
             throw new IllegalArgumentException("Buổi xem chưa tới giờ, chưa hoàn tất được");
         }
 
         b.setStatus(BookingStatus.COMPLETED);
 
-        // Nhả tiền cho Reader ở đúng thời điểm này, không sớm hơn. Chỉ nhả khi
-        // khách đã trả — buổi xem chưa thanh toán thì không có gì trong ký quỹ.
-        if (b.getPaymentStatus() == com.exe.astratarot.domain.enums.PaymentStatus.PAID) {
+        // Chỉ nhả escrow khi PAID (đã trả đủ 100%)
+        if (b.getPaymentStatus() == PaymentStatus.PAID) {
             escrowService.releaseForBooking(b);
+        } else {
+            log.warn("Booking {} ở trạng thái paymentStatus={}, không nhả escrow khi complete",
+                    bookingId, b.getPaymentStatus());
         }
         notificationService.push(b.getUser(), NotificationTypes.BOOKING_COMPLETED,
                 "Buổi xem đã hoàn tất",
@@ -274,16 +287,6 @@ public class BookingServiceImpl implements BookingService {
         return toResponse(b, false);
     }
 
-    /**
-     * Reader viết (hoặc sửa) ghi chú buổi xem.
-     *
-     * <p>Chỉ sau giờ hẹn. Ghi chú là bản tường thuật một buổi đã diễn ra; viết
-     * trước giờ hẹn thì nó là một lời hứa, không phải bản tường thuật, và
-     * chính nó sẽ trở thành bằng chứng sai lệch nếu buổi xem bị huỷ.
-     *
-     * <p>Cho sửa lại về sau chứ không khoá sau lần ghi đầu: sửa chính tả hay
-     * viết thêm một ý vừa nhớ ra là chuyện bình thường của người viết tay.
-     */
     @Override
     @Transactional
     public BookingResponse saveReaderNote(UUID readerUserId, UUID bookingId, String note) {
@@ -301,8 +304,6 @@ public class BookingServiceImpl implements BookingService {
         b.setReaderNote(sach);
         b.setReaderNoteAt(sach == null ? null : Instant.now());
 
-        // Chỉ báo cho khách khi thật sự có nội dung. Xoá ghi chú mà vẫn gửi
-        // thông báo "Reader đã gửi ghi chú" là nói dối họ.
         if (sach != null) {
             notificationService.push(b.getUser(), NotificationTypes.BOOKING_COMPLETED,
                     "Reader đã gửi ghi chú buổi xem",
@@ -313,9 +314,20 @@ public class BookingServiceImpl implements BookingService {
         return toResponse(b, false);
     }
 
+    /**
+     * Huỷ booking với chính sách mới.
+     *
+     * <p>Bảng quy tắc:
+     * <ul>
+     *   <li>Reader/Admin hủy (bất kỳ lúc nào): hoàn 100%</li>
+     *   <li>User hủy ≥ 12h trước giờ hẹn: hoàn 100%</li>
+     *   <li>User hủy &lt; 12h trước giờ hẹn: mất cọc, hoàn (đã trả - cọc)</li>
+     *   <li>SYSTEM (quá hạn paymentDeadline): mất cọc</li>
+     * </ul>
+     */
     @Override
     @Transactional
-    public BookingResponse cancel(UUID actorId, UUID bookingId, String reason) {
+    public BookingResponse cancel(UUID actorId, UUID bookingId, String reason, ActorType actorType) {
         Booking b = bookingRepository.findByIdForUpdate(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy buổi xem"));
         requireParty(b, actorId);
@@ -329,9 +341,34 @@ public class BookingServiceImpl implements BookingService {
 
         b.setStatus(BookingStatus.CANCELLED);
 
-        // Đã trả tiền thì gỡ khỏi ký quỹ và đánh dấu chờ hoàn. Không làm gì nếu
-        // chưa trả.
-        paymentService.refundIfPaid(b);
+        long hoursUntilStart = Duration.between(Instant.now(), b.getStartTime()).toHours();
+        boolean isUserCancel = (actorType == ActorType.USER);
+        boolean isEarlyCancel = hoursUntilStart >= CANCELLATION_DEADLINE_HOURS;
+        boolean isReaderOrAdminCancel = (actorType == ActorType.READER || actorType == ActorType.ADMIN);
+
+        if (isReaderOrAdminCancel) {
+            // Reader hoặc admin hủy → hoàn 100% số đã trả
+            long amountToRefund = getAmountPaid(b);
+            paymentService.refund(b, amountToRefund);
+            log.info("Booking {} bị hủy bởi {}. Hoàn 100% ({})", bookingId, actorType, amountToRefund);
+        } else if (isUserCancel && isEarlyCancel) {
+            // User hủy sớm (≥ 12h) → hoàn 100%
+            long amountToRefund = getAmountPaid(b);
+            paymentService.refund(b, amountToRefund);
+            log.info("Booking {} bị user hủy sớm ({}h). Hoàn 100% ({})", bookingId, hoursUntilStart, amountToRefund);
+        } else if (isUserCancel && !isEarlyCancel) {
+            // User hủy muộn (< 12h) → mất cọc, hoàn (đã trả - cọc)
+            long depositAmount = b.getDepositAmount();
+            long paidSoFar = getAmountPaid(b);
+            long refundAmount = Math.max(0, paidSoFar - depositAmount);
+            paymentService.refund(b, refundAmount);
+            paymentService.forfeitDeposit(b);
+            log.info("Booking {} bị user hủy muộn ({}h). Mất cọc {}, hoàn {}", bookingId, hoursUntilStart, depositAmount, refundAmount);
+        } else {
+            // SYSTEM (quá hạn) hoặc trường hợp khác → mất cọc
+            paymentService.forfeitDeposit(b);
+            log.info("Booking {} bị hủy do quá hạn. Mất cọc {}", bookingId, b.getDepositAmount());
+        }
 
         b.setCancelReason(reason == null || reason.isBlank() ? null : reason.trim());
 
@@ -348,6 +385,16 @@ public class BookingServiceImpl implements BookingService {
                 Map.of("bookingId", b.getId().toString()));
 
         return toResponse(b, false);
+    }
+
+    /** Lấy tổng số tiền đã thanh toán của booking. */
+    private long getAmountPaid(Booking b) {
+        if (b.getPaymentStatus() == PaymentStatus.PAID) {
+            return b.getTotalAmount();
+        } else if (b.getPaymentStatus() == PaymentStatus.DEPOSIT_PAID) {
+            return b.getDepositAmount();
+        }
+        return 0L;
     }
 
     // =========================================================
@@ -376,8 +423,6 @@ public class BookingServiceImpl implements BookingService {
         LocalDateTime localStart = LocalDateTime.ofInstant(start, ZONE);
         LocalDateTime localEnd = LocalDateTime.ofInstant(end, ZONE);
 
-        // Buổi xem vắt qua nửa đêm thì không có khung nào chứa nổi, và cũng
-        // không ai đặt lịch kiểu đó.
         if (!localStart.toLocalDate().equals(localEnd.toLocalDate())) {
             return false;
         }
@@ -455,6 +500,7 @@ public class BookingServiceImpl implements BookingService {
         User customer = b.getUser();
         return BookingResponse.builder()
                 .id(b.getId())
+                .status(b.getStatus().name())
                 .readerProfileId(b.getReaderProfile().getId())
                 .readerUserId(reader.getId())
                 .readerName(reader.getFullName())
@@ -466,8 +512,11 @@ public class BookingServiceImpl implements BookingService {
                 .endTime(b.getEndTime())
                 .durationMinutes((int) Duration.between(b.getStartTime(), b.getEndTime()).toMinutes())
                 .totalAmount(b.getTotalAmount())
-                .status(b.getStatus().name())
+                .depositAmount(b.getDepositAmount())
+                .remainingAmount(b.getRemainingAmount())
+                .paymentDeadline(b.getPaymentDeadline())
                 .paymentStatus(b.getPaymentStatus().name())
+                .forfeitedAmount(b.getForfeitedAmount())
                 .cancelReason(b.getCancelReason())
                 .reviewed(reviewed)
                 .readerNote(b.getReaderNote())

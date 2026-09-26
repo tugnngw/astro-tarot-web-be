@@ -17,11 +17,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -92,7 +94,7 @@ class EscrowServiceImplTest {
         when(escrowTransactionRepository.existsByBookingIdAndKind(bookingId, Kind.REFUND)).thenReturn(false);
         when(escrowAccountRepository.findByUserId(readerUserId)).thenReturn(Optional.of(escrowAccount));
 
-        escrowService.refundForBooking(booking);
+        escrowService.refundForBooking(booking, 100000L);
 
         assertEquals(0L, escrowAccount.getPendingBalance());
         verify(escrowAccountRepository).save(escrowAccount);
@@ -104,11 +106,61 @@ class EscrowServiceImplTest {
     void refundForBooking_SecondCall_IdempotentSkip() {
         when(escrowTransactionRepository.existsByBookingIdAndKind(bookingId, Kind.REFUND)).thenReturn(true);
 
-        escrowService.refundForBooking(booking);
+        escrowService.refundForBooking(booking, 100000L);
 
         assertEquals(100000L, escrowAccount.getPendingBalance());
         verify(escrowAccountRepository, never()).findByUserId(any());
         verify(escrowAccountRepository, never()).save(any());
         verify(escrowTransactionRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("releasePartialForBooking transfers amount minus 15% fee to reader balance")
+    void releasePartialForBooking_TransfersNetAmount() {
+        when(escrowAccountRepository.findByUserId(readerUserId)).thenReturn(Optional.of(escrowAccount));
+
+        // 50,000 deposit - 15% fee (7,500) = 42,500 net
+        escrowService.releasePartialForBooking(booking, 50000L);
+
+        assertEquals(100000L, escrowAccount.getPendingBalance());
+        assertEquals(42500L, escrowAccount.getBalance());
+        assertEquals(42500L, escrowAccount.getTotalEarned());
+
+        verify(escrowAccountRepository).save(escrowAccount);
+        verify(escrowTransactionRepository).save(any(EscrowTransaction.class));
+    }
+
+    @Test
+    @DisplayName("releasePartialForBooking with 0 amount does not change balance")
+    void releasePartialForBooking_ZeroAmount_NoChange() {
+        escrowService.releasePartialForBooking(booking, 0L);
+
+        assertEquals(100000L, escrowAccount.getPendingBalance());
+        assertEquals(0L, escrowAccount.getBalance());
+        verify(escrowAccountRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("holdForBooking with specific amount holds correct amount")
+    void holdForBooking_CorrectAmount() {
+        when(escrowAccountRepository.findByUserId(readerUserId)).thenReturn(Optional.of(escrowAccount));
+
+        escrowService.holdForBooking(booking, 50000L);
+
+        assertEquals(150000L, escrowAccount.getPendingBalance());
+        verify(escrowAccountRepository).save(escrowAccount);
+    }
+
+    @Test
+    @DisplayName("refundForBooking with specific amount refunds correct amount")
+    void refundForBooking_ExactAmount() {
+        when(escrowTransactionRepository.existsByBookingIdAndKind(bookingId, Kind.REFUND)).thenReturn(false);
+        when(escrowAccountRepository.findByUserId(readerUserId)).thenReturn(Optional.of(escrowAccount));
+
+        escrowService.refundForBooking(booking, 50000L);
+
+        assertEquals(50000L, escrowAccount.getPendingBalance());
+        verify(escrowAccountRepository).save(escrowAccount);
+        verify(escrowTransactionRepository).save(any(EscrowTransaction.class));
     }
 }

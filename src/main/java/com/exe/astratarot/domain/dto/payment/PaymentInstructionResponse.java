@@ -23,6 +23,8 @@ public class PaymentInstructionResponse {
     private Long amount;
     /** BANK_TRANSFER hoặc PAYOS */
     private String paymentMethod;
+    /** DEPOSIT, REMAINING, hoặc FULL */
+    private String paymentPhase;
     /** Khách gõ đúng chuỗi này vào nội dung chuyển khoản (hoặc mã order PayOS). */
     private String referenceCode;
     private String bankName;

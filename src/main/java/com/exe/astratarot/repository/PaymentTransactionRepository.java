@@ -1,6 +1,7 @@
 package com.exe.astratarot.repository;
 
 import com.exe.astratarot.domain.entity.PaymentTransaction;
+import com.exe.astratarot.domain.enums.PaymentPhase;
 import com.exe.astratarot.domain.enums.TransactionStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,6 +18,13 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     List<PaymentTransaction> findByBookingIdOrderByCreatedAtDesc(UUID bookingId);
 
     Optional<PaymentTransaction> findFirstByBookingIdAndStatus(UUID bookingId, TransactionStatus status);
+
+    /**
+     * Tìm giao dịch PENDING/FAILED cùng booking và phase — dùng để
+     * cho phép retry trong cùng một phase khi giao dịch trước thất bại.
+     */
+    Optional<PaymentTransaction> findFirstByBookingIdAndStatusAndPhase(
+            UUID bookingId, TransactionStatus status, PaymentPhase phase);
 
     Optional<PaymentTransaction> findByExternalTransactionId(String externalTransactionId);
 

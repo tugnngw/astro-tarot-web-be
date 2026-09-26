@@ -103,5 +103,32 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     // Dem tat ca booking theo trang thai — cho bang thong ke quan tri.
     long countByStatus(BookingStatus status);
 
+    /**
+     * Những booking DEPOSIT_PAID đang quá hạn thanh toán nốt
+     * (paymentDeadline đã qua mà paymentStatus vẫn là DEPOSIT_PAID).
+     */
+    @Query("""
+            SELECT b.id FROM Booking b
+            WHERE b.paymentStatus = :status
+              AND b.paymentDeadline IS NOT NULL
+              AND b.paymentDeadline < :now
+            """)
+    List<UUID> findOverdueDepositPaid(@Param("status") PaymentStatus status,
+                                       @Param("now") Instant now);
+
+    /**
+     * Những booking DEPOSIT_PAID sắp đến hạn nhắc thanh toán (T-24h).
+     */
+    @Query("""
+            SELECT b.id FROM Booking b
+            WHERE b.paymentStatus = :status
+              AND b.paymentDeadline IS NOT NULL
+              AND b.paymentDeadline BETWEEN :now AND :nextDeadline
+            """)
+    List<UUID> findDepositPaidNearDeadline(
+            @Param("status") PaymentStatus status,
+            @Param("now") Instant now,
+            @Param("nextDeadline") Instant nextDeadline);
+
     boolean existsByUserIdAndReaderProfileIdAndStatus(UUID userId, UUID readerProfileId, BookingStatus status);
 }

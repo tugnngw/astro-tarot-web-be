@@ -177,7 +177,7 @@ public class BookingController {
             @PathVariable UUID id,
             @Valid @RequestBody(required = false) CancelBookingRequest request) {
         return ResponseEntity.ok(ApiResponse.success("Đã huỷ lịch hẹn", bookingService.cancel(
-                me.getUser().getId(), id, request == null ? null : request.getReason())));
+                me.getUser().getId(), id, request == null ? null : request.getReason(), BookingService.ActorType.USER)));
     }
 
     @PostMapping("/bookings/{id}/review")

@@ -86,14 +86,20 @@ public class EscrowServiceImpl implements EscrowService {
     // Theo lịch hẹn
     // =========================================================
 
+    /**
+     * Khách trả tiền: cộng đúng số tiền của giao dịch vào phần đang giữ.
+     *
+     * <p>Gọi từ {@link com.exe.astratarot.service.impl.PaymentServiceImpl#markPaid}
+     * với {@code tx.amount} — có thể là deposit, remaining, hoặc full amount.
+     */
     @Override
     @Transactional
-    public void holdForBooking(Booking booking) {
+    public void holdForBooking(Booking booking, long amount) {
         EscrowAccount escrow = getOrCreate(booking.getReaderProfile().getUser());
-        escrow.setPendingBalance(escrow.getPendingBalance() + booking.getTotalAmount());
-        ghiSo(escrow, Kind.HOLD, booking.getTotalAmount(), booking, null, null,
-                "Khách đã thanh toán. Tiền được giữ tới khi buổi xem hoàn tất.");
-        log.info("Ký quỹ giữ {} cho booking {}", booking.getTotalAmount(), booking.getId());
+        escrow.setPendingBalance(escrow.getPendingBalance() + amount);
+        ghiSo(escrow, Kind.HOLD, amount, booking, null, null,
+                "Khách đã trả " + amount + " ₫. Tiền được giữ tới khi buổi xem hoàn tất.");
+        log.info("Ký quỹ giữ {} cho booking {}", amount, booking.getId());
     }
 
     @Override
@@ -133,6 +139,69 @@ public class EscrowServiceImpl implements EscrowService {
         thuNoPhat(escrow, booking);
     }
 
+    /**
+     * Nhả một phần tiền cho Reader khi user hủy muộn (mất cọc).
+     *
+     * <p>Phần bị mất ({@code amount}) được chuyển cho reader,
+     * đã trừ phí nền tảng 15%. Số reader nhận = amount × 85%.
+     */
+    @Override
+    @Transactional
+    public void releasePartialForBooking(Booking booking, long amount) {
+        if (amount <= 0) {
+            log.info("Booking {} amount=0, không xử lý mất cọc.", booking.getId());
+            return;
+        }
+
+        EscrowAccount escrow = getOrCreate(booking.getReaderProfile().getUser());
+
+        // Phần bị mất chuyển cho reader, trừ phí nền tảng 15%
+        long fee = amount * PLATFORM_FEE_PERCENT / 100;
+        long netForReader = amount - fee;
+
+        escrow.setBalance(escrow.getBalance() + netForReader);
+        escrow.setTotalEarned(escrow.getTotalEarned() + netForReader);
+        ghiSo(escrow, Kind.RELEASE, netForReader, booking, null, null,
+                "Khách hủy muộn, mất cọc. Reader nhận " + netForReader
+                        + " ₫ (đã trừ phí " + PLATFORM_FEE_PERCENT + "%). Phí nền tảng: " + fee + " ₫.");
+
+        log.info("Nhả phần {} cho reader (fee={}, net={}) khi hủy muộn booking {}",
+                amount, fee, netForReader, booking.getId());
+
+        // Có nợ phạt thì thu ngay
+        thuNoPhat(escrow, booking);
+    }
+
+    /**
+     * Hoàn tiền cho khách với số tiền cụ thể.
+     *
+     * <p>Số tiền hoàn do caller quyết định (tùy theo chính sách hủy).
+     */
+    @Override
+    @Transactional
+    public void refundForBooking(Booking booking, long amount) {
+        if (amount <= 0) {
+            log.info("Booking {} amount=0, không hoàn tiền.", booking.getId());
+            return;
+        }
+        if (escrowTransactionRepository.existsByBookingIdAndKind(booking.getId(), Kind.REFUND)) {
+            log.info("Booking {} đã có giao dịch REFUND, bỏ qua để đảm bảo idempotency.", booking.getId());
+            return;
+        }
+
+        EscrowAccount escrow = getOrCreate(booking.getReaderProfile().getUser());
+
+        if (escrow.getPendingBalance() < amount) {
+            throw new IllegalStateException(
+                    "Số dư đang giữ không đủ để hoàn tiền cho lịch hẹn " + booking.getId()
+                            + ". Cần đối soát thủ công.");
+        }
+        escrow.setPendingBalance(escrow.getPendingBalance() - amount);
+        ghiSo(escrow, Kind.REFUND, amount, booking, null, null,
+                "Lịch hẹn bị huỷ. Hoàn " + amount + " ₫ cho khách.");
+        log.info("Ký quỹ hoàn {} cho booking {}", amount, booking.getId());
+    }
+
     /** Trừ dần nợ phạt vào số dư vừa nhả. Không đụng tới phần đang giữ. */
     private void thuNoPhat(EscrowAccount escrow, Booking booking) {
         long no = escrow.getPenaltyOwed();
@@ -149,28 +218,6 @@ public class EscrowServiceImpl implements EscrowService {
                                 + escrow.getPenaltyOwed() + " đ sẽ trừ vào lần sau."
                         : "Đã thu hết tiền phạt còn nợ.");
         log.info("Thu {} tiền phạt còn nợ của tài khoản ký quỹ {}", thu, escrow.getId());
-    }
-
-    @Override
-    @Transactional
-    public void refundForBooking(Booking booking) {
-        if (escrowTransactionRepository.existsByBookingIdAndKind(booking.getId(), Kind.REFUND)) {
-            log.info("Booking {} đã có giao dịch REFUND, bỏ qua để đảm bảo idempotency.", booking.getId());
-            return;
-        }
-
-        EscrowAccount escrow = getOrCreate(booking.getReaderProfile().getUser());
-        long amount = booking.getTotalAmount();
-
-        if (escrow.getPendingBalance() < amount) {
-            throw new IllegalStateException(
-                    "Số dư đang giữ không đủ để hoàn tiền cho lịch hẹn " + booking.getId()
-                            + ". Cần đối soát thủ công.");
-        }
-        escrow.setPendingBalance(escrow.getPendingBalance() - amount);
-        ghiSo(escrow, Kind.REFUND, amount, booking, null, null,
-                "Lịch hẹn bị huỷ sau khi khách đã trả. Tiền hoàn lại cho khách.");
-        log.info("Ký quỹ hoàn {} cho booking {}", amount, booking.getId());
     }
 
     // =========================================================

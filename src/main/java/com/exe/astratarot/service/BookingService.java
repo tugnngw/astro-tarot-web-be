@@ -55,5 +55,10 @@ public interface BookingService {
     BookingResponse saveReaderNote(UUID readerUserId, UUID bookingId, String note);
 
     /** Cả khách lẫn Reader đều huỷ được, miễn là buổi xem chưa hoàn tất. */
-    BookingResponse cancel(UUID actorId, UUID bookingId, String reason);
+    BookingResponse cancel(UUID actorId, UUID bookingId, String reason, ActorType actorType);
+
+    /** Actor type cho cancel — phân biệt USER, READER, ADMIN, SYSTEM. */
+    enum ActorType {
+        USER, READER, ADMIN, SYSTEM
+    }
 }

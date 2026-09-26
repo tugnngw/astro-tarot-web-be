@@ -37,6 +37,10 @@ public class BookingResponse {
     /** Số phút, suy ra từ start và end để giao diện không phải tự tính. */
     private int durationMinutes;
     private Long totalAmount;
+    private Long depositAmount;
+    private Long remainingAmount;
+    private Instant paymentDeadline;
+    private Long forfeitedAmount;
 
     private String status;
     private String paymentStatus;

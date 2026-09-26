@@ -7,6 +7,7 @@ import com.exe.astratarot.domain.dto.payment.PaymentTransactionResponse;
 import com.exe.astratarot.domain.entity.Booking;
 import com.exe.astratarot.domain.entity.PaymentTransaction;
 import com.exe.astratarot.domain.enums.BookingStatus;
+import com.exe.astratarot.domain.enums.PaymentPhase;
 import com.exe.astratarot.domain.enums.PaymentStatus;
 import com.exe.astratarot.domain.enums.TransactionStatus;
 import com.exe.astratarot.exception.ResourceNotFoundException;
@@ -33,6 +34,7 @@ import vn.payos.model.v2.paymentRequests.CreatePaymentLinkResponse;
 import vn.payos.model.webhooks.WebhookData;
 
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Locale;
@@ -42,7 +44,8 @@ import java.util.UUID;
 /**
  * Thanh toán buổi xem: PayOS (nếu cấu hình) hoặc chuyển khoản có mã tham chiếu.
  *
- * <p>Webhook PayOS xác nhận tự động rồi gọi cùng luồng ký quỹ như admin confirm.
+ * <p>Máy trạng thái: {@code UNPAID} → {@code DEPOSIT_PAID} → {@code PAID}.
+ * Webhook PayOS xác nhận tự động rồi gọi cùng luồng ký quỹ như admin confirm.
  */
 @Slf4j
 @Service
@@ -51,6 +54,9 @@ public class PaymentServiceImpl implements PaymentService {
 
     private static final String METHOD_BANK_TRANSFER = "BANK_TRANSFER";
     private static final String METHOD_PAYOS = "PAYOS";
+
+    /** Mốc 12 giờ trước giờ hẹn — dùng chung cho cả hạn nộp tiền và hủy miễn phí. */
+    private static final int CANCELLATION_DEADLINE_HOURS = 12;
 
     private final PaymentTransactionRepository transactionRepository;
     private final BookingRepository bookingRepository;
@@ -94,26 +100,76 @@ public class PaymentServiceImpl implements PaymentService {
         if (booking.getPaymentStatus() == PaymentStatus.PAID) {
             throw new IllegalArgumentException("Lịch hẹn này đã thanh toán rồi");
         }
+        if (booking.getPaymentStatus() == PaymentStatus.REFUNDED) {
+            throw new IllegalArgumentException("Lịch hẹn đã được hoàn tiền");
+        }
 
+        // Xác định phase dựa trên trạng thái booking
+        PaymentPhase phase;
+        long amount;
+
+        if (booking.getPaymentStatus() == PaymentStatus.DEPOSIT_PAID) {
+            // Đã đặt cọc → thanh toán nốt phần còn lại
+            // Chỉ cho tạo intent nếu chưa quá paymentDeadline
+            if (booking.getPaymentDeadline() != null
+                    && Instant.now().isAfter(booking.getPaymentDeadline())) {
+                // Quá hạn → tự động hủy (do scheduled job xử lý), nhưng
+                // vẫn cho tạo intent ở đây để user có thể thử trả nốt trước khi job chạy
+                log.warn("Booking {} quá hạn thanh toán nốt (deadline={}), vẫn cho tạo intent",
+                        booking.getId(), booking.getPaymentDeadline());
+            }
+            phase = PaymentPhase.REMAINING;
+            amount = booking.getRemainingAmount();
+        } else {
+            // UNPAID → xác định DEPOSIT hay FULL
+            if (isWithinDeadline(booking)) {
+                phase = PaymentPhase.DEPOSIT;
+                amount = booking.getDepositAmount();
+            } else {
+                // Còn < 12h → bắt buộc trả 100%
+                phase = PaymentPhase.FULL;
+                amount = booking.getTotalAmount();
+            }
+        }
+
+        // Kiểm tra đã có giao dịch PENDING cùng phase chưa (để cho retry khi FAILED)
         PaymentTransaction pending = transactionRepository
-                .findFirstByBookingIdAndStatus(bookingId, TransactionStatus.PENDING)
+                .findFirstByBookingIdAndStatusAndPhase(bookingId, TransactionStatus.PENDING, phase)
                 .orElse(null);
 
         if (pending != null) {
             return toInstruction(pending);
         }
 
-        if (payOsClient.enabled()) {
-            return createPayOsIntent(booking);
+        // Cho phép tạo intent mới nếu giao dịch trước cùng phase đã FAILED
+        PaymentTransaction failed = transactionRepository
+                .findFirstByBookingIdAndStatusAndPhase(bookingId, TransactionStatus.FAILED, phase)
+                .orElse(null);
+        if (failed != null) {
+            transactionRepository.delete(failed);
         }
-        return createBankTransferIntent(booking);
+
+        if (payOsClient.enabled()) {
+            return createPayOsIntent(booking, amount, phase);
+        }
+        return createBankTransferIntent(booking, amount, phase);
     }
 
-    private PaymentInstructionResponse createBankTransferIntent(Booking booking) {
+    private boolean isWithinDeadline(Booking booking) {
+        if (booking.getPaymentDeadline() == null) {
+            // Không có deadline → đặt sát giờ, nhưng đã ở UNPAID → tính theo DEPOSIT
+            // (trường hợp backfill từ migration cũ)
+            return true;
+        }
+        return Instant.now().isBefore(booking.getPaymentDeadline());
+    }
+
+    private PaymentInstructionResponse createBankTransferIntent(Booking booking, long amount, PaymentPhase phase) {
         PaymentTransaction pending = transactionRepository.save(PaymentTransaction.builder()
                 .booking(booking)
                 .user(booking.getUser())
-                .amount(booking.getTotalAmount())
+                .amount(amount)
+                .phase(phase)
                 .paymentMethod(METHOD_BANK_TRANSFER)
                 .externalTransactionId(generateReference())
                 .status(TransactionStatus.PENDING)
@@ -121,7 +177,7 @@ public class PaymentServiceImpl implements PaymentService {
         return toInstruction(pending);
     }
 
-    private PaymentInstructionResponse createPayOsIntent(Booking booking) {
+    private PaymentInstructionResponse createPayOsIntent(Booking booking, long amount, PaymentPhase phase) {
         long orderCode = nextOrderCode();
         String returnUrl = firstNonBlank(payOsProperties.getReturnUrl(),
                 trimSlash(frontendUrl) + "/bookings?payment=success");
@@ -136,7 +192,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         CreatePaymentLinkRequest request = CreatePaymentLinkRequest.builder()
                 .orderCode(orderCode)
-                .amount(booking.getTotalAmount())
+                .amount(amount)
                 .description(description)
                 .returnUrl(returnUrl)
                 .cancelUrl(cancelUrl)
@@ -163,7 +219,8 @@ public class PaymentServiceImpl implements PaymentService {
         PaymentTransaction pending = transactionRepository.save(PaymentTransaction.builder()
                 .booking(booking)
                 .user(booking.getUser())
-                .amount(booking.getTotalAmount())
+                .amount(amount)
+                .phase(phase)
                 .paymentMethod(METHOD_PAYOS)
                 .externalTransactionId(String.valueOf(orderCode))
                 .status(TransactionStatus.PENDING)
@@ -197,21 +254,6 @@ public class PaymentServiceImpl implements PaymentService {
         PaymentTransaction tx = transactionRepository.findByExternalTransactionId(orderKey)
                 .orElse(null);
 
-        // Không tìm thấy giao dịch KHÔNG phải là lỗi của ta, và tuyệt đối không
-        // được trả 5xx.
-        //
-        // Đây chính là nguyên nhân "Webhook url invalid" mỗi lần khởi động:
-        // khi đăng ký webhook, PayOS gọi thử chính URL này bằng một gói tin giả
-        // mang orderCode = 123. Chữ ký của gói tin đó hợp lệ nên nó đi qua
-        // verify(), rồi chết ở đây vì làm gì có giao dịch nào số 123. Ngoại lệ
-        // bay lên controller và thành HTTP 500, PayOS thấy 500 thì kết luận URL
-        // hỏng và từ chối đăng ký — suốt thời gian qua webhook chưa từng được
-        // đăng ký thành công.
-        //
-        // Không bắt riêng số 123: một magic number là thứ sẽ mục đi lặng lẽ khi
-        // PayOS đổi gói tin thử. Lý lẽ đúng rộng hơn thế — orderCode lạ thì
-        // không có việc gì để làm, và gọi lại mười lần cũng không làm nó tồn
-        // tại, nên báo nhận rồi thôi.
         if (tx == null) {
             log.info("PayOS webhook cho orderCode={} không khớp giao dịch nào. "
                     + "Thường là gói tin PayOS gửi thử lúc đăng ký webhook.", orderKey);
@@ -275,18 +317,25 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     // =========================================================
-    // Hoàn tiền khi huỷ
+    // Hoàn tiền / Mất cọc khi huỷ
     // =========================================================
 
     @Override
     @Transactional
-    public void refundIfPaid(Booking booking) {
-        if (booking.getPaymentStatus() != PaymentStatus.PAID) {
+    public void refund(Booking booking, long amount) {
+        if (amount <= 0) {
+            // Không có tiền để hoàn — chỉ cập nhật trạng thái (trường hợp hủy muộn, mất cọc)
+            log.info("Booking {} hủy, không có tiền hoàn (amount=0)", booking.getId());
             return;
         }
-        escrowService.refundForBooking(booking);
+        if (booking.getPaymentStatus() != PaymentStatus.PAID && booking.getPaymentStatus() != PaymentStatus.DEPOSIT_PAID) {
+            log.info("Booking {} không cần hoàn tiền (paymentStatus={})", booking.getId(), booking.getPaymentStatus());
+            return;
+        }
+        escrowService.refundForBooking(booking, amount);
         booking.setPaymentStatus(PaymentStatus.REFUNDED);
 
+        // Đánh dấu tất cả giao dịch SUCCESS thành CANCELLED
         transactionRepository.findByBookingIdOrderByCreatedAtDesc(booking.getId()).stream()
                 .filter(t -> t.getStatus() == TransactionStatus.SUCCESS)
                 .findFirst()
@@ -294,11 +343,44 @@ public class PaymentServiceImpl implements PaymentService {
 
         notificationService.push(booking.getUser(), NotificationTypes.PAYMENT_REFUNDED,
                 "Lịch hẹn đã huỷ, tiền sẽ được hoàn",
-                "Khoản " + booking.getTotalAmount()
-                        + " ₫ sẽ được chuyển lại trong 1-3 ngày làm việc.",
+                "Khoản " + amount + " ₫ sẽ được chuyển lại trong 1-3 ngày làm việc.",
                 Map.of("bookingId", booking.getId().toString()));
 
-        log.info("Đánh dấu hoàn tiền cho booking {}", booking.getId());
+        log.info("Hoàn tiền {} cho booking {}", amount, booking.getId());
+    }
+
+    /**
+     * Xử lý mất cọc khi booking bị hủy muộn hoặc quá hạn.
+     *
+     * <p>Phần forfeitedAmount được chuyển cho reader (đã trừ 15% phí nền tảng).
+     */
+    @Override
+    @Transactional
+    public void forfeitDeposit(Booking booking) {
+        if (booking.getPaymentStatus() != PaymentStatus.DEPOSIT_PAID) {
+            log.warn("Booking {} không ở trạng thái DEPOSIT_PAID, không thể mất cọc", booking.getId());
+            return;
+        }
+        long forfeitedAmount = booking.getDepositAmount();
+        booking.setForfeitedAmount(forfeitedAmount);
+        booking.setPaymentStatus(PaymentStatus.REFUNDED); // Đánh dấu hoàn cuối cùng cho sổ cái
+
+        escrowService.releasePartialForBooking(booking, forfeitedAmount);
+
+        notificationService.push(booking.getUser(), NotificationTypes.PAYMENT_FORFEITED,
+                "Mất tiền đặt cọc",
+                "Bạn đã hủy muộn hoặc quá hạn thanh toán. Khoản đặt cọc "
+                        + forfeitedAmount + " ₫ được chuyển cho reader.",
+                Map.of("bookingId", booking.getId().toString()));
+
+        notificationService.push(booking.getReaderProfile().getUser(), NotificationTypes.PAYMENT_FORFEITED,
+                "Nhận tiền bù do khách hủy muộn",
+                "Khách đã hủy muộn hoặc quá hạn. Khoản bù "
+                        + (forfeitedAmount - (long)(forfeitedAmount * 0.15))
+                        + " ₫ (đã trừ phí nền tảng) được cộng vào tài khoản.",
+                Map.of("bookingId", booking.getId().toString()));
+
+        log.info("Mất cọc {} cho booking {}", forfeitedAmount, booking.getId());
     }
 
     // =========================================================
@@ -312,32 +394,54 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         tx.setStatus(TransactionStatus.SUCCESS);
-        booking.setPaymentStatus(PaymentStatus.PAID);
-        escrowService.holdForBooking(booking);
 
-        if (booking.getStatus() == BookingStatus.CANCELLED) {
-            refundIfPaid(booking);
-            log.info("Late payment for cancelled booking {} processed and immediately marked for refund", booking.getId());
-            return;
+        // Xác định trạng thái booking dựa vào phase của giao dịch
+        if (tx.getPhase() == PaymentPhase.DEPOSIT) {
+            // Đặt cọc thành công → chuyển sang DEPOSIT_PAID
+            booking.setPaymentStatus(PaymentStatus.DEPOSIT_PAID);
+            log.info("Đặt cọc thành công cho booking {} (phase=DEPOSIT)", booking.getId());
+        } else {
+            // Thanh toán nốt hoặc trả đủ → PAID
+            booking.setPaymentStatus(PaymentStatus.PAID);
+            log.info("Thanh toán thành công cho booking {} (phase={})", booking.getId(), tx.getPhase());
         }
+
+        // Giữ đúng số tiền của giao dịch này vào escrow
+        escrowService.holdForBooking(booking, tx.getAmount());
 
         activityLogService.record(actorId, AdminActions.PAYMENT_CONFIRM, AdminActions.ENTITY_PAYMENT,
                 tx.getId(), Map.of(
                         "amount", tx.getAmount(),
+                        "phase", tx.getPhase() != null ? tx.getPhase().name() : "N/A",
                         "bookingId", booking.getId().toString(),
                         "method", String.valueOf(tx.getPaymentMethod()),
                         "source", actorId == null ? "payos_webhook" : "admin"));
 
-        notificationService.push(booking.getUser(), NotificationTypes.PAYMENT_CONFIRMED,
-                "Đã nhận thanh toán",
-                "Buổi xem với " + booking.getReaderProfile().getUser().getFullName()
-                        + " đã được thanh toán.",
-                Map.of("bookingId", booking.getId().toString()));
+        // Thông báo khác nhau tùy phase
+        if (tx.getPhase() == PaymentPhase.DEPOSIT) {
+            notificationService.push(booking.getUser(), NotificationTypes.PAYMENT_CONFIRMED,
+                    "Đã đặt cọc thành công",
+                    "Bạn đã đặt cọc cho buổi xem với "
+                            + booking.getReaderProfile().getUser().getFullName()
+                            + ". Vui lòng thanh toán nốt trước giờ hẹn.",
+                    Map.of("bookingId", booking.getId().toString()));
 
-        notificationService.push(booking.getReaderProfile().getUser(), NotificationTypes.PAYMENT_CONFIRMED,
-                "Khách đã thanh toán",
-                "Tiền đang được giữ ở ký quỹ và sẽ vào số dư của bạn sau khi buổi xem hoàn tất.",
-                Map.of("bookingId", booking.getId().toString()));
+            notificationService.push(booking.getReaderProfile().getUser(), NotificationTypes.PAYMENT_CONFIRMED,
+                    "Khách đã đặt cọc",
+                    "Khách đã đặt cọc " + tx.getAmount() + " ₫. Tiền sẽ vào ký quỹ khi thanh toán xong.",
+                    Map.of("bookingId", booking.getId().toString()));
+        } else {
+            notificationService.push(booking.getUser(), NotificationTypes.PAYMENT_CONFIRMED,
+                    "Đã thanh toán xong",
+                    "Bạn đã thanh toán đầy đủ cho buổi xem với "
+                            + booking.getReaderProfile().getUser().getFullName() + ".",
+                    Map.of("bookingId", booking.getId().toString()));
+
+            notificationService.push(booking.getReaderProfile().getUser(), NotificationTypes.PAYMENT_CONFIRMED,
+                    "Khách đã thanh toán đủ",
+                    "Tiền đang được giữ ở ký quỹ và sẽ vào số dư của bạn sau khi buổi xem hoàn tất.",
+                    Map.of("bookingId", booking.getId().toString()));
+        }
 
         log.info("Xác nhận thanh toán {} cho booking {}", tx.getId(), booking.getId());
     }
@@ -350,6 +454,7 @@ public class PaymentServiceImpl implements PaymentService {
                     .bookingId(pending.getBooking().getId())
                     .amount(pending.getAmount())
                     .paymentMethod(METHOD_PAYOS)
+                    .paymentPhase(pending.getPhase() != null ? pending.getPhase().name() : null)
                     .referenceCode(pending.getExternalTransactionId())
                     .bankName(stringOr(meta.get("bin"), bankName))
                     .bankAccountNumber(stringOr(meta.get("accountNumber"), bankAccountNumber))
@@ -365,6 +470,7 @@ public class PaymentServiceImpl implements PaymentService {
                 .bookingId(pending.getBooking().getId())
                 .amount(pending.getAmount())
                 .paymentMethod(METHOD_BANK_TRANSFER)
+                .paymentPhase(pending.getPhase() != null ? pending.getPhase().name() : null)
                 .referenceCode(pending.getExternalTransactionId())
                 .bankName(bankName)
                 .bankAccountNumber(bankAccountNumber)
@@ -380,6 +486,7 @@ public class PaymentServiceImpl implements PaymentService {
                 .bookingId(pending.getBooking().getId())
                 .amount(pending.getAmount())
                 .paymentMethod(METHOD_PAYOS)
+                .paymentPhase(pending.getPhase() != null ? pending.getPhase().name() : null)
                 .referenceCode(pending.getExternalTransactionId())
                 .bankName(firstNonBlank(link.getBin(), bankName))
                 .bankAccountNumber(firstNonBlank(link.getAccountNumber(), bankAccountNumber))

@@ -7,6 +7,7 @@ import com.exe.astratarot.domain.entity.User;
 import com.exe.astratarot.domain.enums.BookingStatus;
 import com.exe.astratarot.domain.enums.PaymentStatus;
 import com.exe.astratarot.repository.BookingRepository;
+import com.exe.astratarot.service.BookingService.ActorType;
 import com.exe.astratarot.repository.NotificationRepository;
 import com.exe.astratarot.service.EscrowService;
 import com.exe.astratarot.service.NotificationService;
@@ -80,6 +81,7 @@ class BookingServiceImplConcurrencyTest {
                 .readerProfile(readerProfile)
                 .status(BookingStatus.CONFIRMED)
                 .paymentStatus(PaymentStatus.PAID)
+                .depositAmount(50000L)
                 .startTime(Instant.now().minusSeconds(3600))
                 .endTime(Instant.now().minusSeconds(1800))
                 .totalAmount(100000L)
@@ -89,6 +91,7 @@ class BookingServiceImplConcurrencyTest {
     @Test
     @DisplayName("complete() calls bookingRepository.findByIdForUpdate() to acquire pessimistic lock")
     void complete_UsesFindByIdForUpdate() {
+        booking.setStartTime(Instant.now().minusSeconds(7300)); // Past start time (12+ hours ago)
         when(bookingRepository.findByIdForUpdate(bookingId)).thenReturn(Optional.of(booking));
 
         when(bookingChatService.chatOpen(booking)).thenReturn(true);
@@ -96,10 +99,6 @@ class BookingServiceImplConcurrencyTest {
         BookingResponse response = bookingService.complete(readerUserId, bookingId);
 
         assertEquals(BookingStatus.COMPLETED.name(), response.getStatus());
-        // Cờ này là thứ giao diện dùng để hiện hay giấu nút "Nhắn tin / Gọi".
-        // Khẳng định nó đi được từ BookingChatService ra tới DTO, để ai lỡ bỏ
-        // .chatOpen(...) khỏi hàm dựng DTO thì đỏ ở đây chứ không phải im lặng
-        // làm nút biến mất trên production.
         assertEquals(Boolean.TRUE, response.getChatOpen());
         verify(bookingRepository).findByIdForUpdate(bookingId);
         verify(escrowService).releaseForBooking(booking);
@@ -112,7 +111,7 @@ class BookingServiceImplConcurrencyTest {
 
         when(bookingChatService.chatOpen(booking)).thenReturn(false);
 
-        BookingResponse response = bookingService.cancel(customerId, bookingId, "Need to cancel");
+        BookingResponse response = bookingService.cancel(customerId, bookingId, "Need to cancel", ActorType.USER);
 
         assertEquals(BookingStatus.CANCELLED.name(), response.getStatus());
         assertEquals(Boolean.FALSE, response.getChatOpen());
@@ -126,6 +125,38 @@ class BookingServiceImplConcurrencyTest {
 
         when(bookingRepository.findByIdForUpdate(bookingId)).thenReturn(Optional.of(booking));
 
-        assertThrows(IllegalArgumentException.class, () -> bookingService.cancel(customerId, bookingId, "Cancel"));
+        assertThrows(IllegalArgumentException.class, () -> bookingService.cancel(customerId, bookingId, "Cancel", ActorType.USER));
+    }
+
+    @Test
+    @DisplayName("cancel with PAID and early (≥12h before start) refunds full amount")
+    void cancel_DepositPaid_WithinDeadline_RefundsDeposit() {
+        booking.setPaymentStatus(PaymentStatus.PAID);
+        booking.setDepositAmount(50000L);
+        booking.setTotalAmount(100000L);
+        booking.setForfeitedAmount(50000L);
+        booking.setStartTime(Instant.now().plusSeconds(43201)); // 12h+1s in future → early cancel
+        when(bookingRepository.findByIdForUpdate(bookingId)).thenReturn(Optional.of(booking));
+
+        bookingService.cancel(customerId, bookingId, "Cancel", ActorType.USER);
+
+        // PAID status → getAmountPaid() returns totalAmount = 100000, refund full amount
+        verify(paymentService).refund(booking, 100000L);
+        verify(paymentService, never()).forfeitDeposit(booking);
+    }
+
+    @Test
+    @DisplayName("cancel with DEPOSIT_PAID and past T-12h forfeits deposit")
+    void cancel_DepositPaid_PastDeadline_ForfeitsDeposit() {
+        booking.setPaymentStatus(PaymentStatus.DEPOSIT_PAID);
+        booking.setDepositAmount(50000L);
+        booking.setForfeitedAmount(50000L);
+        booking.setPaymentDeadline(Instant.now().minusSeconds(3600)); // past deadline
+        when(bookingRepository.findByIdForUpdate(bookingId)).thenReturn(Optional.of(booking));
+
+        bookingService.cancel(customerId, bookingId, "Cancel", ActorType.USER);
+
+        verify(paymentService).forfeitDeposit(booking);
+        verify(paymentService).refund(booking, 0L);
     }
 }

@@ -1,5 +1,6 @@
 package com.exe.astratarot.domain.entity;
 
+import com.exe.astratarot.domain.enums.PaymentPhase;
 import com.exe.astratarot.domain.enums.TransactionStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -42,6 +43,10 @@ public class PaymentTransaction {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private TransactionStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "phase", nullable = false)
+    private PaymentPhase phase;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
