@@ -155,6 +155,41 @@ class BookingChatServiceTest {
     }
 
     @Test
+    @DisplayName("MỚI ĐẶT CỌC đã mở, không đợi trả đủ")
+    void datCocLaMo() {
+        booking.setStatus(BookingStatus.CONFIRMED);
+        booking.setPaymentStatus(PaymentStatus.DEPOSIT_PAID);
+
+        // Từ khi có đặt cọc 50%, một người vừa chuyển tiền thật vẫn ở
+        // DEPOSIT_PAID cho tới sát giờ hẹn. Đòi PAID nghĩa là suốt quãng ấy
+        // họ không hỏi Reader được câu nào — đúng quãng cần hỏi nhất.
+        assertTrue(service.chatOpen(booking));
+        assertDoesNotThrow(() -> service.send(bookingId, customerId, "xin chào"));
+    }
+
+    @Test
+    @DisplayName("Reader CHƯA nhận lịch nhưng đã có tiền thì vẫn mở")
+    void chuaNhanLichNhungDaCoTienThiVanMo() {
+        booking.setStatus(BookingStatus.PENDING);
+        booking.setPaymentStatus(PaymentStatus.DEPOSIT_PAID);
+
+        // Reader im lâu thì nhắn được một câu chính là thứ gỡ tình huống đó,
+        // chứ không phải ngồi chờ rồi huỷ.
+        assertTrue(service.chatOpen(booking));
+    }
+
+    @Test
+    @DisplayName("Đã huỷ thì đóng dù đã đặt cọc")
+    void daHuyThiDongDuDaDatCoc() {
+        booking.setStatus(BookingStatus.CANCELLED);
+        booking.setPaymentStatus(PaymentStatus.DEPOSIT_PAID);
+
+        // Tiền đã vào không mở lại một buổi đã huỷ. Huỷ xong còn nhắn được là
+        // một đường vòng để làm phiền nhau sau khi quan hệ đã chấm dứt.
+        assertFalse(service.chatOpen(booking));
+    }
+
+    @Test
     @DisplayName("Đã huỷ thì đóng")
     void daHuyThiDong() {
         booking.setStatus(BookingStatus.CANCELLED);
