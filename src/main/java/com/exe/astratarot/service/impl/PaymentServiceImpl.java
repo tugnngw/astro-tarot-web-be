@@ -269,7 +269,9 @@ public class PaymentServiceImpl implements PaymentService {
                 reason == null || reason.isBlank()
                         ? "Chúng tôi chưa tìm thấy khoản chuyển khớp với mã của bạn. Kiểm tra lại giúp nhé."
                         : reason,
-                tx.getBooking() == null ? Map.of() : Map.of("bookingId", tx.getBooking().getId().toString()));
+                tx.getBooking() == null
+                        ? Map.of()
+                        : Map.of("bookingId", tx.getBooking().getId().toString(), NotificationTypes.SIDE, NotificationTypes.SIDE_CUSTOMER));
 
         return toResponse(tx);
     }
@@ -296,7 +298,7 @@ public class PaymentServiceImpl implements PaymentService {
                 "Lịch hẹn đã huỷ, tiền sẽ được hoàn",
                 "Khoản " + booking.getTotalAmount()
                         + " ₫ sẽ được chuyển lại trong 1-3 ngày làm việc.",
-                Map.of("bookingId", booking.getId().toString()));
+                Map.of("bookingId", booking.getId().toString(), NotificationTypes.SIDE, NotificationTypes.SIDE_CUSTOMER));
 
         log.info("Đánh dấu hoàn tiền cho booking {}", booking.getId());
     }
@@ -332,12 +334,12 @@ public class PaymentServiceImpl implements PaymentService {
                 "Đã nhận thanh toán",
                 "Buổi xem với " + booking.getReaderProfile().getUser().getFullName()
                         + " đã được thanh toán.",
-                Map.of("bookingId", booking.getId().toString()));
+                Map.of("bookingId", booking.getId().toString(), NotificationTypes.SIDE, NotificationTypes.SIDE_CUSTOMER));
 
         notificationService.push(booking.getReaderProfile().getUser(), NotificationTypes.PAYMENT_CONFIRMED,
                 "Khách đã thanh toán",
                 "Tiền đang được giữ ở ký quỹ và sẽ vào số dư của bạn sau khi buổi xem hoàn tất.",
-                Map.of("bookingId", booking.getId().toString()));
+                Map.of("bookingId", booking.getId().toString(), NotificationTypes.SIDE, NotificationTypes.SIDE_READER));
 
         log.info("Xác nhận thanh toán {} cho booking {}", tx.getId(), booking.getId());
     }
