@@ -14,7 +14,12 @@ import static org.junit.jupiter.api.Assertions.assertAll;
  *
  * <p>Sau khi thêm hệ thống đặt cọc 50%, entity Booking phải có:
  * depositAmount, remainingAmount, paymentDeadline, forfeitedAmount.
- * Tất cả đều có giá trị mặc định là null (có thể gán null khi chưa đặt cọc).
+ *
+ * <p>Ba trường đầu để trống được ở tầng builder vì {@code create()} luôn gán
+ * chúng. {@code forfeitedAmount} thì KHÔNG: nó là một bộ đếm tiền, cột khai
+ * {@code nullable = false}, và chỗ nào cộng dồn vào nó cũng đọc giá trị cũ ra
+ * trước. Null ở đó là một lượt đặt lịch đổ ở tầng database, hoặc một phép cộng
+ * ném NullPointerException.
  */
 @DisplayName("Booking entity - deposit payment fields")
 class BookingDepositFieldsTest {
@@ -47,7 +52,7 @@ class BookingDepositFieldsTest {
     }
 
     @Test
-    @DisplayName("Booking without deposit fields defaults to null")
+    @DisplayName("Không khai cọc thì ba trường để trống, riêng tiền mất cọc là 0")
     void booking_without_deposit_fields_defaults_to_null() {
         Booking booking = Booking.builder()
                 .id(UUID.randomUUID())
@@ -58,7 +63,11 @@ class BookingDepositFieldsTest {
         assertAll(
                 () -> assertThat(booking.getDepositAmount()).isNull(),
                 () -> assertThat(booking.getRemainingAmount()).isNull(),
-                () -> assertThat(booking.getForfeitedAmount()).isNull(),
+                // 0, không phải null. Cột khai `nullable = false` và trường
+                // có sẵn `= 0L`, nhưng Lombok BỎ QUA giá trị khởi tạo nếu
+                // thiếu @Builder.Default — nên trước đây builder ghi null
+                // xuống, và lỗi nổ ở tầng database chứ không ở chỗ sai.
+                () -> assertThat(booking.getForfeitedAmount()).isZero(),
                 () -> assertThat(booking.getPaymentDeadline()).isNull()
         );
     }

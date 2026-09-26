@@ -15,6 +15,7 @@ import com.exe.astratarot.repository.ReaderUnavailableDateRepository;
 import com.exe.astratarot.repository.ReviewRepository;
 import com.exe.astratarot.repository.UserRepository;
 import com.exe.astratarot.service.BookingChatService;
+import com.exe.astratarot.service.BookingService.ActorType;
 import com.exe.astratarot.service.EscrowService;
 import com.exe.astratarot.service.NotificationService;
 import com.exe.astratarot.service.NotificationTypes;
@@ -51,6 +52,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
@@ -196,6 +198,11 @@ class BookingServiceImplTest {
                 .startTime(batDau)
                 .endTime(batDau.plus(30, ChronoUnit.MINUTES))
                 .totalAmount(180_000L)
+                // Cọc bằng nửa tổng, đúng như create() tính. Cột này
+                // `nullable = false` nên để trống là dựng một dòng không tồn
+                // tại ngoài đời — và nhánh huỷ muộn đọc thẳng vào nó.
+                .depositAmount(90_000L)
+                .remainingAmount(90_000L)
                 .status(tt)
                 .paymentStatus(tra)
                 .build();
@@ -598,7 +605,7 @@ class BookingServiceImplTest {
                     () -> assertThrows(ResourceNotFoundException.class,
                             () -> service.complete(readerUser.getId(), la)),
                     () -> assertThrows(ResourceNotFoundException.class,
-                            () -> service.cancel(khach.getId(), la, "lý do")),
+                            () -> service.cancel(khach.getId(), la, "lý do", ActorType.USER)),
                     () -> assertThrows(ResourceNotFoundException.class,
                             () -> service.confirm(readerUser.getId(), la)));
         }
@@ -618,14 +625,16 @@ class BookingServiceImplTest {
             Booking b = lichHen(BookingStatus.CONFIRMED, PaymentStatus.PAID,
                     Instant.now().plus(1, ChronoUnit.DAYS));
 
-            var kq = service.cancel(khach.getId(), b.getId(), "  Có việc gấp  ");
+            var kq = service.cancel(khach.getId(), b.getId(), "  Có việc gấp  ", ActorType.USER);
 
             assertAll(
                     () -> assertEquals(BookingStatus.CANCELLED.name(), kq.getStatus()),
                     () -> assertEquals("Có việc gấp", kq.getCancelReason()));
             // Huỷ mà không đi qua hoàn tiền thì khoản khách đã trả nằm lại trong
-            // ký quỹ, không của ai.
-            verify(paymentService).refundIfPaid(b);
+            // ký quỹ, không của ai. Huỷ trước hạn 12h thì hoàn TRỌN số đã trả —
+            // kiểm cả con số, vì hoàn thiếu cũng là gọi đúng hàm.
+            verify(paymentService).refund(b, 180_000L);
+            verify(paymentService, never()).forfeitDeposit(any());
             verify(notificationService).push(eq(readerUser), anyString(), anyString(), anyString(), any());
             verify(notificationService, never()).push(eq(khach), anyString(), anyString(), anyString(), any());
             // Khách huỷ → người nhận đang đứng ở vai Reader. Đây là loại thông
@@ -640,7 +649,7 @@ class BookingServiceImplTest {
             Booking b = lichHen(BookingStatus.CONFIRMED, PaymentStatus.UNPAID,
                     Instant.now().plus(1, ChronoUnit.DAYS));
 
-            service.cancel(readerUser.getId(), b.getId(), null);
+            service.cancel(readerUser.getId(), b.getId(), null, ActorType.READER);
 
             assertNull(b.getCancelReason());
             verify(notificationService).push(eq(khach), anyString(), anyString(), anyString(), any());
@@ -656,7 +665,7 @@ class BookingServiceImplTest {
             Booking b = lichHen(BookingStatus.PENDING, PaymentStatus.UNPAID,
                     Instant.now().plus(1, ChronoUnit.DAYS));
 
-            service.cancel(khach.getId(), b.getId(), "   ");
+            service.cancel(khach.getId(), b.getId(), "   ", ActorType.USER);
 
             assertNull(b.getCancelReason());
         }
@@ -669,8 +678,8 @@ class BookingServiceImplTest {
 
             // Huỷ sau khi đã nhả tiền cho Reader là đòi lại khoản đã chi.
             assertThrows(IllegalArgumentException.class,
-                    () -> service.cancel(khach.getId(), b.getId(), "đổi ý"));
-            verify(paymentService, never()).refundIfPaid(any());
+                    () -> service.cancel(khach.getId(), b.getId(), "đổi ý", ActorType.USER));
+            verify(paymentService, never()).refund(any(), anyLong());
         }
 
         @Test
@@ -680,8 +689,8 @@ class BookingServiceImplTest {
                     Instant.now().plus(1, ChronoUnit.DAYS));
 
             assertThrows(IllegalArgumentException.class,
-                    () -> service.cancel(khach.getId(), b.getId(), "lại huỷ"));
-            verify(paymentService, never()).refundIfPaid(any());
+                    () -> service.cancel(khach.getId(), b.getId(), "lại huỷ", ActorType.USER));
+            verify(paymentService, never()).refund(any(), anyLong());
         }
 
         @Test
@@ -691,7 +700,7 @@ class BookingServiceImplTest {
                     Instant.now().plus(1, ChronoUnit.DAYS));
 
             assertThrows(AccessDeniedException.class,
-                    () -> service.cancel(UUID.randomUUID(), b.getId(), "tôi thích"));
+                    () -> service.cancel(UUID.randomUUID(), b.getId(), "tôi thích", ActorType.USER));
         }
     }
 
