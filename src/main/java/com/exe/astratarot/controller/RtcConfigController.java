@@ -1,7 +1,6 @@
 package com.exe.astratarot.controller;
 
 import com.exe.astratarot.domain.dto.common.ApiResponse;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -32,17 +31,35 @@ import java.util.Map;
  * thông tin TURN là một vòng deploy đầy đủ, và thông tin đăng nhập TURN sẽ
  * nằm vĩnh viễn trong bundle công khai.
  *
- * <p>Ví dụ bật TURN sau này (Cloudflare Realtime TURN có mức miễn phí):
+ * <h3>Hai cách khai TURN</h3>
+ *
+ * <p><b>Cloudflare Realtime</b> (khuyên dùng, 1000 GB/tháng miễn phí): khai
+ * hai biến rồi khởi động lại, {@link com.exe.astratarot.service.CloudflareTurnService}
+ * tự xin thông tin đăng nhập và tự gia hạn.
+ * <pre>
+ * CF_TURN_KEY_ID=...
+ * CF_TURN_API_TOKEN=...
+ * </pre>
+ *
+ * <p><b>Máy chủ TURN tự dựng hoặc nhà cung cấp cấp tài khoản cố định:</b>
  * <pre>
  * RTC_ICE_URLS=stun:stun.l.google.com:19302,turn:turn.example.com:3478
  * RTC_TURN_USERNAME=...
  * RTC_TURN_CREDENTIAL=...
  * </pre>
+ *
+ * <p>Khai cả hai thì Cloudflare được ưu tiên, còn mục cố định vẫn gửi kèm —
+ * ICE tự thử lần lượt và dùng đường nào nối được trước.
  */
 @RestController
 @RequestMapping("/api/v1/rtc")
-@RequiredArgsConstructor
 public class RtcConfigController {
+
+    private final com.exe.astratarot.service.CloudflareTurnService cloudflareTurn;
+
+    public RtcConfigController(com.exe.astratarot.service.CloudflareTurnService cloudflareTurn) {
+        this.cloudflareTurn = cloudflareTurn;
+    }
 
     @Value("${app.rtc.ice-urls:stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302}")
     private String iceUrls;
@@ -79,6 +96,12 @@ public class RtcConfigController {
         if (!stun.isEmpty()) {
             servers.add(Map.of("urls", stun));
         }
+
+        // Cloudflare trước: thông tin đăng nhập của nó được gia hạn tự động,
+        // còn mục cố định bên dưới thì phụ thuộc vào việc có ai nhớ cập nhật
+        // biến môi trường hay không.
+        List<Map<String, Object>> cloudflare = cloudflareTurn.iceServers();
+        servers.addAll(cloudflare);
         // Chỉ khai TURN khi có đủ thông tin đăng nhập. Gửi TURN thiếu
         // username/credential thì trình duyệt lặng lẽ bỏ qua nó, và ta mất
         // hàng giờ tưởng TURN đang chạy trong khi thật ra không.
@@ -90,7 +113,10 @@ public class RtcConfigController {
             servers.add(entry);
         }
 
-        boolean hasTurn = servers.size() > 1;
+        // Đếm mục CÓ username thay vì đếm tổng số mục: mục STUN cũng là một
+        // mục, nên `size() > 1` nói dối ngay khi ai đó thêm một nguồn STUN thứ
+        // hai — và giao diện sẽ thôi cảnh báo trong khi TURN vẫn chưa có.
+        boolean hasTurn = servers.stream().anyMatch(m -> m.containsKey("username"));
         return ResponseEntity.ok(ApiResponse.success(Map.of(
                 "iceServers", servers,
                 // Giao diện dùng cờ này để cảnh báo trước thay vì để người
