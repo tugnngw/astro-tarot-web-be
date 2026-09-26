@@ -5,6 +5,7 @@ import com.exe.astratarot.domain.enums.AuthProvider;
 import com.exe.astratarot.domain.enums.UserRole;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -15,6 +16,22 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface UserRepository extends JpaRepository<User, UUID> {
+
+    /**
+     * Ghi mốc "còn thấy lần cuối".
+     *
+     * <p>Câu UPDATE thẳng chứ không nạp entity rồi sửa: ảnh đại diện nằm
+     * ngay trong bảng users (xem V2_6), nên nạp cả User chỉ để đặt một dấu
+     * thời gian là kéo theo vài trăm KB nhị phân mỗi lần ai đó mở hay đóng
+     * một tab.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE User u SET u.lastSeenAt = :luc WHERE u.id = :id")
+    void ghiLastSeen(@Param("id") UUID id, @Param("luc") Instant luc);
+
+    /** Chỉ lấy mốc thời gian, cùng lý do như trên. */
+    @Query("SELECT u.lastSeenAt FROM User u WHERE u.id = :id")
+    Optional<Instant> lastSeenCua(@Param("id") UUID id);
     Optional<User> findByUsernameIgnoreCaseAndDeletedAtIsNull(String username);
 
     Optional<User> findByEmailIgnoreCaseAndDeletedAtIsNull(String email);
