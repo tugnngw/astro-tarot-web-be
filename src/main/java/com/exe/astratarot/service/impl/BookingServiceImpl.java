@@ -208,7 +208,7 @@ public class BookingServiceImpl implements BookingService {
         notificationService.push(reader.getUser(), NotificationTypes.BOOKING_CREATED,
                 "Có lịch hẹn mới",
                 customer.getFullName() + " vừa đặt một buổi xem " + duration + " phút.",
-                Map.of("bookingId", booking.getId().toString()));
+                Map.of("bookingId", booking.getId().toString(), NotificationTypes.SIDE, NotificationTypes.SIDE_READER));
 
         log.info("Booking {} : {} đặt lịch với reader {}, depositAmount={}, remainingAmount={}, withinDeadline={}",
                 booking.getId(), customerId, reader.getId(), depositAmount, remainingAmount, withinDeadline);
@@ -254,7 +254,7 @@ public class BookingServiceImpl implements BookingService {
         notificationService.push(b.getUser(), NotificationTypes.BOOKING_CONFIRMED,
                 "Lịch hẹn đã được nhận",
                 b.getReaderProfile().getUser().getFullName() + " đã xác nhận buổi xem của bạn.",
-                Map.of("bookingId", b.getId().toString()));
+                Map.of("bookingId", b.getId().toString(), NotificationTypes.SIDE, NotificationTypes.SIDE_CUSTOMER));
         return toResponse(b, false);
     }
 
@@ -283,7 +283,8 @@ public class BookingServiceImpl implements BookingService {
                 "Buổi xem đã hoàn tất",
                 "Bạn có thể để lại đánh giá cho "
                         + b.getReaderProfile().getUser().getFullName() + ".",
-                Map.of("bookingId", b.getId().toString()));
+                Map.of("bookingId", b.getId().toString(),
+                        NotificationTypes.SIDE, NotificationTypes.SIDE_CUSTOMER));
         return toResponse(b, false);
     }
 
@@ -309,7 +310,7 @@ public class BookingServiceImpl implements BookingService {
                     "Reader đã gửi ghi chú buổi xem",
                     b.getReaderProfile().getUser().getFullName()
                             + " vừa ghi lại nội dung buổi xem của bạn.",
-                    Map.of("bookingId", b.getId().toString()));
+                    Map.of("bookingId", b.getId().toString(), NotificationTypes.SIDE, NotificationTypes.SIDE_CUSTOMER));
         }
         return toResponse(b, false);
     }
@@ -382,7 +383,11 @@ public class BookingServiceImpl implements BookingService {
                 "Lịch hẹn đã bị huỷ",
                 who + " đã huỷ buổi xem"
                         + (b.getCancelReason() == null ? "." : ": " + b.getCancelReason()),
-                Map.of("bookingId", b.getId().toString()));
+                Map.of("bookingId", b.getId().toString(),
+                        NotificationTypes.SIDE,
+                        cancelledByCustomer
+                                ? NotificationTypes.SIDE_READER
+                                : NotificationTypes.SIDE_CUSTOMER));
 
         return toResponse(b, false);
     }
