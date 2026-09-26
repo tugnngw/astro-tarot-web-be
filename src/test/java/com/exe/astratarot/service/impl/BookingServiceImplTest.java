@@ -6,6 +6,8 @@ import com.exe.astratarot.domain.entity.ReaderAvailability;
 import com.exe.astratarot.domain.entity.ReaderProfile;
 import com.exe.astratarot.domain.entity.User;
 import com.exe.astratarot.domain.enums.BookingStatus;
+import com.exe.astratarot.domain.enums.CalendarDayKind;
+import com.exe.astratarot.domain.enums.CalendarSlotState;
 import com.exe.astratarot.domain.enums.PaymentStatus;
 import com.exe.astratarot.exception.ResourceNotFoundException;
 import com.exe.astratarot.repository.BookingRepository;
@@ -37,6 +39,7 @@ import org.springframework.security.access.AccessDeniedException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -57,6 +60,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -153,14 +157,25 @@ class BookingServiceImplTest {
         short thu = (short) (ngay.getDayOfWeek().getValue() % 7);
         lenient().when(availabilityRepository
                         .findByReaderIdAndDayOfWeekAndActiveTrue(reader.getId(), thu))
-                .thenReturn(List.of(ReaderAvailability.builder()
-                        .id(UUID.randomUUID())
-                        .reader(reader)
-                        .dayOfWeek(thu)
-                        .startTime(tu)
-                        .endTime(den)
-                        .active(true)
-                        .build()));
+                .thenReturn(List.of(khungTuan(ngay, tu, den)));
+    }
+
+    /** Lịch tháng đọc cả tuần một lần, khác với từng-thứ của khung giờ một ngày. */
+    private void moCaTuan(LocalDate ngay, LocalTime tu, LocalTime den) {
+        lenient().when(availabilityRepository.findByReaderIdAndActiveTrue(reader.getId()))
+                .thenReturn(List.of(khungTuan(ngay, tu, den)));
+    }
+
+    private ReaderAvailability khungTuan(LocalDate ngay, LocalTime tu, LocalTime den) {
+        short thu = (short) (ngay.getDayOfWeek().getValue() % 7);
+        return ReaderAvailability.builder()
+                .id(UUID.randomUUID())
+                .reader(reader)
+                .dayOfWeek(thu)
+                .startTime(tu)
+                .endTime(den)
+                .active(true)
+                .build();
     }
 
     private Instant gio(LocalDate ngay, int h, int m) {
@@ -349,6 +364,101 @@ class BookingServiceImplTest {
 
             assertThrows(ResourceNotFoundException.class,
                     () -> service.availableSlots(la, ngayMai, 30));
+        }
+    }
+
+    @Nested
+    @DisplayName("Lịch tháng")
+    class LichThang {
+
+        @Test
+        @DisplayName("Khung đã có người đặt hiện TAKEN, không bị xoá khỏi ngày")
+        void khungDaDatVanHien() {
+            LocalDate ngay = LocalDate.now(VN).plusDays(2);
+            moCaTuan(ngay, LocalTime.of(9, 0), LocalTime.of(10, 0));
+            when(bookingRepository.findOverlapping(eq(reader.getId()), any(), any()))
+                    .thenReturn(List.of(Booking.builder()
+                            .startTime(gio(ngay, 9, 0))
+                            .endTime(gio(ngay, 9, 30))
+                            .build()));
+
+            var lich = service.monthCalendar(
+                    reader.getId(), ngay.getYear(), ngay.getMonthValue(), 30);
+            var hom = lich.getDays().stream()
+                    .filter(d -> d.getDate().equals(ngay)).findFirst().orElseThrow();
+
+            assertAll(
+                    () -> assertEquals(CalendarDayKind.OPEN, hom.getKind()),
+                    () -> assertEquals(CalendarSlotState.TAKEN, hom.getSlots().get(0).getState()),
+                    () -> assertEquals(CalendarSlotState.TAKEN, hom.getSlots().get(1).getState()),
+                    () -> assertEquals(CalendarSlotState.FREE, hom.getSlots().get(2).getState()),
+                    () -> assertEquals(gio(ngay, 9, 30), hom.getSlots().get(2).getStartTime()));
+            // Cả tháng chỉ một lần chồng lấn, không phải một lần mỗi ngày.
+            verify(bookingRepository, times(1)).findOverlapping(eq(reader.getId()), any(), any());
+        }
+
+        @Test
+        @DisplayName("Ngày nghỉ và ngày không làm việc là hai loại khác nhau")
+        void nghiKhacKhongLam() {
+            LocalDate lam = LocalDate.now(VN).plusDays(2);
+            moCaTuan(lam, LocalTime.of(9, 0), LocalTime.of(10, 0));
+            when(unavailableDateRepository.findByReaderIdAndUnavailableDateBetween(
+                    eq(reader.getId()), any(), any()))
+                    .thenReturn(List.of(com.exe.astratarot.domain.entity.ReaderUnavailableDate.builder()
+                            .unavailableDate(lam)
+                            .build()));
+
+            var lich = service.monthCalendar(reader.getId(), lam.getYear(), lam.getMonthValue(), 30);
+            var nghi = lich.getDays().stream()
+                    .filter(d -> d.getDate().equals(lam)).findFirst().orElseThrow();
+            assertEquals(CalendarDayKind.OFF, nghi.getKind());
+            assertTrue(nghi.getSlots().isEmpty());
+
+            lich.getDays().stream()
+                    .filter(d -> !d.getDate().isBefore(LocalDate.now(VN)))
+                    .filter(d -> d.getDate().getDayOfWeek() != lam.getDayOfWeek())
+                    .findFirst()
+                    .ifPresent(d -> assertEquals(CalendarDayKind.CLOSED, d.getKind()));
+        }
+
+        @Test
+        @DisplayName("Kín cả khung còn lại thì là FULL, hết giờ hôm nay thì là OVER")
+        void kinVaHetGio() {
+            LocalDate ngay = LocalDate.now(VN).plusDays(2);
+            moCaTuan(ngay, LocalTime.of(9, 0), LocalTime.of(10, 0));
+            when(bookingRepository.findOverlapping(eq(reader.getId()), any(), any()))
+                    .thenReturn(List.of(Booking.builder()
+                            .startTime(gio(ngay, 9, 0))
+                            .endTime(gio(ngay, 10, 0))
+                            .build()));
+
+            var kin = service.monthCalendar(reader.getId(), ngay.getYear(), ngay.getMonthValue(), 30)
+                    .getDays().stream().filter(d -> d.getDate().equals(ngay)).findFirst().orElseThrow();
+            assertEquals(CalendarDayKind.FULL, kin.getKind());
+
+            LocalDate homNay = LocalDate.now(VN);
+            moCaTuan(homNay, LocalTime.of(0, 0), LocalTime.of(0, 30));
+            when(bookingRepository.findOverlapping(eq(reader.getId()), any(), any()))
+                    .thenReturn(List.of());
+            var het = service.monthCalendar(reader.getId(), homNay.getYear(), homNay.getMonthValue(), 30)
+                    .getDays().stream().filter(d -> d.getDate().equals(homNay)).findFirst().orElseThrow();
+            assertEquals(CalendarDayKind.OVER, het.getKind());
+            assertTrue(het.getSlots().stream().allMatch(s -> s.getState() == CalendarSlotState.PAST));
+        }
+
+        @Test
+        @DisplayName("Tháng quá xa hoặc thời lượng lạ thì từ chối, không đụng dữ liệu")
+        void ngoaiKhoang() {
+            YearMonth xa = YearMonth.now(VN).plusMonths(4);
+            assertAll(
+                    () -> assertThrows(IllegalArgumentException.class,
+                            () -> service.monthCalendar(reader.getId(), xa.getYear(), xa.getMonthValue(), 30)),
+                    () -> assertThrows(IllegalArgumentException.class,
+                            () -> service.monthCalendar(reader.getId(), YearMonth.now(VN).getYear(), 0, 30)),
+                    () -> assertThrows(IllegalArgumentException.class,
+                            () -> service.monthCalendar(reader.getId(), YearMonth.now(VN).getYear(),
+                                    YearMonth.now(VN).getMonthValue(), 45)));
+            verify(availabilityRepository, never()).findByReaderIdAndActiveTrue(any());
         }
     }
 

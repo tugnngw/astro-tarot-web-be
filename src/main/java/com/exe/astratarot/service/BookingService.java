@@ -2,6 +2,7 @@ package com.exe.astratarot.service;
 
 import com.exe.astratarot.domain.dto.booking.BookingResponse;
 import com.exe.astratarot.domain.dto.booking.CreateBookingRequest;
+import com.exe.astratarot.domain.dto.booking.MonthCalendarResponse;
 import com.exe.astratarot.domain.dto.booking.SlotResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -33,7 +34,22 @@ public interface BookingService {
      */
     Optional<LocalDate> nextAvailableDate(UUID readerProfileId, LocalDate from, int durationMinutes, int horizonDays);
 
+    /**
+     * Lịch cả tháng của một Reader, gồm cả khung đã có người đặt.
+     *
+     * <p>{@link #availableSlots} chỉ trả khung còn đặt được, nên ngày kín và
+     * ngày nghỉ đều thành danh sách rỗng. Lịch tháng phân biệt được hai chuyện
+     * đó, và lấy một lần thay vì ba truy vấn nhân với số ngày.
+     */
+    MonthCalendarResponse monthCalendar(UUID readerProfileId, int year, int month, int durationMinutes);
+
     BookingResponse create(UUID customerId, CreateBookingRequest request);
+
+    /** Mọi buổi khách đã đặt trong một tháng, để vẽ lịch của chính họ. */
+    List<BookingResponse> listForCustomerInMonth(UUID customerId, int year, int month);
+
+    /** Mọi buổi khách đặt với Reader này trong một tháng. */
+    List<BookingResponse> listForReaderInMonth(UUID readerUserId, int year, int month);
 
     Page<BookingResponse> listForCustomer(UUID customerId, String status, Pageable pageable);
 

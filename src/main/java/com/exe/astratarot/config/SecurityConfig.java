@@ -108,6 +108,7 @@ public class SecurityConfig {
                                 // @PreAuthorize("permitAll()") — đúng cái bẫy
                                 // mà chú thích bên trên đã cảnh báo.
                                 "/api/v1/readers/*/slots/next-available",
+                                "/api/v1/readers/*/calendar",
                                 "/api/v1/readers/*/reviews").permitAll()
                         // Blog công khai: khách chưa đăng nhập phải đọc được danh
                         // sách và bài viết. Hai endpoint này có @PreAuthorize

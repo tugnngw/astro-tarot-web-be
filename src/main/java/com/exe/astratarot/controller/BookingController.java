@@ -3,6 +3,7 @@ package com.exe.astratarot.controller;
 import com.exe.astratarot.domain.dto.booking.BookingResponse;
 import com.exe.astratarot.domain.dto.booking.CancelBookingRequest;
 import com.exe.astratarot.domain.dto.booking.CreateBookingRequest;
+import com.exe.astratarot.domain.dto.booking.MonthCalendarResponse;
 import com.exe.astratarot.domain.dto.booking.SlotResponse;
 import com.exe.astratarot.domain.dto.common.ApiResponse;
 import com.exe.astratarot.domain.dto.review.CreateReviewRequest;
@@ -80,6 +81,21 @@ public class BookingController {
                         .orElse(null)));
     }
 
+    /**
+     * Lịch cả tháng. Khung đã có người đặt vẫn nằm trong kết quả, trạng thái
+     * TAKEN, để giao diện hiện ô mờ thay vì làm khung đó biến mất.
+     */
+    @GetMapping("/readers/{readerProfileId}/calendar")
+    @PreAuthorize("permitAll()")
+    public ResponseEntity<ApiResponse<MonthCalendarResponse>> calendar(
+            @PathVariable UUID readerProfileId,
+            @RequestParam int year,
+            @RequestParam int month,
+            @RequestParam(defaultValue = "30") int duration) {
+        return ResponseEntity.ok(ApiResponse.success(
+                bookingService.monthCalendar(readerProfileId, year, month, duration)));
+    }
+
     @GetMapping("/readers/{readerProfileId}/reviews")
     @PreAuthorize("permitAll()")
     public ResponseEntity<ApiResponse<Page<ReviewResponse>>> readerReviews(
@@ -112,6 +128,17 @@ public class BookingController {
                 me.getUser().getId(), status, PageRequest.of(page, size))));
     }
 
+    /** Lịch tháng của chính khách — đủ buổi để vẽ lịch, không cắt theo trang. */
+    @GetMapping("/bookings/me/calendar")
+    @PreAuthorize("hasAuthority('USER_BASIC')")
+    public ResponseEntity<ApiResponse<List<BookingResponse>>> myCalendar(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @RequestParam int year,
+            @RequestParam int month) {
+        return ResponseEntity.ok(ApiResponse.success(
+                bookingService.listForCustomerInMonth(me.getUser().getId(), year, month)));
+    }
+
     // ---------- Reader nhận lịch ----------
 
     @GetMapping("/bookings/reader")
@@ -123,6 +150,17 @@ public class BookingController {
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.success(bookingService.listForReader(
                 me.getUser().getId(), status, PageRequest.of(page, size))));
+    }
+
+    /** Lịch tháng phía Reader — có tên khách, vì đây là lịch của chính họ. */
+    @GetMapping("/bookings/reader/calendar")
+    @PreAuthorize("hasAuthority('READER_MANAGE_PROFILE')")
+    public ResponseEntity<ApiResponse<List<BookingResponse>>> readerCalendar(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @RequestParam int year,
+            @RequestParam int month) {
+        return ResponseEntity.ok(ApiResponse.success(
+                bookingService.listForReaderInMonth(me.getUser().getId(), year, month)));
     }
 
     @PatchMapping("/bookings/{id}/confirm")

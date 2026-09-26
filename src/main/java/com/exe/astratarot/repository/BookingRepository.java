@@ -98,6 +98,41 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
                                   @Param("start") Instant start,
                                   @Param("end") Instant end);
 
+    /**
+     * Buổi của khách trong một tháng, tính theo giờ bắt đầu.
+     *
+     * <p>Kèm các bên để dựng {@code BookingResponse} mà không nạp thêm từng dòng.
+     * Lịch huỷ cũng nằm trong kết quả: người đặt cần thấy buổi mình đã bỏ.
+     */
+    @Query("""
+            SELECT b FROM Booking b
+            JOIN FETCH b.user
+            JOIN FETCH b.readerProfile rp
+            JOIN FETCH rp.user
+            WHERE b.user.id = :userId
+              AND b.startTime >= :start
+              AND b.startTime < :end
+            ORDER BY b.startTime ASC
+            """)
+    List<Booking> findForUserBetween(@Param("userId") UUID userId,
+                                     @Param("start") Instant start,
+                                     @Param("end") Instant end);
+
+    /** Buổi khách đặt với Reader này trong một tháng, tính theo giờ bắt đầu. */
+    @Query("""
+            SELECT b FROM Booking b
+            JOIN FETCH b.user
+            JOIN FETCH b.readerProfile rp
+            JOIN FETCH rp.user
+            WHERE rp.user.id = :readerUserId
+              AND b.startTime >= :start
+              AND b.startTime < :end
+            ORDER BY b.startTime ASC
+            """)
+    List<Booking> findForReaderBetween(@Param("readerUserId") UUID readerUserId,
+                                       @Param("start") Instant start,
+                                       @Param("end") Instant end);
+
     long countByReaderProfileIdAndStatus(UUID readerProfileId, BookingStatus status);
 
     // Dem tat ca booking theo trang thai — cho bang thong ke quan tri.
