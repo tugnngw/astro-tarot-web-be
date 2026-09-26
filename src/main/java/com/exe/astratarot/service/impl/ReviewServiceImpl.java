@@ -71,7 +71,7 @@ public class ReviewServiceImpl implements ReviewService {
         notificationService.push(reader.getUser(), NotificationTypes.REVIEW_RECEIVED,
                 "Bạn có đánh giá mới",
                 booking.getUser().getFullName() + " chấm " + request.getRating() + " sao cho buổi xem.",
-                Map.of("bookingId", bookingId.toString()));
+                Map.of("bookingId", bookingId.toString(), NotificationTypes.SIDE, NotificationTypes.SIDE_READER));
 
         return toResponse(review);
     }

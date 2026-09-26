@@ -28,5 +28,32 @@ public final class NotificationTypes {
     /** Khách bổ sung tin → báo nhân viên phụ trách (hoặc hàng chờ). */
     public static final String SUPPORT_MESSAGE = "SUPPORT_MESSAGE";
 
+    // ---------- Khoá trong metadata ----------
+
+    /**
+     * Thông báo này nói về phía nào của một buổi xem: {@link #SIDE_READER} hay
+     * {@link #SIDE_CUSTOMER}.
+     *
+     * <p>Một buổi xem có hai người và HAI danh sách khác nhau trên giao diện —
+     * "Lịch hẹn của tôi" của khách, và tab Lịch hẹn trong Bàn làm việc của
+     * Reader. Loại thông báo không đủ để biết phải mở cái nào: BOOKING_CANCELLED
+     * và PAYMENT_CONFIRMED đều gửi được cho cả hai bên, tuỳ tình huống.
+     *
+     * <p>Không có khoá này thì giao diện phải đoán theo loại, và nó đoán sai:
+     * Reader nhận "Có lịch hẹn mới" rồi bấm vào, bị đưa sang danh sách phía
+     * KHÁCH — nơi trống rỗng một cách hoàn toàn đúng đắn, vì chính họ không đặt
+     * gì cả. Người dùng kết luận lịch hẹn không tới nơi.
+     *
+     * <p>Người gửi biết chắc mình đang báo cho ai, nên phía được nói ra ở đây
+     * chứ không suy lại ở đầu bên kia.
+     */
+    public static final String SIDE = "side";
+
+    /** Người nhận đang đứng ở vai Reader của buổi xem. */
+    public static final String SIDE_READER = "reader";
+
+    /** Người nhận đang đứng ở vai khách của buổi xem. */
+    public static final String SIDE_CUSTOMER = "customer";
+
     private NotificationTypes() {}
 }

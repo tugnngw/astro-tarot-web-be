@@ -17,12 +17,14 @@ import com.exe.astratarot.repository.UserRepository;
 import com.exe.astratarot.service.BookingChatService;
 import com.exe.astratarot.service.EscrowService;
 import com.exe.astratarot.service.NotificationService;
+import com.exe.astratarot.service.NotificationTypes;
 import com.exe.astratarot.service.PaymentService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -37,6 +39,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -160,6 +163,21 @@ class BookingServiceImplTest {
 
     private Instant gio(LocalDate ngay, int h, int m) {
         return ngay.atTime(h, m).atZone(VN).toInstant();
+    }
+
+    /**
+     * Metadata của thông báo đã gửi tới [nguoiNhan].
+     *
+     * <p>Đọc thẳng đối số thật thay vì {@code any()}: một thông báo gửi đúng
+     * người nhưng thiếu khoá "side" vẫn qua được mọi phép kiểm trước đó, và đó
+     * chính là cách lỗi này lọt ra tới người dùng.
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, ?> metaGuiCho(User nguoiNhan) {
+        ArgumentCaptor<Map<String, ?>> bat = ArgumentCaptor.forClass(Map.class);
+        verify(notificationService)
+                .push(eq(nguoiNhan), anyString(), anyString(), anyString(), bat.capture());
+        return bat.getValue();
     }
 
     private CreateBookingRequest yeuCau(Instant batDau, int phut) {
@@ -352,6 +370,23 @@ class BookingServiceImplTest {
                     () -> assertEquals("Khách", kq.getCustomerName()),
                     () -> assertFalse(kq.getReviewed()));
             verify(notificationService).push(eq(readerUser), anyString(), anyString(), anyString(), any());
+        }
+
+        @Test
+        @DisplayName("Thông báo đặt lịch nói rõ nó thuộc phía READER")
+        void thongBaoDatLichGhiPhiaReader() {
+            LocalDate ngay = LocalDate.now(VN).plusDays(2);
+            moLichTuan(ngay);
+
+            service.create(khach.getId(), yeuCau(gio(ngay, 10, 0), 30));
+
+            // Một buổi xem có hai người và HAI danh sách khác nhau trên giao
+            // diện. Nếu thông báo không nói mình thuộc phía nào thì đầu bên kia
+            // phải đoán theo loại — và nó đoán sai đúng ở đây: Reader bấm vào
+            // "Có lịch hẹn mới" rồi bị đưa sang danh sách phía KHÁCH, nơi trống
+            // rỗng một cách hoàn toàn đúng đắn vì chính họ không đặt gì cả.
+            assertEquals(NotificationTypes.SIDE_READER,
+                    metaGuiCho(readerUser).get(NotificationTypes.SIDE));
         }
 
         @Test
@@ -593,6 +628,10 @@ class BookingServiceImplTest {
             verify(paymentService).refundIfPaid(b);
             verify(notificationService).push(eq(readerUser), anyString(), anyString(), anyString(), any());
             verify(notificationService, never()).push(eq(khach), anyString(), anyString(), anyString(), any());
+            // Khách huỷ → người nhận đang đứng ở vai Reader. Đây là loại thông
+            // báo đi được CẢ HAI chiều, nên phía phải do người gửi nói ra.
+            assertEquals(NotificationTypes.SIDE_READER,
+                    metaGuiCho(readerUser).get(NotificationTypes.SIDE));
         }
 
         @Test
@@ -606,6 +645,9 @@ class BookingServiceImplTest {
             assertNull(b.getCancelReason());
             verify(notificationService).push(eq(khach), anyString(), anyString(), anyString(), any());
             verify(notificationService, never()).push(eq(readerUser), anyString(), anyString(), anyString(), any());
+            // Cùng một loại thông báo, phía ngược lại hẳn so với khi khách huỷ.
+            assertEquals(NotificationTypes.SIDE_CUSTOMER,
+                    metaGuiCho(khach).get(NotificationTypes.SIDE));
         }
 
         @Test
