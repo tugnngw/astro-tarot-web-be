@@ -105,15 +105,26 @@ public class BookingChatService {
      * đã trao đổi là lấy mất của người dùng thứ họ đã trả tiền để có.
      */
     public boolean chatOpen(Booking booking) {
-        if (booking.getPaymentStatus() != PaymentStatus.PAID) {
+        // Mốc là TIỀN ĐÃ VÀO, không phải đã trả đủ.
+        //
+        // Từ khi có đặt cọc 50%, một người vừa chuyển tiền thật vẫn ở
+        // DEPOSIT_PAID cho tới sát giờ hẹn. Đòi PAID ở đây nghĩa là suốt quãng
+        // ấy họ không hỏi Reader được câu nào — đúng quãng cần hỏi nhất, vì
+        // chưa gặp nên còn nhiều thứ chưa rõ.
+        PaymentStatus tra = booking.getPaymentStatus();
+        if (tra != PaymentStatus.PAID && tra != PaymentStatus.DEPOSIT_PAID) {
             return false;
         }
         return switch (booking.getStatus()) {
-            case CONFIRMED -> true;
+            // PENDING cũng mở. Reader chưa bấm nhận lịch KHÔNG phải lý do
+            // chặn: khách đã đặt cọc, và nếu Reader im lâu thì nhắn được một
+            // câu chính là thứ gỡ tình huống đó — chứ không phải ngồi chờ rồi
+            // huỷ.
+            case PENDING, CONFIRMED -> true;
             case COMPLETED -> booking.getEndTime() != null
                     && Instant.now().isBefore(
                             booking.getEndTime().plus(Duration.ofDays(graceDays)));
-            case PENDING, CANCELLED -> false;
+            case CANCELLED -> false;
         };
     }
 
@@ -121,9 +132,10 @@ public class BookingChatService {
         if (chatOpen(booking)) {
             return;
         }
-        if (booking.getPaymentStatus() != PaymentStatus.PAID) {
+        if (booking.getPaymentStatus() != PaymentStatus.PAID
+                && booking.getPaymentStatus() != PaymentStatus.DEPOSIT_PAID) {
             throw new IllegalStateException(
-                    "Cần thanh toán xong mới nhắn tin được với Reader.");
+                    "Cần đặt cọc hoặc thanh toán xong mới nhắn tin được với Reader.");
         }
         if (booking.getStatus() == BookingStatus.CANCELLED) {
             throw new IllegalStateException("Buổi tư vấn đã huỷ, không nhắn tin được nữa.");
