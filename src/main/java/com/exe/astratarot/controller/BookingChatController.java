@@ -56,6 +56,7 @@ public class BookingChatController {
     private static final int MAX_BODY = 4000;
 
     private final BookingChatService chatService;
+    private final com.exe.astratarot.service.PresenceService presenceService;
     private final SimpMessagingTemplate messagingTemplate;
 
     // ---------- REST ----------
@@ -88,6 +89,30 @@ public class BookingChatController {
             @PathVariable UUID bookingId) {
         int marked = chatService.markRead(bookingId, me.getUser().getId());
         return ResponseEntity.ok(ApiResponse.success(Map.of("marked", marked)));
+    }
+
+    /**
+     * Người BÊN KIA đang online không, và nếu không thì rời đi lúc nào.
+     *
+     * <p>Đi qua {@code participants} nên chỉ hai người của buổi đó hỏi được.
+     * Đây không phải chi tiết thừa: một endpoint hỏi trạng thái online theo
+     * userId bất kỳ là một cách để người lạ theo dõi giờ giấc của một Reader
+     * — biết họ thường online lúc nào, và biết ngay khi họ vừa mở máy.
+     *
+     * <p>{@code lastSeenAt} trả null khi người kia chưa từng kết nối lần nào.
+     * Giao diện phải chịu được điều đó chứ không hiện "Hoạt động 56 năm
+     * trước".
+     */
+    @GetMapping("/presence")
+    @PreAuthorize("hasAuthority('USER_BASIC')")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> presence(
+            @AuthenticationPrincipal CustomUserDetails me,
+            @PathVariable UUID bookingId) {
+        UUID benKia = chatService.participants(bookingId, me.getUser().getId()).otherUserId();
+        Map<String, Object> ra = new java.util.HashMap<>();
+        ra.put("online", presenceService.dangOnline(benKia));
+        ra.put("lastSeenAt", presenceService.lanCuoiThay(benKia).orElse(null));
+        return ResponseEntity.ok(ApiResponse.success(ra));
     }
 
     @GetMapping("/messages/unread")

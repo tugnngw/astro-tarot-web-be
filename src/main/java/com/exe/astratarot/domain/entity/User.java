@@ -104,6 +104,16 @@ public class User {
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
+    /**
+     * Lần cuối còn kết nối realtime, để hiện "Hoạt động 5 phút trước".
+     *
+     * <p>Khác {@link #lastLoginAt}: đăng nhập một lần rồi mở app suốt tuần thì
+     * lastLoginAt đứng im ở ngày đầu, và nó sẽ nói dối rằng người này biến mất
+     * bảy ngày trước.
+     */
+    @Column(name = "last_seen_at")
+    private Instant lastSeenAt;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
