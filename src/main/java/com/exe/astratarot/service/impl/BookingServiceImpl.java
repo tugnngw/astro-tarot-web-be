@@ -427,12 +427,22 @@ public class BookingServiceImpl implements BookingService {
             log.warn("Booking {} ở trạng thái paymentStatus={}, không nhả escrow khi complete",
                     bookingId, b.getPaymentStatus());
         }
-        notificationService.push(b.getUser(), NotificationTypes.BOOKING_COMPLETED,
-                "Buổi xem đã hoàn tất",
-                "Bạn có thể để lại đánh giá cho "
-                        + b.getReaderProfile().getUser().getFullName() + ".",
-                Map.of("bookingId", b.getId().toString(),
-                        NotificationTypes.SIDE, NotificationTypes.SIDE_CUSTOMER));
+        String tenReader = b.getReaderProfile().getUser().getFullName();
+        if (b.getPaymentStatus() == PaymentStatus.DEPOSIT_PAID) {
+            long conLai = b.getRemainingAmount() == null ? 0L : b.getRemainingAmount();
+            notificationService.push(b.getUser(), NotificationTypes.PAYMENT_REMAINING_DUE,
+                    "Reader đã đọc xong — thanh toán nốt 50%",
+                    tenReader + " đã đọc xong. Bạn còn " + conLai
+                            + "đ (50% còn lại). Vào Lịch hẹn để thanh toán nốt.",
+                    Map.of("bookingId", b.getId().toString(),
+                            NotificationTypes.SIDE, NotificationTypes.SIDE_CUSTOMER));
+        } else {
+            notificationService.push(b.getUser(), NotificationTypes.BOOKING_COMPLETED,
+                    "Buổi xem đã hoàn tất",
+                    "Bạn có thể để lại đánh giá cho " + tenReader + ".",
+                    Map.of("bookingId", b.getId().toString(),
+                            NotificationTypes.SIDE, NotificationTypes.SIDE_CUSTOMER));
+        }
         return toResponse(b, false);
     }
 

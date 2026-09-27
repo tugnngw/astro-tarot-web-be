@@ -17,6 +17,8 @@ public final class NotificationTypes {
     public static final String READER_APPLICATION_REJECTED = "READER_APPLICATION_REJECTED";
     public static final String ACCOUNT_ROLE_CHANGED = "ACCOUNT_ROLE_CHANGED";
     public static final String PAYMENT_CONFIRMED = "PAYMENT_CONFIRMED";
+    /** Reader đọc xong, khách mới cọc 50% — nhắc trả nốt. */
+    public static final String PAYMENT_REMAINING_DUE = "PAYMENT_REMAINING_DUE";
     public static final String PAYMENT_FAILED = "PAYMENT_FAILED";
     public static final String PAYMENT_REFUNDED = "PAYMENT_REFUNDED";
     public static final String PAYOUT_APPROVED = "PAYOUT_APPROVED";

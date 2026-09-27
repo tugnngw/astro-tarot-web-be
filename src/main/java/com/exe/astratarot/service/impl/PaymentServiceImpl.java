@@ -99,6 +99,12 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public PaymentInstructionResponse createPaymentIntent(UUID userId, UUID bookingId) {
+        return createPaymentIntent(userId, bookingId, null);
+    }
+
+    @Override
+    @Transactional
+    public PaymentInstructionResponse createPaymentIntent(UUID userId, UUID bookingId, PaymentPhase requested) {
         Booking booking = bookingRepository.findByIdWithParties(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy lịch hẹn"));
 
@@ -120,27 +126,27 @@ public class PaymentServiceImpl implements PaymentService {
         long amount;
 
         if (booking.getPaymentStatus() == PaymentStatus.DEPOSIT_PAID) {
-            // Đã đặt cọc → thanh toán nốt phần còn lại
-            // Chỉ cho tạo intent nếu chưa quá paymentDeadline
-            if (booking.getPaymentDeadline() != null
-                    && Instant.now().isAfter(booking.getPaymentDeadline())) {
-                // Quá hạn → tự động hủy (do scheduled job xử lý), nhưng
-                // vẫn cho tạo intent ở đây để user có thể thử trả nốt trước khi job chạy
-                log.warn("Booking {} quá hạn thanh toán nốt (deadline={}), vẫn cho tạo intent",
-                        booking.getId(), booking.getPaymentDeadline());
-            }
+            // Đã cọc thì phần còn lại thu sau khi Reader đọc xong (hoặc khách
+            // trả sớm hơn). Không còn hạn 12 tiếng trước buổi.
             phase = PaymentPhase.REMAINING;
             amount = booking.getRemainingAmount();
-        } else {
-            // UNPAID → xác định DEPOSIT hay FULL
+        } else if (requested == PaymentPhase.FULL) {
+            phase = PaymentPhase.FULL;
+            amount = booking.getTotalAmount();
+        } else if (requested == PaymentPhase.DEPOSIT) {
+            phase = PaymentPhase.DEPOSIT;
+            amount = booking.getDepositAmount();
+        } else if (requested == null) {
+            // Khách cũ không gửi lựa chọn: còn cửa sổ 12 tiếng thì cọc, sát giờ thì trả hết.
             if (isWithinDeadline(booking)) {
                 phase = PaymentPhase.DEPOSIT;
                 amount = booking.getDepositAmount();
             } else {
-                // Còn < 12h → bắt buộc trả 100%
                 phase = PaymentPhase.FULL;
                 amount = booking.getTotalAmount();
             }
+        } else {
+            throw new IllegalArgumentException("Chọn đặt cọc 50% hoặc thanh toán hết");
         }
 
         // Kiểm tra đã có giao dịch PENDING cùng phase chưa (để cho retry khi FAILED)
