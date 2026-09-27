@@ -3,6 +3,7 @@ package com.exe.astratarot.service;
 import com.exe.astratarot.domain.dto.payment.PaymentInstructionResponse;
 import com.exe.astratarot.domain.dto.payment.PaymentTransactionResponse;
 import com.exe.astratarot.domain.entity.Booking;
+import com.exe.astratarot.domain.enums.PaymentPhase;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -12,6 +13,13 @@ public interface PaymentService {
 
     /** Sinh (hoặc lấy lại) lệnh thanh toán cho một lịch hẹn (PayOS hoặc chuyển khoản). */
     PaymentInstructionResponse createPaymentIntent(UUID userId, UUID bookingId);
+
+    /**
+     * Giống hàm trên, nhưng khách chỉ rõ {@link PaymentPhase#DEPOSIT} hoặc
+     * {@link PaymentPhase#FULL}. Đã cọc rồi thì luôn thu phần còn lại, bỏ qua
+     * lựa chọn này.
+     */
+    PaymentInstructionResponse createPaymentIntent(UUID userId, UUID bookingId, PaymentPhase phase);
 
     Page<PaymentTransactionResponse> list(String status, Pageable pageable);
 

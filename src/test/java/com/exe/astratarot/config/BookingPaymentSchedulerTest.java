@@ -39,32 +39,10 @@ class BookingPaymentSchedulerTest {
     private BookingPaymentScheduler scheduler;
 
     @Test
-    @DisplayName("processOverdueAndRemind calls findDepositPaidNearDeadline with correct arguments")
-    void processOverdueAndRemind_CallsNearDeadlineQuery() {
-        Instant now = Instant.now();
-        Instant nextDeadline = now.plus(24, java.time.temporal.ChronoUnit.HOURS);
-
-        when(bookingRepository.findDepositPaidNearDeadline(
-                eq(PaymentStatus.DEPOSIT_PAID), any(Instant.class), any(Instant.class)))
-                .thenReturn(List.of());
-        when(bookingRepository.findOverdueDepositPaid(
-                eq(PaymentStatus.DEPOSIT_PAID), any(Instant.class)))
-                .thenReturn(List.of());
-
-        scheduler.processOverdueAndRemind();
-
-        ArgumentCaptor<Instant> nowCaptor = ArgumentCaptor.forClass(Instant.class);
-        ArgumentCaptor<Instant> nextDeadlineCaptor = ArgumentCaptor.forClass(Instant.class);
-        verify(bookingRepository).findDepositPaidNearDeadline(
-                eq(PaymentStatus.DEPOSIT_PAID),
-                nowCaptor.capture(),
-                nextDeadlineCaptor.capture());
-        verify(bookingRepository).findOverdueDepositPaid(
-                eq(PaymentStatus.DEPOSIT_PAID),
-                nowCaptor.capture());
-
-        assertThat(nowCaptor.getAllValues()).allMatch(instant -> !instant.isBefore(now));
-        assertThat(nowCaptor.getAllValues()).allMatch(instant -> !instant.isAfter(Instant.now()));
+    @DisplayName("không còn job quét hạn để tự huỷ buổi chỉ vì chưa trả nốt")
+    void khongConQuetHan() {
+        // Phần còn lại được nhắc khi Reader đánh dấu xong, không huỷ trước buổi.
+        verifyNoInteractions(bookingRepository, paymentService, bookingService);
     }
 
     @Test

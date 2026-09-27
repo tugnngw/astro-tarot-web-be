@@ -1,6 +1,7 @@
 package com.exe.astratarot.controller;
 
 import com.exe.astratarot.domain.dto.common.ApiResponse;
+import com.exe.astratarot.domain.dto.payment.CreatePaymentRequest;
 import com.exe.astratarot.domain.dto.payment.PaymentInstructionResponse;
 import com.exe.astratarot.domain.dto.payment.PaymentTransactionResponse;
 import com.exe.astratarot.domain.dto.payment.RejectRequest;
@@ -57,9 +58,13 @@ public class MoneyController {
     @PreAuthorize("hasAuthority('USER_BASIC')")
     public ResponseEntity<ApiResponse<PaymentInstructionResponse>> pay(
             @AuthenticationPrincipal CustomUserDetails me,
-            @PathVariable UUID bookingId) {
+            @PathVariable UUID bookingId,
+            @RequestBody(required = false) CreatePaymentRequest body) {
         PaymentInstructionResponse instruction =
-                paymentService.createPaymentIntent(me.getUser().getId(), bookingId);
+                paymentService.createPaymentIntent(
+                        me.getUser().getId(),
+                        bookingId,
+                        body == null ? null : body.phase());
         String msg = "PAYOS".equalsIgnoreCase(instruction.getPaymentMethod())
                 ? "Mở link PayOS để thanh toán"
                 : "Chuyển khoản theo hướng dẫn bên dưới";

@@ -218,7 +218,45 @@ class PaymentServiceImplTest {
         when(transactionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(payOsClient.enabled()).thenReturn(false);
 
-        return paymentService.createPaymentIntent(customerId, bookingId);
+        return paymentService.createPaymentIntent(customerId, bookingId, null);
+    }
+
+    @Test
+    @DisplayName("khách chọn trả hết thì thu đủ, dù còn hơn 12 tiếng")
+    void intent_ChonTraHet() {
+        PaymentInstructionResponse huongDan = taoTheoY(
+                Instant.now().plus(24, ChronoUnit.HOURS), PaymentPhase.FULL);
+
+        assertEquals("FULL", huongDan.getPaymentPhase());
+        assertEquals(100_000L, huongDan.getAmount());
+    }
+
+    @Test
+    @DisplayName("khách chọn cọc thì thu một nửa, dù buổi sát giờ")
+    void intent_ChonCoc() {
+        PaymentInstructionResponse huongDan = taoTheoY(null, PaymentPhase.DEPOSIT);
+
+        assertEquals("DEPOSIT", huongDan.getPaymentPhase());
+        assertEquals(50_000L, huongDan.getAmount());
+    }
+
+    private PaymentInstructionResponse taoTheoY(Instant han, PaymentPhase phase) {
+        booking.setPaymentStatus(PaymentStatus.UNPAID);
+        booking.setStatus(BookingStatus.CONFIRMED);
+        booking.setDepositAmount(50_000L);
+        booking.setRemainingAmount(50_000L);
+        booking.setTotalAmount(100_000L);
+        booking.setPaymentDeadline(han);
+        booking.setStartTime(Instant.now().plus(48, ChronoUnit.HOURS));
+
+        when(bookingRepository.findByIdWithParties(bookingId)).thenReturn(Optional.of(booking));
+        when(transactionRepository.findFirstByBookingIdAndStatusAndPhase(any(), any(), any()))
+                .thenReturn(Optional.empty());
+        when(transactionRepository.findByExternalTransactionId(any())).thenReturn(Optional.empty());
+        when(transactionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(payOsClient.enabled()).thenReturn(false);
+
+        return paymentService.createPaymentIntent(customerId, bookingId, phase);
     }
 }
 

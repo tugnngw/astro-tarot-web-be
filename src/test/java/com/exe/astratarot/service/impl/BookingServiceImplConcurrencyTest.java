@@ -105,6 +105,26 @@ class BookingServiceImplConcurrencyTest {
     }
 
     @Test
+    @DisplayName("đọc xong mà khách mới cọc thì nhắc trả nốt 50%, chưa nhả ký quỹ")
+    void complete_DaCoc_NhacTraNot() {
+        booking.setPaymentStatus(PaymentStatus.DEPOSIT_PAID);
+        booking.setRemainingAmount(50_000L);
+        booking.setStartTime(Instant.now().minusSeconds(7300));
+        when(bookingRepository.findByIdForUpdate(bookingId)).thenReturn(Optional.of(booking));
+        when(bookingChatService.chatOpen(booking)).thenReturn(true);
+
+        bookingService.complete(readerUserId, bookingId);
+
+        verify(notificationService).push(
+                eq(customerUser),
+                eq(com.exe.astratarot.service.NotificationTypes.PAYMENT_REMAINING_DUE),
+                org.mockito.ArgumentMatchers.contains("50%"),
+                org.mockito.ArgumentMatchers.contains("50000"),
+                any());
+        verify(escrowService, never()).releaseForBooking(any());
+    }
+
+    @Test
     @DisplayName("cancel() calls bookingRepository.findByIdForUpdate() to acquire pessimistic lock")
     void cancel_UsesFindByIdForUpdate() {
         when(bookingRepository.findByIdForUpdate(bookingId)).thenReturn(Optional.of(booking));

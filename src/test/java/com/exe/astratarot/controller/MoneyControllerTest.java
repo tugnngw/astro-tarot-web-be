@@ -102,11 +102,11 @@ class MoneyControllerTest {
         @Test
         @DisplayName("PayOS: lời nhắn bảo mở link, không bảo chuyển khoản tay")
         void payOs() {
-            when(paymentService.createPaymentIntent(any(), any()))
+            when(paymentService.createPaymentIntent(any(), any(), any()))
                     .thenReturn(PaymentInstructionResponse.builder()
                             .paymentMethod("PAYOS").checkoutUrl("https://pay.payos.vn/x").build());
 
-            var res = controller.pay(toi, UUID.randomUUID());
+            var res = controller.pay(toi, UUID.randomUUID(), null);
 
             // Hai phương thức trả tiền cần hai câu hướng dẫn khác hẳn nhau;
             // dùng chung một câu là dẫn khách làm sai một trong hai.
@@ -119,11 +119,11 @@ class MoneyControllerTest {
         @Test
         @DisplayName("Chuyển khoản tay: lời nhắn bảo chuyển theo hướng dẫn")
         void chuyenKhoanTay() {
-            when(paymentService.createPaymentIntent(any(), any()))
+            when(paymentService.createPaymentIntent(any(), any(), any()))
                     .thenReturn(PaymentInstructionResponse.builder()
                             .paymentMethod("BANK_TRANSFER").build());
 
-            assertTrue(controller.pay(toi, UUID.randomUUID()).getBody()
+            assertTrue(controller.pay(toi, UUID.randomUUID(), null).getBody()
                     .getMessage().contains("Chuyển khoản"));
         }
 
@@ -131,14 +131,14 @@ class MoneyControllerTest {
         @DisplayName("ID người trả lấy từ TOKEN, không từ đường dẫn hay thân yêu cầu")
         void idLayTuToken() {
             UUID bookingId = UUID.randomUUID();
-            when(paymentService.createPaymentIntent(any(), any()))
+            when(paymentService.createPaymentIntent(any(), any(), any()))
                     .thenReturn(PaymentInstructionResponse.builder().paymentMethod("BANK_TRANSFER").build());
 
-            controller.pay(toi, bookingId);
+            controller.pay(toi, bookingId, null);
 
             // Nhận id từ client là cho bất kỳ ai trả tiền hộ — hoặc xem hướng
             // dẫn thanh toán của buổi xem người khác.
-            verify(paymentService).createPaymentIntent(eq(nguoiDung.getId()), eq(bookingId));
+            verify(paymentService).createPaymentIntent(eq(nguoiDung.getId()), eq(bookingId), eq(null));
         }
     }
 
