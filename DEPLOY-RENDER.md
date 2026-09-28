@@ -297,6 +297,22 @@ Ba cách xử lý, tuỳ mức độ bạn quan tâm:
   phần upload.
 - **Trả tiền đĩa Render** (7 USD/tháng cho 1 GB) — nhưng như vậy không còn free.
 
+## Đừng chĩa pinger vào database tính tiền theo giờ compute
+
+Mục "Giữ cho dịch vụ khỏi ngủ" bên dưới ping backend mỗi 10 phút để Render
+khỏi ngủ. Mỗi lần ping, backend chạm database.
+
+Với Neon, điều đó có nghĩa là **compute không bao giờ scale về 0** và bị tính
+24/7. Ngày 28/09/2026 nó đã đốt hết 100 CU-hrs của gói free trong 19 ngày và
+làm project bị tạm dừng giữa kỳ — xem `deploy/KHOI-PHUC-NEON.md`.
+
+Supabase free không tính theo giờ compute, nên trên Supabase thì workflow ấy
+vô hại, và còn có ích vì project free của Supabase cũng bị tạm dừng sau một
+tuần không hoạt động.
+
+Bài học chỉ áp cho những nhà cung cấp tính compute theo giờ: Neon, và các gói
+serverless tương tự.
+
 ## Giữ cho dịch vụ khỏi ngủ
 
 Với đồ án cần demo thì gần như bắt buộc, vì 90 giây chờ trước mặt người chấm là
