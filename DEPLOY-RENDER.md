@@ -224,6 +224,17 @@ bash deploy/chuyen-database.sh khoa-bi-mat-db.txt
 File hai dòng, `NGUON=postgresql://...` và `DICH=postgresql://...`. Đặt tên
 theo mẫu `khoa-bi-mat-*.txt` để `.gitignore` tự bỏ qua — nó chứa mật khẩu.
 
+Mật khẩu có ký tự lạ (`@ : / ? # & khoảng trắng`) thì mã hoá URL: `@` thành
+`%40`, dấu cách thành `%20`. Đó là yêu cầu của chuỗi kết nối, không phải của
+script.
+
+**Trên Windows, gọi bash của Git chứ đừng gõ `bash` trần** trong PowerShell —
+`bash` ở đó trỏ vào WSL, và WSL không thấy được ổ đĩa theo cùng đường dẫn:
+
+```powershell
+& "C:\Program Files\Git\bin\bash.exe" deploy/chuyen-database.sh khoa-bi-mat-db.txt
+```
+
 Nó chỉ cần Docker, không cần cài `pg_dump`. Ba thứ nó làm mà hai dòng
 `pg_dump`/`pg_restore` trần không làm:
 
