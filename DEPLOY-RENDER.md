@@ -122,9 +122,9 @@ Cổng là `6379`, và **bắt buộc TLS** — `render.yaml` đã đặt sẵn
 
 | Biến | Lấy ở đâu |
 |---|---|
-| `SPRING_DATASOURCE_URL`, `SPRING_FLYWAY_URL` | chuỗi JDBC của Neon (giống nhau) |
-| `SPRING_DATASOURCE_USERNAME`, `SPRING_FLYWAY_USER` | user của Neon |
-| `SPRING_DATASOURCE_PASSWORD`, `SPRING_FLYWAY_PASSWORD`, `DB_PASSWORD` | password của Neon (cả ba giống nhau) |
+| `SPRING_DATASOURCE_URL` | chuỗi JDBC của Postgres, giữ `?sslmode=require` |
+| `SPRING_DATASOURCE_USERNAME` | user của Postgres |
+| `SPRING_DATASOURCE_PASSWORD`, `DB_PASSWORD` | password (hai biến, cùng một giá trị) |
 | `REDIS_HOST` | Endpoint của Upstash |
 | `SPRING_DATA_REDIS_PASSWORD` | Password của Upstash |
 | `ASTRO_ENCRYPTION_KEY` | tự sinh: `openssl rand -base64 32` |
@@ -133,6 +133,14 @@ Cổng là `6379`, và **bắt buộc TLS** — `render.yaml` đã đặt sẵn
 
 `JWT_SECRET` để Render tự sinh.
 
+> **Không còn `SPRING_FLYWAY_URL` / `SPRING_FLYWAY_USER` / `SPRING_FLYWAY_PASSWORD`.**
+> Ba biến ấy từng tồn tại và tài liệu này từng ghi rõ chúng phải *giống hệt* ba
+> biến của datasource — tức là ba thứ thừa phải nhớ chép lại mỗi lần đổi cơ sở
+> dữ liệu. Bỏ đi thì Flyway dùng lại datasource của ứng dụng, và không còn hai
+> nơi để lệch nhau. Nếu dịch vụ trên Render còn giữ ba biến cũ thì **xoá chúng
+> đi**: Spring Boot thấy `SPRING_FLYWAY_URL` là lập tức mở một kết nối riêng
+> bằng đúng chuỗi đó, bỏ qua datasource.
+
 **`ASTRO_ENCRYPTION_KEY` phải là base64 của đúng 32 byte, và cất một bản sao ở
 nơi khác.** Nó mã hoá ngày sinh và nơi sinh trong CSDL; đổi khoá sau khi đã có
 dữ liệu là không giải mã lại được nữa.
@@ -140,6 +148,81 @@ dữ liệu là không giải mã lại được nữa.
 4. Bấm **Apply**. Lần đầu mất 5–10 phút vì phải tải phụ thuộc Maven.
 
 Flyway tự chạy toàn bộ migration khi khởi động — không cần tạo bảng bằng tay.
+
+## Chuyển sang Supabase (hoặc bất kỳ Postgres nào khác)
+
+### Hai cái bẫy, và cả hai đều báo lỗi sai chỗ
+
+**1. Host trực tiếp chỉ có IPv6.** `db.<project-ref>.supabase.co` không có bản
+ghi A nào:
+
+```
+$ nslookup db.ikbzlitbqifprgypeuol.supabase.co
+*** no data of the requested type
+```
+
+Render gói free không có IPv6, nên nó sẽ **không bao giờ** nối được — bất kể
+mật khẩu và chứng chỉ đúng hay sai. Phải dùng host **pooler**:
+
+| | Host | Cổng |
+|---|---|---|
+| Session pooler (dùng cái này) | `aws-0-<region>.pooler.supabase.com` | 5432 |
+| Transaction pooler | `aws-0-<region>.pooler.supabase.com` | 6543 |
+
+Session pooler giữ nguyên một phiên Postgres cho mỗi kết nối, nên Flyway và
+Hibernate chạy bình thường. Transaction pooler trả kết nối về hồ sau *mỗi câu
+lệnh*, nên nó phá prepared statement — phải thêm `prepareThreshold=0`, và ngay
+cả thế thì advisory lock của Flyway cũng không còn nghĩa.
+
+Số ở đầu (`aws-0`, `aws-1`…) là **cụm máy chủ, không phải số thứ tự để đoán**.
+Trỏ nhầm cụm thì lỗi là `tenant/user ... not found`, một câu không hề gợi ra
+rằng vấn đề nằm ở tên miền.
+
+**2. Tên đăng nhập phải kèm project-ref.** `postgres.<project-ref>`, không phải
+`postgres` trần — pooler dựa vào phần đuôi ấy để biết định tuyến tới dự án nào.
+
+### Dò trước khi deploy
+
+Không đoán. Có sẵn một công cụ dò dùng **đúng driver và đúng JVM** mà Render
+dùng:
+
+```bash
+export JDBC_URL='jdbc:postgresql://aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require'
+export DB_USER='postgres.<project-ref>'
+export DB_PASSWORD='...'
+JAR=$(ls ~/.m2/repository/org/postgresql/postgresql/*/postgresql-*.jar | tail -1)
+java -Dstdout.encoding=UTF-8 -cp "$JAR" deploy/KiemKetNoi.java
+```
+
+Nó tách ba câu hỏi mà một thông báo lỗi duy nhất gộp lại: tên miền phân giải ra
+IPv4 hay chỉ IPv6, cổng TCP có mở không, và bắt tay TLS cộng đăng nhập có qua
+không. Mật khẩu đọc từ biến môi trường và không bao giờ được in ra.
+
+**"psql nối được" không chứng minh được gì.** psql dùng OpenSSL, ứng dụng dùng
+tầng TLS của Java — hai thứ thương lượng khác nhau và tin bộ chứng chỉ khác
+nhau. Đó là lý do công cụ trên chạy bằng Java chứ không phải một lệnh `psql`.
+
+### Dữ liệu KHÔNG tự đi theo
+
+Đổi biến môi trường chỉ đổi chỗ ứng dụng trỏ tới. Cơ sở dữ liệu mới **rỗng**:
+Flyway sẽ dựng đủ bảng rồi chạy tiếp như không có gì, và toàn bộ tài khoản,
+lịch hẹn, giao dịch nằm lại ở nơi cũ. Không có thông báo lỗi nào — trang vẫn
+chạy, chỉ là trống trơn.
+
+Chép dữ liệu sang **trước** khi đổi biến:
+
+```bash
+pg_dump --no-owner --no-privileges -Fc -d "<chuỗi kết nối CŨ>" -f astro.dump
+pg_restore --no-owner --no-privileges -d "<chuỗi kết nối MỚI>" astro.dump
+```
+
+Dùng `pg_dump` cùng phiên bản (hoặc mới hơn) so với máy chủ nguồn. Restore
+xong thì kiểm `select count(*) from users;` ở cả hai bên rồi mới đổi biến.
+
+Giữ cơ sở dữ liệu cũ thêm ít nhất một tuần. Nó là bản lùi duy nhất, và một lỗi
+lúc chép dữ liệu thường chỉ lộ ra sau vài ngày.
+
+---
 
 ## 4. Kiểm tra
 
