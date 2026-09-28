@@ -103,7 +103,19 @@ doc_bien() {
   printf '%s' "$dong"
 }
 
-if [ $# -ge 1 ]; then
+# --thu: chỉ kiểm hai đầu còn trả lời không, rồi dừng. Không chép gì.
+#
+# Có riêng một chế độ cho việc này vì câu hỏi "database cũ còn đọc được
+# không" thường xuất hiện đúng lúc nó SẮP không đọc được nữa — hết hạn mức,
+# sắp bị treo, sắp hết hạn dùng thử. Lúc ấy cần một câu trả lời trong mười
+# giây, không phải một lượt chép có thể chết giữa chừng.
+CHI_THU=0
+for t in "$@"; do
+  [ "$t" = "--thu" ] && CHI_THU=1
+done
+set -- "${@/--thu/}"
+
+if [ -n "${1:-}" ]; then
   [ -f "$1" ] || { loi "Không có file $1"; exit 1; }
   NGUON=$(doc_bien "$1" NGUON)
   DICH=$(doc_bien "$1" DICH)
@@ -181,6 +193,32 @@ fi
 # pg_dump phải mới BẰNG HOẶC HƠN máy chủ nguồn.
 anh="postgres:${major_nguon}-alpine"
 echo "  dùng ảnh $anh"
+
+if [ "$CHI_THU" -eq 1 ]; then
+  echo
+  echo "--- Đếm thử vài bảng ở NGUỒN"
+  # Đọc được số dòng nghĩa là database còn phục vụ truy vấn thật, không chỉ
+  # còn bắt tay được. Một máy chủ hết hạn mức có thể vẫn cho nối rồi mới từ
+  # chối câu lệnh.
+  co_bang=0
+  for b in users bookings payment_transactions; do
+    n=$(hoi NGUON "select count(*) from public.$b")
+    if [ -n "$n" ]; then
+      printf "  %-22s %s dòng\n" "$b" "$n"
+      co_bang=1
+    else
+      printf "  %-22s (không đọc được)\n" "$b"
+    fi
+  done
+  echo
+  if [ "$co_bang" -eq 1 ]; then
+    xong "NGUỒN còn đọc được. Chạy lại KHÔNG kèm --thu để chép sang ĐÍCH."
+  else
+    loi "NGUỒN nối được nhưng không truy vấn được bảng nào."
+    echo "  Thường là hết hạn mức hoặc sai database trong chuỗi kết nối."
+  fi
+  exit 0
+fi
 
 echo
 echo "--- Kiểm tra ĐÍCH có rỗng không"
