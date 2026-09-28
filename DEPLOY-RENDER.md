@@ -209,15 +209,25 @@ Flyway sẽ dựng đủ bảng rồi chạy tiếp như không có gì, và to�
 lịch hẹn, giao dịch nằm lại ở nơi cũ. Không có thông báo lỗi nào — trang vẫn
 chạy, chỉ là trống trơn.
 
-Chép dữ liệu sang **trước** khi đổi biến:
+Chép dữ liệu sang **trước** khi đổi biến. Có sẵn script làm trọn việc:
 
 ```bash
-pg_dump --no-owner --no-privileges -Fc -d "<chuỗi kết nối CŨ>" -f astro.dump
-pg_restore --no-owner --no-privileges -d "<chuỗi kết nối MỚI>" astro.dump
+bash deploy/chuyen-database.sh
 ```
 
-Dùng `pg_dump` cùng phiên bản (hoặc mới hơn) so với máy chủ nguồn. Restore
-xong thì kiểm `select count(*) from users;` ở cả hai bên rồi mới đổi biến.
+Nó chỉ cần Docker, không cần cài `pg_dump`. Ba thứ nó làm mà hai dòng
+`pg_dump`/`pg_restore` trần không làm:
+
+- **Chọn đúng bản `pg_dump`.** Bản cũ hơn máy chủ nguồn sẽ lặng lẽ bỏ qua thứ
+  nó không hiểu — dump báo thành công và thiếu dữ liệu. Script đọc phiên bản
+  hai bên rồi chọn ảnh Docker cho khớp.
+- **Từ chối nếu đích chưa rỗng.** Đổ đè lên database đã có bảng sinh hàng trăm
+  lỗi `already exists` lẫn giữa lỗi thật, và không ai đọc hết.
+- **Đếm lại từng bảng ở cả hai bên.** `pg_restore` trả mã 0 không có nghĩa là
+  đủ dòng; đây mới là chỗ chứng minh dữ liệu sang tới nơi.
+
+Chuỗi kết nối gõ vào lúc chạy chứ không truyền qua tham số — tham số thì hiện
+ra trong `ps` và nằm lại trong lịch sử shell.
 
 Giữ cơ sở dữ liệu cũ thêm ít nhất một tuần. Nó là bản lùi duy nhất, và một lỗi
 lúc chép dữ liệu thường chỉ lộ ra sau vài ngày.
