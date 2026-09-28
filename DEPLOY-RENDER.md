@@ -232,7 +232,7 @@ script.
 `bash` ở đó trỏ vào WSL, và WSL không thấy được ổ đĩa theo cùng đường dẫn:
 
 ```powershell
-& "C:\Program Files\Gitinash.exe" deploy/chuyen-database.sh khoa-bi-mat-db.txt
+& "C:\Program Files\Git\bin\bash.exe" deploy/chuyen-database.sh khoa-bi-mat-db.txt
 ```
 
 Nó chỉ cần Docker, không cần cài `pg_dump`. Ba thứ nó làm mà hai dòng
