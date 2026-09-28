@@ -32,7 +32,15 @@
 # Chạy
 # ---------------------------------------------------------------------------
 #
-#   bash deploy/chuyen-database.sh
+#   bash deploy/chuyen-database.sh                    # gõ chuỗi kết nối vào
+#   bash deploy/chuyen-database.sh khoa-bi-mat-db.txt # đọc từ file, không gõ gì
+#
+# File có dạng hai dòng:
+#
+#     NGUON=postgresql://user:matkhau@ep-....neon.tech/neondb?sslmode=require
+#     DICH=postgresql://postgres.<ref>:matkhau@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require
+#
+# Đặt tên theo mẫu `khoa-bi-mat-*.txt` để .gitignore tự bỏ qua nó.
 #
 # Cần Docker. Không cần cài pg_dump trên máy.
 
@@ -58,10 +66,30 @@ echo "và tên đăng nhập postgres.<project-ref>. Host db.<ref>.supabase.co c
 echo "có IPv6."
 echo
 
-# -s: không hiện lại những gì gõ vào. Chuỗi có mật khẩu bên trong.
-read -r -s -p "NGUỒN  (database đang có dữ liệu): " NGUON; echo
-read -r -s -p "ĐÍCH   (database mới, đang rỗng) : " DICH;  echo
-echo
+# Đọc từ file nếu có, để khỏi phải dán chuỗi dài bằng tay.
+#
+# File hai dòng, mỗi dòng một chuỗi kết nối:
+#
+#     NGUON=postgresql://...
+#     DICH=postgresql://...
+#
+# Đọc bằng `source` chứ không phải đọc rồi eval từng dòng: chuỗi kết nối có
+# dấu & và ? bên trong, và một vòng lặp tự cắt chuỗi sẽ nuốt mất chúng.
+#
+# File này chứa mật khẩu nên phải nằm ngoài git. `.gitignore` đã có sẵn mẫu
+# `khoa-bi-mat-*.txt`, đặt tên theo mẫu ấy là an toàn.
+if [ $# -ge 1 ]; then
+  [ -f "$1" ] || { loi "Không có file $1"; exit 1; }
+  # shellcheck disable=SC1090
+  . "$1"
+  echo "Đọc chuỗi kết nối từ $1"
+  echo
+else
+  # -s: không hiện lại những gì gõ vào. Chuỗi có mật khẩu bên trong.
+  read -r -s -p "NGUỒN  (database đang có dữ liệu): " NGUON; echo
+  read -r -s -p "ĐÍCH   (database mới, đang rỗng) : " DICH;  echo
+  echo
+fi
 
 [ -n "${NGUON:-}" ] && [ -n "${DICH:-}" ] || { loi "Thiếu một trong hai chuỗi."; exit 1; }
 export NGUON DICH
