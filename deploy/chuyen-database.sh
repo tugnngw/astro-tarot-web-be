@@ -152,11 +152,22 @@ echo "--- Dump từ NGUỒN (chỉ schema public)"
 # dụng đều nằm ở public, và kéo theo schema hệ thống là chuốc lấy xung đột.
 # --no-owner --no-privileges: chủ sở hữu ở hai nơi khác nhau, giữ lại chỉ làm
 # restore đỏ vì những vai trò không tồn tại bên đích.
-if ! docker run --rm -e NGUON -v "$thu_muc:/x" "$anh" \
-      sh -c 'pg_dump "$NGUON" -n public --no-owner --no-privileges -Fc -f /x/astro.dump'; then
+# Dump đi ra STDOUT rồi mới ghi xuống file, thay vì gắn thư mục vào container.
+#
+# Trên Git Bash ở Windows, `-v "$thu_muc:/x"` KHÔNG chạy: MSYS tưởng `/x` là
+# một đường dẫn POSIX rồi đổi nó thành `X:\`, và docker từ chối với
+# "destination can't be '/'". Đặt MSYS_NO_PATHCONV rồi gọi cygpath thì chữa
+# được, nhưng đó là thêm hai thứ chỉ đúng trên một hệ điều hành.
+#
+# Ống dẫn thì không có đường dẫn nào để ai đó bóp méo, và chạy như nhau ở mọi
+# nơi. `-Fc` vẫn giữ để pg_restore chọn lọc được và báo lỗi theo từng mục.
+if ! docker run --rm -e NGUON "$anh" \
+      sh -c 'pg_dump "$NGUON" -n public --no-owner --no-privileges -Fc' \
+      > "$thu_muc/astro.dump"; then
   loi "pg_dump hỏng. Không có gì bị thay đổi ở đâu cả."
   exit 1
 fi
+[ -s "$thu_muc/astro.dump" ] || { loi "Dump rỗng. Không chép gì cả."; exit 1; }
 co=$(du -h "$thu_muc/astro.dump" 2>/dev/null | cut -f1)
 xong "dump xong ($co)"
 
@@ -164,9 +175,11 @@ echo
 echo "--- Restore sang ĐÍCH"
 # pg_restore trả mã khác 0 cả khi chỉ là cảnh báo, nên không dừng ở đây —
 # phần đếm dòng bên dưới mới là chỗ phán xử.
-docker run --rm -e DICH -v "$thu_muc:/x" "$anh" \
-  sh -c 'pg_restore "$DICH" --no-owner --no-privileges /x/astro.dump' \
-  2>&1 | tail -20
+# `-i` để container nhận được STDIN. pg_restore không có tên file thì đọc từ
+# STDIN — cùng lý do như lúc dump: không có đường dẫn nào để bóp méo.
+docker run --rm -i -e DICH "$anh" \
+  sh -c 'pg_restore --no-owner --no-privileges -d "$DICH"' \
+  < "$thu_muc/astro.dump" 2>&1 | tail -20
 echo
 
 echo "--- Đối chiếu số dòng"
