@@ -109,13 +109,31 @@ if [ $# -ge 1 ]; then
   DICH=$(doc_bien "$1" DICH)
   # Bắt luôn trường hợp còn nguyên chỗ trống trong file mẫu — nếu không thì
   # nó đi tiếp và báo "không nối được", một câu dẫn người ta đi sai hướng.
-  # Chỉ bắt đúng dạng chỗ trống <TEN_VIET_HOA>, không bắt mọi dấu `<`: một
-  # mật khẩu thật có thể chứa nó (đúng ra phải mã hoá thành %3C, nhưng từ
-  # chối oan thì người ta không biết mình bị từ chối vì cái gì).
-  if [[ "$NGUON$DICH" =~ \<[A-Z_]+\> ]]; then
-    loi "Trong $1 còn chỗ trống chưa điền (dạng <...>)."
-    exit 1
-  fi
+  # Kiểm TỪNG ô và nói đích danh ô nào hỏng.
+  #
+  # Bản trước chỉ báo "còn chỗ trống chưa điền" cho cả file. Đúng nhưng vô
+  # dụng: người đọc vẫn phải mở file ra dò xem chỗ nào, mà file thì có hai ô
+  # và cả hai đều có thể sai theo ba kiểu khác nhau.
+  #
+  # Chỉ bắt đúng dạng <TEN_VIET_HOA>, không bắt mọi dấu `<`: mật khẩu thật có
+  # thể chứa nó, và từ chối oan thì không ai biết mình bị từ chối vì cái gì.
+  hong=0
+  for o in NGUON DICH; do
+    v=${!o}
+    if [ -z "$v" ]; then
+      loi "$o= còn để trống trong $1"
+      hong=1
+    elif [[ "$v" =~ (\<[A-Z_]+\>) ]]; then
+      loi "$o= còn chỗ trống ${BASH_REMATCH[1]} chưa thay trong $1"
+      hong=1
+    elif [ "${v#postgresql://}" = "$v" ] && [ "${v#postgres://}" = "$v" ]; then
+      # Bắt luôn lỗi dán nhầm chuỗi JDBC — nó khác đúng bốn ký tự ở đầu, và
+      # nếu lọt qua thì psql báo một câu chẳng liên quan gì tới nguyên nhân.
+      loi "$o= phải bắt đầu bằng postgresql:// (bỏ chữ 'jdbc:' nếu chép từ Render)"
+      hong=1
+    fi
+  done
+  [ "$hong" -eq 0 ] || exit 1
   echo "Đọc chuỗi kết nối từ $1"
   echo
 else
