@@ -49,22 +49,34 @@ services:
       - key: FORWARD_HEADERS_STRATEGY
         value: FRAMEWORK
 
-      # ---------- Postgres ở Neon ----------
-      # Lấy chuỗi kết nối ở Neon Dashboard → Connection Details → JDBC.
-      # Dạng: jdbc:postgresql://ep-abc-123.ap-southeast-1.aws.neon.tech/neondb?sslmode=require
-      # PHẢI giữ ?sslmode=require, thiếu là Neon từ chối.
+      # ---------- Postgres ----------
+      #
+      # MỘT bộ thông tin kết nối duy nhất. Trước đây có thêm SPRING_FLYWAY_URL,
+      # SPRING_FLYWAY_USER và SPRING_FLYWAY_PASSWORD, và tài liệu ghi rõ chúng
+      # "giống hệt" ba biến trên — tức là ba biến thừa phải nhớ chép lại mỗi
+      # lần đổi cơ sở dữ liệu.
+      #
+      # Nó đã hỏng đúng theo cách dự đoán được: khi chuyển sang cơ sở dữ liệu
+      # mới, ba biến của datasource được cập nhật còn ba biến của Flyway thì
+      # không, nên ứng dụng trỏ một nơi mà Flyway trỏ nơi khác. Deploy chết ở
+      # bước Flyway, và thông báo lỗi nói về TLS chứ không nói về cấu hình —
+      # nên rất khó lần ra.
+      #
+      # Bỏ hẳn ba biến ấy đi thì Flyway dùng lại datasource của ứng dụng (mặc
+      # định của Spring Boot), và không còn hai nơi để lệch nhau nữa.
+      #
+      # Chuỗi JDBC PHẢI giữ ?sslmode=require.
+      #
+      # Supabase: dùng host POOLER (aws-0-<region>.pooler.supabase.com, cổng
+      # 5432 cho session pooler), KHÔNG dùng db.<ref>.supabase.co — host đó chỉ
+      # có bản ghi IPv6, mà Render gói free không có IPv6. Tên đăng nhập phải
+      # là postgres.<project-ref>, không phải postgres trần: pooler dựa vào
+      # phần đuôi ấy để biết định tuyến tới dự án nào.
       - key: SPRING_DATASOURCE_URL
         sync: false
       - key: SPRING_DATASOURCE_USERNAME
         sync: false
       - key: SPRING_DATASOURCE_PASSWORD
-        sync: false
-      # Flyway mở kết nối riêng, không dùng lại của datasource.
-      - key: SPRING_FLYWAY_URL
-        sync: false
-      - key: SPRING_FLYWAY_USER
-        sync: false
-      - key: SPRING_FLYWAY_PASSWORD
         sync: false
       # application.properties còn một chỗ viết ${DB_PASSWORD} trần.
       - key: DB_PASSWORD
