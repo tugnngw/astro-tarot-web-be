@@ -73,15 +73,49 @@ echo
 #     NGUON=postgresql://...
 #     DICH=postgresql://...
 #
-# Đọc bằng `source` chứ không phải đọc rồi eval từng dòng: chuỗi kết nối có
-# dấu & và ? bên trong, và một vòng lặp tự cắt chuỗi sẽ nuốt mất chúng.
-#
 # File này chứa mật khẩu nên phải nằm ngoài git. `.gitignore` đã có sẵn mẫu
 # `khoa-bi-mat-*.txt`, đặt tên theo mẫu ấy là an toàn.
+#
+# ---- Vì sao KHÔNG dùng `source` ----
+#
+# `source` là *chạy* file như mã shell, không phải đọc nó. Mật khẩu thật hay
+# có ký tự mà shell coi là lệnh:
+#
+#     DICH=...:mat<khau@...     →  `<` thành chuyển hướng, báo
+#                                  "No such file or directory"
+#     DICH=...:a;rm -rf ~;b@... →  shell CHẠY phần giữa
+#     DICH=...:mat khau@...     →  cắt ở dấu cách
+#
+# Bộ đọc dưới đây không diễn giải gì: cắt đúng sau dấu `=` đầu tiên rồi giữ
+# nguyên phần còn lại.
+doc_bien() {
+  local dong
+  dong=$(grep -m1 "^[[:space:]]*$2=" "$1") || return 1
+  dong=${dong#*=}
+  # File soạn bằng Notepad trên Windows có \r ở cuối dòng. Nó sẽ dính vào
+  # đuôi chuỗi kết nối và đẻ ra một lỗi không thể nào đoán ra từ thông báo.
+  dong=${dong%$'\r'}
+  # Bỏ nháy bao ngoài nếu người dùng có gõ.
+  case "$dong" in
+    \'*\') dong=${dong#\'}; dong=${dong%\'} ;;
+    \"*\") dong=${dong#\"}; dong=${dong%\"} ;;
+  esac
+  printf '%s' "$dong"
+}
+
 if [ $# -ge 1 ]; then
   [ -f "$1" ] || { loi "Không có file $1"; exit 1; }
-  # shellcheck disable=SC1090
-  . "$1"
+  NGUON=$(doc_bien "$1" NGUON)
+  DICH=$(doc_bien "$1" DICH)
+  # Bắt luôn trường hợp còn nguyên chỗ trống trong file mẫu — nếu không thì
+  # nó đi tiếp và báo "không nối được", một câu dẫn người ta đi sai hướng.
+  # Chỉ bắt đúng dạng chỗ trống <TEN_VIET_HOA>, không bắt mọi dấu `<`: một
+  # mật khẩu thật có thể chứa nó (đúng ra phải mã hoá thành %3C, nhưng từ
+  # chối oan thì người ta không biết mình bị từ chối vì cái gì).
+  if [[ "$NGUON$DICH" =~ \<[A-Z_]+\> ]]; then
+    loi "Trong $1 còn chỗ trống chưa điền (dạng <...>)."
+    exit 1
+  fi
   echo "Đọc chuỗi kết nối từ $1"
   echo
 else
