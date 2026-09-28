@@ -129,8 +129,13 @@ if [ -n "${1:-}" ]; then
   #
   # Chỉ bắt đúng dạng <TEN_VIET_HOA>, không bắt mọi dấu `<`: mật khẩu thật có
   # thể chứa nó, và từ chối oan thì không ai biết mình bị từ chối vì cái gì.
+  # Ở chế độ --thu chỉ cần NGUỒN. Câu hỏi lúc đó là "database cũ còn đọc
+  # được không", và ĐÍCH không liên quan gì tới câu trả lời — bắt điền nốt
+  # mật khẩu bên kia chỉ dựng thêm một rào cản đúng lúc người ta đang vội.
   hong=0
-  for o in NGUON DICH; do
+  can=( NGUON DICH )
+  [ "$CHI_THU" -eq 1 ] && can=( NGUON )
+  for o in "${can[@]}"; do
     v=${!o}
     if [ -z "$v" ]; then
       loi "$o= còn để trống trong $1"
@@ -155,7 +160,12 @@ else
   echo
 fi
 
-[ -n "${NGUON:-}" ] && [ -n "${DICH:-}" ] || { loi "Thiếu một trong hai chuỗi."; exit 1; }
+if [ "$CHI_THU" -eq 1 ]; then
+  [ -n "${NGUON:-}" ] || { loi "Thiếu chuỗi NGUỒN."; exit 1; }
+  DICH=${DICH:-}
+else
+  [ -n "${NGUON:-}" ] && [ -n "${DICH:-}" ] || { loi "Thiếu một trong hai chuỗi."; exit 1; }
+fi
 export NGUON DICH
 
 # Một ảnh tạm để hỏi phiên bản. Bản nào cũng hỏi được, nên dùng 18 cho chắc.
@@ -171,17 +181,29 @@ hoi() {
            psql "$U" -tAX -c "$SQL"' 2>/dev/null | tr -d '\r'
 }
 
-echo "--- Đọc phiên bản hai bên"
+echo "--- Đọc phiên bản"
 v_nguon=$(hoi NGUON "show server_version_num")
-v_dich=$(hoi DICH  "show server_version_num")
-
-[ -n "$v_nguon" ] || { loi "Không nối được tới NGUỒN. Kiểm tra chuỗi kết nối."; exit 1; }
-[ -n "$v_dich"  ] || { loi "Không nối được tới ĐÍCH. Kiểm tra chuỗi kết nối."; exit 1; }
-
+if [ -z "$v_nguon" ]; then
+  loi "Không nối được tới NGUỒN."
+  echo "  Ba nguyên nhân hay gặp, theo thứ tự:"
+  echo "    1. Database đang bị tạm dừng (hết hạn mức gói free, ngủ vì không"
+  echo "       dùng lâu). Bảng điều khiển của nhà cung cấp sẽ nói rõ."
+  echo "    2. Sai mật khẩu, hoặc mật khẩu có ký tự lạ chưa mã hoá URL"
+  echo "       (@ thành %40, dấu cách thành %20)."
+  echo "    3. Sai host hoặc sai tên database."
+  exit 1
+fi
 major_nguon=$(( v_nguon / 10000 ))
-major_dich=$(( v_dich / 10000 ))
 echo "  nguồn = PostgreSQL $major_nguon"
-echo "  đích  = PostgreSQL $major_dich"
+
+# ĐÍCH chỉ hỏi khi thật sự sắp ghi vào nó.
+major_dich=$major_nguon
+if [ "$CHI_THU" -eq 0 ]; then
+  v_dich=$(hoi DICH "show server_version_num")
+  [ -n "$v_dich" ] || { loi "Không nối được tới ĐÍCH. Kiểm tra chuỗi kết nối."; exit 1; }
+  major_dich=$(( v_dich / 10000 ))
+  echo "  đích  = PostgreSQL $major_dich"
+fi
 
 if [ "$major_nguon" -gt "$major_dich" ]; then
   nhac "Nguồn MỚI hơn đích ($major_nguon > $major_dich)."
