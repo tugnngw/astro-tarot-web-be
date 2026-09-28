@@ -215,6 +215,15 @@ Chép dữ liệu sang **trước** khi đổi biến. Có sẵn script làm tr�
 bash deploy/chuyen-database.sh
 ```
 
+Không muốn dán chuỗi bằng tay thì để sẵn trong một file rồi đưa đường dẫn vào:
+
+```bash
+bash deploy/chuyen-database.sh khoa-bi-mat-db.txt
+```
+
+File hai dòng, `NGUON=postgresql://...` và `DICH=postgresql://...`. Đặt tên
+theo mẫu `khoa-bi-mat-*.txt` để `.gitignore` tự bỏ qua — nó chứa mật khẩu.
+
 Nó chỉ cần Docker, không cần cài `pg_dump`. Ba thứ nó làm mà hai dòng
 `pg_dump`/`pg_restore` trần không làm:
 
