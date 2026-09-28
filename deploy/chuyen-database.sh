@@ -134,6 +134,19 @@ if [ $# -ge 1 ]; then
     fi
   done
   [ "$hong" -eq 0 ] || exit 1
+
+  # NGUỒN và ĐÍCH trỏ cùng một máy chủ là một lỗi rất dễ mắc, vì chỗ tiện
+  # nhất để chép chuỗi kết nối — biến SPRING_DATASOURCE_URL trên Render —
+  # thường ĐÃ được đổi sang database mới rồi. Chép nhầm vào ô NGUỒN thì
+  # thành chép database rỗng sang chính nó.
+  #
+  # So phần host:cổng, bỏ qua tên đăng nhập và mật khẩu.
+  may_cua() { local t=${1#*://}; t=${t#*@}; printf '%s' "${t%%/*}"; }
+  if [ "$(may_cua "$NGUON")" = "$(may_cua "$DICH")" ]; then
+    loi "NGUỒN và ĐÍCH cùng trỏ tới $(may_cua "$NGUON")"
+    echo "  NGUỒN phải là database ĐANG CÓ dữ liệu (Neon), ĐÍCH là database mới."
+    exit 1
+  fi
   echo "Đọc chuỗi kết nối từ $1"
   echo
 else
