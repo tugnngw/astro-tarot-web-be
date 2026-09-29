@@ -62,7 +62,7 @@ public class KeepAwakeJob {
     public void giuThuc() {
         if (publicUrl == null || publicUrl.isBlank()) return;
 
-        String url = publicUrl.replaceAll("/$", "") + "/actuator/health";
+        String url = publicUrl.replaceAll("/$", "") + "/ping";
         try {
             HttpResponse<Void> res = http.send(
                     HttpRequest.newBuilder(URI.create(url))

@@ -14,8 +14,10 @@ COPY --from=build /app/target/*.jar app.jar
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider "http://localhost:${PORT:-8080}/actuator/health" || exit 1
+# start-period phải đủ cho Spring Boot trên hộp 512 MB. 10 giây thì quá
+# trình còn đang nạp lớp đã bị đánh dấu chết. /ping không chờ database.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider "http://localhost:${PORT:-8080}/ping" || exit 1
 
 # Chia lại bộ nhớ cho hộp 512 MB của gói free.
 #

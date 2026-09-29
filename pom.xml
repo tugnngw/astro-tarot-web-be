@@ -74,7 +74,9 @@
         </dependency>
 
         <!--
-            Health check cho Docker và nginx. Dockerfile đã gọi /actuator/health
+            Health check cho Docker và nginx. Dockerfile và Render gọi /ping
+            (không đụng database). /actuator/health vẫn mở nhưng hồ sơ prod
+            không hỏi Postgres hay Redis, vì Render chỉ chờ 5 giây.
             từ trước nhưng dependency này chưa có, nên endpoint đó luôn trả 404
             và container luôn bị đánh dấu unhealthy.
             Chỉ mở đúng endpoint health — xem application.properties.
