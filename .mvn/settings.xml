@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Ép mọi lượt tải phụ thuộc đi qua Maven Central.
+
+  ============================================================
+  Vì sao cần file này
+  ============================================================
+
+  `flyway-parent` khai thêm một kho trong pom của chính nó:
+
+      <repository>
+        <id>flyway-community-db-support</id>
+        <url>https://maven.pkg.github.com/flyway/flyway-community-db-support</url>
+      </repository>
+
+  Dự án kế thừa kho ấy qua flyway-core. Maven hỏi TỪNG kho cho TỪNG
+  artifact, mà GitHub Packages đòi xác thực — nên mỗi lượt hỏi là một vòng
+  chờ rồi thất bại. Nhân với hàng trăm phụ thuộc bắc cầu thì build trên
+  Render mất hơn hai mươi phút, và log đầy những dòng tải BOM của Google
+  Cloud mà dự án không hề dùng.
+
+  Kho đó cũng không chứa gì ta cần: flyway-core và flyway-database-postgresql
+  đều nằm sẵn trên Maven Central.
+
+  ============================================================
+  Vì sao là mirror chứ không phải xoá kho đi
+  ============================================================
+
+  Kho ấy nằm trong pom của Flyway, không phải pom của dự án — không xoá
+  được. Mirror là cách duy nhất chặn nó từ phía mình.
+
+  `external:*` phủ mọi kho từ xa (kể cả `central`, vốn cũng trỏ đúng địa chỉ
+  này nên không đổi gì). Kết quả: Maven không bao giờ gọi maven.pkg.github.com
+  nữa.
+
+  Nếu về sau dự án thật sự cần một kho riêng, thêm ngoại lệ vào mirrorOf:
+  `external:*,!ten-kho-do`.
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
+                              https://maven.apache.org/xsd/settings-1.0.0.xsd">
+
+  <mirrors>
+    <mirror>
+      <id>central-thay-moi-kho</id>
+      <name>Maven Central, thay cho mọi kho từ xa</name>
+      <url>https://repo.maven.apache.org/maven2</url>
+      <mirrorOf>external:*</mirrorOf>
+    </mirror>
+  </mirrors>
+
+</settings>
