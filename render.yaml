@@ -18,8 +18,10 @@ services:
     region: singapore
     branch: main
 
-    # Render gọi đường dẫn này để biết ứng dụng đã sẵn sàng chưa.
-    healthCheckPath: /actuator/health
+    # Render gọi đường dẫn này và chỉ chờ 5 giây. /actuator/health từng gồm
+    # cả Postgres và Redis nên hết giờ, Render khởi động lại instance liên
+    # tục. /ping không đụng database, chỉ trả lời tiến trình đã nhận request.
+    healthCheckPath: /ping
 
     envVars:
       - key: SPRING_PROFILES_ACTIVE
