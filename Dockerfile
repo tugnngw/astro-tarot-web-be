@@ -1,10 +1,23 @@
 # Build stage
 FROM maven:3.9.9-eclipse-temurin-21 AS build
 WORKDIR /app
+
+# `-s .mvn/settings.xml` không phải trang trí: nó ép mọi lượt tải đi qua Maven
+# Central.
+#
+# `flyway-parent` khai thêm kho https://maven.pkg.github.com/flyway/... trong
+# pom của chính nó, và dự án kế thừa kho ấy qua flyway-core. Maven hỏi TỪNG
+# kho cho TỪNG artifact, mà GitHub Packages đòi xác thực — nên mỗi lượt hỏi là
+# một vòng chờ rồi thất bại. Đo được: 38 lượt gọi cho riêng một artifact
+# flyway, và log build đầy những dòng tải BOM của Google Cloud mà dự án không
+# hề dùng. Build trên Render vì thế mất hơn hai mươi phút.
+#
+# Với settings.xml, con số ấy về 0.
+COPY .mvn/settings.xml .mvn/settings.xml
 COPY pom.xml .
-RUN mvn dependency:go-offline -B
+RUN mvn -s .mvn/settings.xml dependency:go-offline -B
 COPY src ./src
-RUN mvn clean package -DskipTests
+RUN mvn -s .mvn/settings.xml clean package -DskipTests
 
 # Runtime stage
 FROM eclipse-temurin:21-jre-alpine
