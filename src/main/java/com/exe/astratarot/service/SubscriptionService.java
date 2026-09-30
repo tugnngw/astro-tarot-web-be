@@ -25,6 +25,8 @@ public interface SubscriptionService {
 
     List<SubscriptionPlan> getAllActivePlans();
 
+    List<SubscriptionPlan> getAllPlans();
+
     List<UserPlanPurchase> getUserActivePurchases(UUID userId);
 
     List<AiUsageRecord> getUserAIUsage(UUID userId, LocalDate date);

@@ -320,6 +320,11 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         return subscriptionPlanRepository.findByIsActiveTrue();
     }
 
+    @Override
+    public List<SubscriptionPlan> getAllPlans() {
+        return subscriptionPlanRepository.findAll();
+    }
+
     // ------------------------------------------------------------
     // 11. Get user active purchases
     // ------------------------------------------------------------

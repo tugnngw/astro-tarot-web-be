@@ -213,4 +213,72 @@ class SubscriptionControllerTest {
                 .andExpect(jsonPath("$.name").value("VIP 7 Days"))
                 .andExpect(jsonPath("$.dailyQuota").value(50));
     }
+
+    @Test
+    @DisplayName("GET /api/admin/subscriptions/plans - Trả tất cả gói kể cả inactive")
+    void getAllPlans_Returns200() throws Exception {
+        SubscriptionPlan activePlan = SubscriptionPlan.builder()
+                .id(UUID.randomUUID())
+                .name("Pro Monthly")
+                .planType(SubscriptionPlan.PlanType.MONTHLY)
+                .dailyQuota(20)
+                .price(199000L)
+                .durationDays(30)
+                .isActive(true)
+                .build();
+
+        SubscriptionPlan inactivePlan = SubscriptionPlan.builder()
+                .id(UUID.randomUUID())
+                .name("Old Plan")
+                .planType(SubscriptionPlan.PlanType.DAY_PASS)
+                .dailyQuota(5)
+                .price(10000L)
+                .durationDays(1)
+                .isActive(false)
+                .build();
+
+        when(subscriptionService.getAllPlans()).thenReturn(List.of(activePlan, inactivePlan));
+
+        mockMvc.perform(get("/api/admin/subscriptions/plans")
+                        .header("Authorization", "Bearer " + TEST_TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].name").value("Pro Monthly"))
+                .andExpect(jsonPath("$[0].isActive").value(true))
+                .andExpect(jsonPath("$[1].name").value("Old Plan"))
+                .andExpect(jsonPath("$[1].isActive").value(false));
+    }
+
+    @Test
+    @DisplayName("PUT /api/admin/subscriptions/plans/{planId} - Cập nhật gói thành công")
+    void updatePlan_Returns200() throws Exception {
+        UUID planId = UUID.randomUUID();
+        UpdatePlanRequest request = new UpdatePlanRequest();
+        request.setDailyQuota(25);
+        request.setPrice(250000L);
+        request.setIsActive(true);
+        request.setDescription("Gói nâng cấp");
+
+        SubscriptionPlan updated = SubscriptionPlan.builder()
+                .id(planId)
+                .name("Pro Monthly")
+                .planType(SubscriptionPlan.PlanType.MONTHLY)
+                .dailyQuota(25)
+                .price(250000L)
+                .durationDays(30)
+                .isActive(true)
+                .description("Gói nâng cấp")
+                .build();
+
+        when(subscriptionService.updatePlan(eq(planId), any(UpdatePlanRequest.class))).thenReturn(updated);
+
+        mockMvc.perform(put("/api/admin/subscriptions/plans/{planId}", planId)
+                        .header("Authorization", "Bearer " + TEST_TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(toJson(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dailyQuota").value(25))
+                .andExpect(jsonPath("$.price").value(250000))
+                .andExpect(jsonPath("$.description").value("Gói nâng cấp"));
+    }
 }

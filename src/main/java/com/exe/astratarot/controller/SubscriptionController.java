@@ -76,6 +76,11 @@ public class SubscriptionController {
 
     // -------- Admin endpoints --------
 
+    @GetMapping("/plans")
+    public ResponseEntity<List<SubscriptionPlan>> getAllPlans() {
+        return ResponseEntity.ok(subscriptionService.getAllPlans());
+    }
+
     @PostMapping("/plans")
     public ResponseEntity<SubscriptionPlan> createPlan(
             @RequestBody CreatePlanRequest request) {
