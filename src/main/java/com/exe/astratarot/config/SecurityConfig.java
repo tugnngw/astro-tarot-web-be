@@ -69,6 +69,8 @@ public class SecurityConfig {
                                 "/test",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**").permitAll()
+                        // Cho phép xem các gói đăng ký AI đang hoạt động
+                        .requestMatchers(HttpMethod.GET, "/api/admin/subscriptions/plans/active").permitAll()
                         // Catalog shop: khách chưa đăng nhập vẫn phải duyệt được
                         // sản phẩm. Giỏ hàng và đơn hàng (/shop/cart, /shop/orders)
                         // KHÔNG nằm trong đây nên vẫn cần đăng nhập.
