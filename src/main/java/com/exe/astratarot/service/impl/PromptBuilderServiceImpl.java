@@ -3,90 +3,149 @@ package com.exe.astratarot.service.impl;
 import com.exe.astratarot.domain.dto.astrology.AstrologyContextDTO;
 import com.exe.astratarot.domain.dto.astrology.AspectDTO;
 import com.exe.astratarot.domain.dto.astrology.PlanetPositionDTO;
+import com.exe.astratarot.domain.dto.llm.LLMMessage;
+import com.exe.astratarot.domain.dto.llm.LLMRequest;
 import com.exe.astratarot.domain.dto.prompt.BuildPromptRequest;
 import com.exe.astratarot.domain.dto.prompt.DrawnCardDetailDTO;
 import com.exe.astratarot.service.PromptBuilderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
 /**
  * Implementation of PromptBuilderService.
  *
- * Constructs prompts by composing six distinct sections:
- * 1. System Instructions (fixed)
- * 2. Reading Context (from request)
- * 3. Astrology Context (from AstrologyContextDTO)
- * 4. Tarot Cards (from DrawnCardDetailDTO list)
- * 5. User Question (verbatim from request)
- * 6. Response Instructions (fixed)
+ * <p>Builds structured {@link LLMRequest} with proper role separation:
+ * <ul>
+ *   <li><b>systemInstruction</b>: persona, tone, reading context, astrology data,
+ *       tarot cards, response quality rules</li>
+ *   <li><b>messages</b>: conversation history (USER/ASSISTANT pairs) + current
+ *       user question as final USER message</li>
+ * </ul>
  *
- * No external dependencies. Pure string composition.
+ * <p>No external dependencies. Pure composition.
  */
 @Service
 @RequiredArgsConstructor
 public class PromptBuilderServiceImpl implements PromptBuilderService {
 
     @Override
-    public String buildPrompt(BuildPromptRequest request) {
-        StringBuilder prompt = new StringBuilder();
-
-        // Section 1: System Instructions (PHÂN BIỆT theo loại)
+    public LLMRequest buildLLMRequest(BuildPromptRequest request) {
         boolean hasCards = request.getDrawnCardDetails() != null && !request.getDrawnCardDetails().isEmpty();
-        prompt.append(buildSystemInstructions(hasCards));
+        boolean isContinuation = request.getConversationHistory() != null && !request.getConversationHistory().isBlank();
 
-        // Section 2: Reading Context
-        prompt.append(buildReadingContext(request.getSpreadName()));
+        // Build system instruction
+        StringBuilder sys = new StringBuilder();
+        sys.append(hasCards ? buildTarotSystemInstructions() : buildAstrologySystemInstructions());
+        sys.append(buildReadingContext(request.getSpreadName()));
 
-        // Section 3: Astrology Context
         if (request.getAstrologyContext() != null) {
-            prompt.append(buildAstrologyContext(request.getAstrologyContext(), hasCards));
-        } else {
-            prompt.append(buildAstrologyContextUnavailable());
+            sys.append(buildAstrologyContext(request.getAstrologyContext(), hasCards));
         }
 
-        // Section 4: Tarot Cards - CHỈ KHI CÓ CARD
         if (hasCards) {
-            prompt.append(buildTarotCardsSection(request.getDrawnCardDetails()));
+            sys.append(buildTarotCardsSection(request.getDrawnCardDetails()));
         }
 
-        // Section 5: Conversation History (follow-up only)
-        if (request.getConversationHistory() != null && !request.getConversationHistory().isBlank()) {
-            prompt.append(buildConversationHistorySection(request.getConversationHistory()));
-        }
-
-        // Section 5b: Original Question (follow-up only)
+        // Original question as context anchor for continuation
         if (request.getOriginalQuestion() != null && !request.getOriginalQuestion().isBlank()) {
-            prompt.append(buildOriginalQuestionSection(request.getOriginalQuestion()));
+            sys.append("ORIGINAL QUESTION (context):\n")
+                    .append(request.getOriginalQuestion())
+                    .append("\n\n---\n\n");
         }
 
-        // Section 6: User Question
-        prompt.append(buildUserQuestionSection(request.getUserQuestion()));
+        sys.append(buildResponseInstructions(hasCards));
 
-        // Section 7: Response Instructions (PHÂN BIỆT theo loại)
-        prompt.append(buildResponseInstructions(hasCards));
+        // Build messages: history + current
+        List<LLMMessage> messages = new ArrayList<>();
+        if (isContinuation) {
+            messages.addAll(parseConversationHistory(request.getConversationHistory()));
+        }
+        messages.add(LLMMessage.user(request.getUserQuestion()));
 
-        return prompt.toString();
+        return LLMRequest.builder()
+                .systemInstruction(sys.toString())
+                .messages(messages)
+                .build();
+    }
+
+    @Override
+    @Deprecated
+    public String buildPrompt(BuildPromptRequest request) {
+        LLMRequest req = buildLLMRequest(request);
+        StringBuilder sb = new StringBuilder();
+        sb.append(req.getSystemInstruction());
+        if (req.getMessages() != null) {
+            for (LLMMessage msg : req.getMessages()) {
+                if (msg.getRole() == LLMMessage.Role.USER) {
+                    sb.append("USER: ").append(msg.getContent()).append("\n");
+                } else if (msg.getRole() == LLMMessage.Role.ASSISTANT) {
+                    sb.append("AI: ").append(msg.getContent()).append("\n");
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    // ==================== HISTORY PARSING ====================
+
+    /**
+     * Parses conversation history string into structured LLMMessages.
+     *
+     * <p>Format produced by ChatServiceImpl.formatConversationHistory:
+     * <pre>
+     * USER: content
+     *
+     * AI: content
+     *
+     * USER: content
+     * </pre>
+     *
+     * <p>Content may contain newlines. Lines without a role prefix are appended
+     * to the current message.
+     */
+    private List<LLMMessage> parseConversationHistory(String history) {
+        List<LLMMessage> messages = new ArrayList<>();
+        if (history == null || history.isBlank()) {
+            return messages;
+        }
+
+        LLMMessage current = null;
+        StringBuilder currentContent = new StringBuilder();
+
+        for (String line : history.split("\n", -1)) {
+            if (line.startsWith("USER: ")) {
+                if (current != null) {
+                    current.setContent(currentContent.toString().strip());
+                    messages.add(current);
+                }
+                current = LLMMessage.user("");
+                currentContent = new StringBuilder(line.substring(6));
+            } else if (line.startsWith("AI: ")) {
+                if (current != null) {
+                    current.setContent(currentContent.toString().strip());
+                    messages.add(current);
+                }
+                current = LLMMessage.assistant("");
+                currentContent = new StringBuilder(line.substring(4));
+            } else if (current != null && !line.isBlank()) {
+                currentContent.append("\n").append(line);
+            }
+        }
+
+        if (current != null && !currentContent.toString().isBlank()) {
+            current.setContent(currentContent.toString().strip());
+            messages.add(current);
+        }
+
+        return messages;
     }
 
     // ==================== SYSTEM INSTRUCTIONS ====================
 
-    /**
-     * Builds system instructions based on whether tarot cards are present.
-     */
-    private String buildSystemInstructions(boolean hasCards) {
-        if (hasCards) {
-            return buildTarotSystemInstructions();
-        } else {
-            return buildAstrologySystemInstructions();
-        }
-    }
-
-    /**
-     * Tarot persona system instructions.
-     */
     private String buildTarotSystemInstructions() {
         return """
                 Bạn là một người đọc tarot — có óc quan sát, tinh tế, nói chuyện như đang trò với bạn.
@@ -117,9 +176,6 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
                 """;
     }
 
-    /**
-     * Astrology-only persona system instructions.
-     */
     private String buildAstrologySystemInstructions() {
         return """
                 Bạn là một nhà chiêm tinh học — tinh tế, quan sát, nói chuyện như đang trò chuyện với bạn.
@@ -133,8 +189,7 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
 
                 VIẾT NHƯ ĐANG NÓI CHUYỆN:
                 - "Mình thấy...", "Có vẻ như...", "Điều mình để ý là..."
-                - "Với Mặt Trời của bạn ở ...", "Mặt Trăng của bạn đang..."
-                - "Điều thú vị trong biểu đồ của bạn là..."
+                - "Mặt Trời của bạn đang ở...", "Điều thú vị trong biểu đồ của bạn là..."
 
                 KHÔNG: Giảng nghĩa các cung/hành tinh — Lặp tên các vị trí
                 KHÔNG: "Ultimately", "In conclusion", "Bringing it all together"
@@ -148,10 +203,6 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
 
     // ==================== READING CONTEXT ====================
 
-    /**
-     * Builds the reading context section.
-     * Includes spread name and any relevant metadata.
-     */
     private String buildReadingContext(String spreadName) {
         StringBuilder section = new StringBuilder();
         section.append("READING CONTEXT\n");
@@ -168,11 +219,6 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
 
     // ==================== ASTROLOGY CONTEXT ====================
 
-    /**
-     * Builds the astrology context section.
-     * Formats natal chart and transit data into readable text.
-     * When hasCards=false, astrology is the PRIMARY context.
-     */
     private String buildAstrologyContext(AstrologyContextDTO astrology, boolean hasCards) {
         if (astrology == null) {
             return "";
@@ -186,7 +232,7 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
             section.append("=== ASTROLOGY CONTEXT (Primary Source of Insight) ===\n\n");
         }
 
-        // ——— Natal Chart Foundation ———
+        // Natal Chart Foundation
         section.append("Natal Chart:\n");
         section.append("  • Birth Date: ").append(astrology.getBirthDate());
         if (astrology.getBirthTime() != null) {
@@ -198,7 +244,7 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
             section.append("\n");
         }
 
-        // ——— Primary Zodiac Data ———
+        // Primary Zodiac Data
         section.append("  • Sun: ").append(astrology.getSunSign());
         if (astrology.getElement() != null && !astrology.getElement().isBlank()) {
             section.append(" (").append(astrology.getElement()).append(")");
@@ -260,45 +306,44 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
             }
         }
 
-        // ——— Personalization Guidance ———
+        // Personalization Guidance — only mention fields that exist
+        section.append("\nHOW TO USE THIS ASTROLOGY DATA:\n");
+        section.append("• Sun sign → core identity and ego drives.\n");
+        if (astrology.getElement() != null && !astrology.getElement().isBlank()) {
+            section.append("• Element (").append(astrology.getElement()).append(") → emotional and behavioral style.\n");
+        }
+        if (astrology.getModality() != null && !astrology.getModality().isBlank()) {
+            section.append("• Modality (").append(astrology.getModality()).append(") → approach to action and change.\n");
+        }
         if (hasCards) {
-            section.append("\nHOW TO USE THIS ASTROLOGY DATA:\n");
-            section.append("• Sun sign → core identity and ego drives.\n");
-            section.append("• Element (Fire/Earth/Air/Water) → emotional and behavioral style.\n");
-            section.append("• Modality (Cardinal/Fixed/Mutable) → approach to action and change.\n");
             section.append("Let these traits subtly colour the card interpretation.\n");
             section.append("Do NOT make deterministic predictions based solely on astrology.\n");
             section.append("Reminder: Tarot cards are the primary source of insight. Astrology enriches, it does not override.\n");
         } else {
-            section.append("\nHOW TO USE THIS ASTROLOGY DATA:\n");
-            section.append("• Sun sign → core identity and ego drives.\n");
-            section.append("• Element (Fire/Earth/Air/Water) → emotional and behavioral style.\n");
-            section.append("• Modality (Cardinal/Fixed/Mutable) → approach to action and change.\n");
-            section.append("• Planetary positions → specific areas of life (House) and how you express energy.\n");
-            section.append("• Aspects → how different parts of your personality interact.\n");
-            section.append("• Transits → current energies affecting you now.\n");
+            if (astrology.getNatalPlanetPositions() != null && !astrology.getNatalPlanetPositions().isEmpty()) {
+                section.append("• Planetary positions → specific areas of life (House) and how you express energy.\n");
+            }
+            if (astrology.getNatalAspects() != null && !astrology.getNatalAspects().isEmpty()) {
+                section.append("• Aspects → how different parts of your personality interact.\n");
+            }
+            if (astrology.getCurrentTransit() != null && !astrology.getCurrentTransit().isBlank()) {
+                section.append("• Transits → current energies affecting you now.\n");
+            }
             section.append("Use this as the PRIMARY source of insight. Connect it directly to the user's question.\n");
-            section.append("Be specific: mention their Sun sign, Moon sign, or key aspects that are relevant.\n");
         }
+
+        // Data safety: only mention what's in context
+        section.append("\nDATA SAFETY:\n");
+        section.append("Chỉ nhắc đến các dữ liệu có trong context trên.\n");
+        section.append("Nếu Moon, Rising, hoặc vị trí hành tinh nào không có trong context, KHÔNG được tự đoán, tự tính, hay trình bày như fact.\n");
+        section.append("Nếu cần đề cập dữ liệu không có, nói rõ: mình chưa có dữ liệu đó trong context hiện tại.\n");
 
         section.append("\n---\n\n");
         return section.toString();
     }
 
-    /**
-     * Builds an unavailable astrology context section.
-     * Used when astrology context is null or not provided.
-     */
-    private String buildAstrologyContextUnavailable() {
-        return "";
-    }
-
     // ==================== TAROT CARDS SECTION ====================
 
-    /**
-     * Builds the tarot cards section.
-     * Lists each drawn card with position and orientation.
-     */
     private String buildTarotCardsSection(List<DrawnCardDetailDTO> cards) {
         if (cards == null || cards.isEmpty()) {
             return "";
@@ -307,7 +352,6 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
         StringBuilder section = new StringBuilder();
         section.append("TAROT CARDS\n\n");
 
-        // Sort by position to ensure correct order
         List<DrawnCardDetailDTO> sortedCards = cards.stream()
                 .sorted((a, b) -> Short.compare(a.getPosition(), b.getPosition()))
                 .collect(Collectors.toList());
@@ -323,46 +367,8 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
         return section.toString();
     }
 
-    // ==================== USER QUESTION ====================
-
-    /**
-     * Builds the user question section.
-     * Includes the user's question verbatim.
-     */
-    private String buildUserQuestionSection(String userQuestion) {
-        return "USER QUESTION\n" +
-                userQuestion + "\n\n" +
-                "---\n\n";
-    }
-
-    // ==================== CONVERSATION HISTORY ====================
-
-    /**
-     * Builds the conversation history section.
-     * Contains previous USER/AI message pairs for follow-up context.
-     * Latest messages at the bottom. Empty for initial readings.
-     */
-    private String buildConversationHistorySection(String conversationHistory) {
-        return "CONVERSATION HISTORY\n" +
-                conversationHistory + "\n" +
-                "---\n\n";
-    }
-
-    /**
-     * Builds the original question section.
-     * Preserves the user's initial reading question for context.
-     */
-    private String buildOriginalQuestionSection(String originalQuestion) {
-        return "ORIGINAL QUESTION\n" +
-                originalQuestion + "\n\n" +
-                "---\n\n";
-    }
-
     // ==================== RESPONSE INSTRUCTIONS ====================
 
-    /**
-     * Builds response instructions based on whether tarot cards are present.
-     */
     private String buildResponseInstructions(boolean hasCards) {
         if (hasCards) {
             return buildTarotResponseInstructions();
@@ -371,75 +377,65 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
         }
     }
 
-    /**
-     * Tarot response instructions.
-     */
     private String buildTarotResponseInstructions() {
         return """
-                HƯỚNG DẪN VIẾT BÀI ĐỌC TAROT:
+                CÁCH TRẢ LỜI:
+                - Trả lời trực tiếp câu hỏi trước.
+                - Sau đó giải thích các điểm quan trọng liên quan.
+                - Khi câu hỏi cần phân tích nhiều khía cạnh, hãy phân tích đủ các khía cạnh đó.
+                - Không cố kéo dài câu trả lời chỉ để tăng độ dài.
+                - Không cắt ngắn câu trả lời khi vẫn còn thông tin quan trọng cần giải thích.
+                - Ưu tiên chất lượng, chiều sâu và tính liên quan hơn độ dài cố định.
 
-                ĐỘ DÀI: Viết thoải mái, bao nhiêu cũng được, MIỄN LÀ ĐỦ Ý. Đừng viết lan man, đừng kéo dài vô nghĩa.
-                Mỗi câu đều phải có giá trị. Nếu ý đã rõ, dừng lại. Không thêm thắt cho đủ chữ.
+                TÍNH CHÍNH XÁC:
+                - Chỉ sử dụng dữ liệu được cung cấp trong context.
+                - Không bịa dữ liệu còn thiếu để làm câu trả lời có vẻ hoàn chỉnh.
+                - Nếu thông tin cần thiết không có, nói rõ giới hạn của dữ liệu.
+                - Không biến diễn giải tarot thành fact khách quan hoặc certainty tuyệt đối.
+                - Tránh: "Bạn chắc chắn sẽ...", "Người đó chắc chắn...", "Tháng sau chắc chắn..."
 
-                CẤU TRÚC BÀI ĐỌC LẦN ĐẦU:
-                1. Một câu ngắn — cảm nhận của bạn về câu hỏi.
-                2. Lá bài nổi bật nhất — nó đang phản ánh điều gì trong con người bạn.
-                3. Các lá còn lại hỗ trợ hoặc sắc thái gì thêm.
-                4. Kết thúc tự nhiên — có thể là một nhận xét ngắn, một insight thực tế,
-                   hoặc một câu hỏi nhẹ để bạn suy nghĩ. Đừng gượng ép đặt câu hỏi.
-
-                CẤU TRÚC CHAT TIẾP THEO:
-                1. Trả lời thẳng.
-                2. Một câu kết nối với bài đã đọc.
-                3. Dừng lại. Không cần kết luận.
-
-                NGUYÊN TẮC VIẾT:
-                - Nói chuyện, không viết luận
-                - Trả lời câu hỏi trước
-                - Chỉ nhắc tên lá bài MỘT lần
-                - Dùng: "Mình thấy...", "Có vẻ...", "Điều nổi bật là..."
-                - Câu ngắn. Xuống dòng tự nhiên.
-                - ĐỦ Ý thì DỪNG. Không thêm thắt.
+                GIỌNG NÓI:
+                - Nói chuyện tự nhiên như đang trò chuyện, không viết luận.
+                - Có thể dùng: "Mình thấy ở đây có một điểm khá rõ...", "Điểm mình chú ý nhất là..."
+                - Không lặp lại cùng một mẫu câu mở đầu.
+                - Không ép phải có cấu trúc giống nhau cho mọi câu trả lời.
 
                 CẤM TUYỆT ĐỐI:
                 - Giải nghĩa lá bài từ A-Z. KHÔNG viết kiểu: "Eight of Swords là lá bài của..."
                 - Lặp tên lá bài
                 - "Ultimately" / "In conclusion" / "Bringing it all together"
                 - "The cards are telling you" / "Remember that"
-                - Kết luận kiểu "Hãy luôn nhớ rằng..."
                 - Giọng huyền bí: "Mình nhìn thấy...", "Cảm nhận năng lượng...", "Vũ trụ nói..."
                 - Giọng diễn thuyết tạo động lực
-                - Viết lan man, thêm thắt vô nghĩa
-
-                GỢI NHỚ: Observant > Explanatory. Conversation > Essay. Insight > Lecture. Đủ ý thì dừng.
+                - Thêm card không có trong reading
+                - Đảo ngược card orientation
+                - Tự tạo spread position
                 """;
     }
 
-    /**
-     * Astrology-only response instructions.
-     */
     private String buildAstrologyResponseInstructions() {
         return """
-                HƯỚNG DẪN VIẾT TRẢ LỜI CHO BẢN ĐỒ SAO:
+                CÁCH TRẢ LỜI:
+                - Trả lời trực tiếp câu hỏi trước.
+                - Sau đó giải thích các điểm quan trọng liên quan.
+                - Khi câu hỏi cần phân tích nhiều khía cạnh, hãy phân tích đủ các khía cạnh đó.
+                - Không cố kéo dài câu trả lời chỉ để tăng độ dài.
+                - Không cắt ngắn câu trả lời khi vẫn còn thông tin quan trọng cần giải thích.
+                - Ưu tiên chất lượng, chiều sâu và tính liên quan hơn độ dài cố định.
 
-                ĐỘ DÀI: Viết thoải mái, bao nhiêu cũng được, MIỄN LÀ ĐỦ Ý. Đừng viết lan man, đừng kéo dài vô nghĩa.
-                Mỗi câu đều phải có giá trị. Nếu ý đã rõ, dừng lại. Không thêm thắt cho đủ chữ.
+                TÍNH CHÍNH XÁC:
+                - Chỉ sử dụng dữ liệu được cung cấp trong context.
+                - Không bịa dữ liệu còn thiếu để làm câu trả lời có vẻ hoàn chỉnh.
+                - Nếu thông tin cần thiết không có, nói rõ giới hạn của dữ liệu.
+                - Không biến diễn giải astrology thành fact khách quan hoặc certainty tuyệt đối.
+                - Tránh: "Bạn chắc chắn sẽ...", "Tháng sau chắc chắc..."
+                - Chỉ nhắc đến các dữ liệu astrology có trong context. Không tự đoán Moon/Rising/planets nếu không có.
 
-                CẤU TRÚC TRẢ LỜI:
-                1. Một câu ngắn — cảm nhận chung về biểu đồ sao của bạn.
-                2. Điểm nổi bật nhất trong biểu đồ (Sun, Moon, Rising, hoặc một khía cạnh đặc biệt).
-                3. Kết nối trực tiếp với câu hỏi bạn đặt ra.
-                4. Đưa ra insight dựa trên vị trí các hành tinh/cung.
-                5. Kết thúc nhẹ nhàng, có thể là một gợi ý hoặc một câu hỏi suy ngẫm.
-
-                NGUYÊN TẮC VIẾT:
-                - Nói chuyện, không viết luận
-                - Trả lời câu hỏi trước
-                - Dùng cụ thể: "Với Mặt Trời ở ...", "Mặt Trăng của bạn đang..."
-                - Dùng: "Mình thấy...", "Có vẻ...", "Điều nổi bật là..."
-                - Câu ngắn. Xuống dòng tự nhiên.
-                - Tập trung vào 2-3 yếu tố quan trọng nhất, không liệt kê tất cả
-                - ĐỦ Ý thì DỪNG. Không thêm thắt.
+                GIỌNG NÓI:
+                - Nói chuyện tự nhiên như đang trò chuyện, không viết luận.
+                - Có thể dùng: "Mình thấy ở đây có một điểm khá rõ...", "Điểm mình chú ý nhất là..."
+                - Không lặp lại cùng một mẫu câu mở đầu.
+                - Không ép phải có cấu trúc giống nhau cho mọi câu trả lời.
 
                 CẤM TUYỆT ĐỐI:
                 - Giải nghĩa từng vị trí hành tinh một cách máy móc
@@ -448,9 +444,7 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
                 - Dự đoán chính xác, khẳng định tuyệt đối (chỉ nói xu hướng)
                 - Giọng diễn thuyết tạo động lực
                 - Liệt kê tất cả các hành tinh — chỉ chọn những cái liên quan
-                - Viết lan man, thêm thắt vô nghĩa
-
-                GỢI NHỚ: Observant > Explanatory. Conversation > Essay. Insight > Lecture. Đủ ý thì dừng.
+                - Tự đoán dữ liệu chiêm tinh không có trong context
                 """;
     }
 }

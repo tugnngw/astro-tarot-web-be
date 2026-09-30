@@ -155,8 +155,7 @@ class PromptBuilderServiceImplTest {
         assertTrue(prompt.contains("Test Spread"), "Should contain spread name");
         assertTrue(prompt.contains("TAROT CARDS"), "Should contain tarot cards section");
         assertTrue(prompt.contains("Card 1"), "Should contain card details");
-        assertTrue(prompt.contains("USER QUESTION"), "Should contain user question section");
         assertTrue(prompt.contains("Test question"), "Should contain the actual question");
-        assertTrue(prompt.contains("CẤU TRÚC BÀI ĐỌC LẦN ĐẦU"), "Should contain response format instructions");
+        assertTrue(prompt.contains("CÁCH TRẢ LỜI"), "Should contain response approach instructions");
     }
 }

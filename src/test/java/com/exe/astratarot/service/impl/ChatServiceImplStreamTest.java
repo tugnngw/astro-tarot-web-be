@@ -132,7 +132,13 @@ class ChatServiceImplStreamTest {
                     return m;
                 });
         lenient().when(chatSessionRepository.save(any(ChatSession.class)))
-                .thenAnswer(inv -> inv.getArgument(0));
+                .thenAnswer(inv -> {
+                    ChatSession s = inv.getArgument(0);
+                    if (s.getId() == null) {
+                        ReflectionTestUtils.setField(s, "id", UUID.randomUUID());
+                    }
+                    return s;
+                });
         lenient().when(tarotReadingRepository.save(any(TarotReading.class)))
                 .thenAnswer(inv -> inv.getArgument(0));
     }
@@ -352,34 +358,46 @@ class ChatServiceImplStreamTest {
     // =====================================================================
 
     @Test
-    @DisplayName("Không có lượt trải: vẫn hỏi được, nhưng KHÔNG lưu tin nhắn nào")
+    @DisplayName("Đường chiêm tinh: vẫn hỏi được, có phiên chat và lưu tin nhắn")
     void duongChiemTinh() {
+        // Astrology session lookup returns empty → new session created
+        when(chatSessionRepository.findByUserIdAndTarotReadingIsNullAndSessionType(
+                        any(UUID.class), any(com.exe.astratarot.domain.enums.SessionType.class)))
+                .thenReturn(Optional.empty());
+
         aiPhatRa(List.of("Sao Thuỷ ", "nghịch hành."), token(5, 15, 20), "gemini");
 
         List<String> manh = new ArrayList<>();
         AtomicReference<ChatService.StreamResult> xong = new AtomicReference<>();
         service.sendMessageStream(null, khach, "Hôm nay thế nào?", manh::add, e -> {}, xong::set);
 
-        // Đây là lối hỏi nhanh, không gắn vào lượt trải nào, nên không có phiên
-        // chat để lưu vào. Cố lưu là tạo một phiên mồ côi.
+        // Astrology chat now creates session and persists messages
         assertAll(
                 () -> assertEquals(List.of("Sao Thuỷ ", "nghịch hành."), manh),
-                () -> assertNull(xong.get().sessionId()),
-                () -> assertNull(xong.get().messageId()),
+                () -> assertNotNull(xong.get().sessionId()),
+                () -> assertNotNull(xong.get().messageId()),
                 () -> assertEquals(20, xong.get().totalTokens()));
-        verify(chatMessageRepository, never()).save(any());
-        verify(chatSessionRepository, never()).save(any());
+
+        // Verify USER + AI messages persisted
+        verify(chatMessageRepository, org.mockito.Mockito.times(2)).save(any(ChatMessage.class));
+        // Verify session saved (create + update lastMessageAt)
+        verify(chatSessionRepository, org.mockito.Mockito.times(2)).save(any(ChatSession.class));
     }
 
     @Test
     @DisplayName("Đường chiêm tinh không có token thì báo 0")
     void duongChiemTinhKhongCoToken() {
+        when(chatSessionRepository.findByUserIdAndTarotReadingIsNullAndSessionType(
+                        any(UUID.class), any(com.exe.astratarot.domain.enums.SessionType.class)))
+                .thenReturn(Optional.empty());
+
         aiPhatRa(List.of("x"), null, "gemini");
 
         AtomicReference<ChatService.StreamResult> xong = new AtomicReference<>();
         service.sendMessageStream(null, khach, "hỏi", s -> {}, e -> {}, xong::set);
 
         assertAll(
+                () -> assertNotNull(xong.get().sessionId()),
                 () -> assertEquals(0, xong.get().totalTokens()),
                 () -> assertEquals(0, xong.get().completionTokens()));
     }

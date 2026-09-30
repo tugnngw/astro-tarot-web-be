@@ -24,4 +24,14 @@ public interface ChatSessionRepository extends JpaRepository<ChatSession, UUID> 
      * @return Optional containing the session if found
      */
     Optional<ChatSession> findByTarotReadingIdAndSessionType(UUID readingId, SessionType sessionType);
+
+    /**
+     * Finds the astrology-only chat session for a user (no associated TarotReading).
+     * Used to provide conversation memory for astrology chats when readingId is null.
+     *
+     * @param userId the user ID
+     * @param sessionType the session type (typically AI)
+     * @return Optional containing the session if found
+     */
+    Optional<ChatSession> findByUserIdAndTarotReadingIsNullAndSessionType(UUID userId, SessionType sessionType);
 }

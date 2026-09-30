@@ -1,5 +1,7 @@
 package com.exe.astratarot.service.impl;
 
+import com.exe.astratarot.domain.dto.llm.LLMMessage;
+import com.exe.astratarot.domain.dto.llm.LLMRequest;
 import com.exe.astratarot.domain.dto.llm.LLMResponse;
 import com.exe.astratarot.domain.dto.llm.LLMTokenUsage;
 import com.exe.astratarot.domain.dto.llm.StreamCompletion;
@@ -23,6 +25,8 @@ import org.springframework.web.client.RestTemplate;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -40,6 +44,13 @@ import java.util.function.Consumer;
  * Bật lớp này bằng llm.provider=openai. Khi để mặc định (gemini) thì lớp không
  * được tạo, và GeminiProvider giữ vai trò như cũ — nhờ vậy hai provider không
  * bao giờ cùng tồn tại để Spring phải phân vân chọn cái nào.
+ *
+ * <p>Supports structured requests with proper role separation:
+ * <ul>
+ *   <li>System instruction → {@code messages} entry with {@code role: "system"}</li>
+ *   <li>User messages → {@code messages} entry with {@code role: "user"}</li>
+ *   <li>Assistant messages → {@code messages} entry with {@code role: "assistant"}</li>
+ * </ul>
  */
 @Service
 @Slf4j
@@ -80,24 +91,74 @@ public class OpenAiCompatibleProvider implements LLMProvider {
         return h;
     }
 
-    private Map<String, Object> body(String prompt, boolean stream) {
-        Map<String, Object> b = new java.util.HashMap<>();
+    /**
+     * Builds OpenAI-compatible request body from structured LLMRequest.
+     *
+     * <p>Maps:
+     * <ul>
+     *   <li>{@code systemInstruction} → {@code messages} entry with {@code role: "system"}</li>
+     *   <li>{@code USER} messages → {@code messages} entry with {@code role: "user"}</li>
+     *   <li>{@code ASSISTANT} messages → {@code messages} entry with {@code role: "assistant"}</li>
+     * </ul>
+     *
+     * <p>Generation config (temperature, maxTokens) is included only when set.
+     */
+    private Map<String, Object> body(LLMRequest request, boolean stream) {
+        Map<String, Object> b = new HashMap<>();
         b.put("model", model);
-        b.put("messages", List.of(Map.of("role", "user", "content", prompt)));
+
+        List<Map<String, Object>> messages = new ArrayList<>();
+
+        // System instruction → role="system" message
+        String systemInstruction = request.getSystemInstruction();
+        if (systemInstruction != null && !systemInstruction.isBlank()) {
+            messages.add(Map.of("role", "system", "content", systemInstruction));
+        }
+
+        // Conversation messages → role="user" / role="assistant"
+        List<LLMMessage> msgs = request.getMessages();
+        if (msgs != null) {
+            for (LLMMessage msg : msgs) {
+                if (msg == null || msg.getContent() == null || msg.getContent().isBlank()) {
+                    continue;
+                }
+                if (msg.getRole() == LLMMessage.Role.SYSTEM) {
+                    // SYSTEM messages in messages list — treat as system
+                    messages.add(Map.of("role", "system", "content", msg.getContent()));
+                } else if (msg.getRole() == LLMMessage.Role.ASSISTANT) {
+                    messages.add(Map.of("role", "assistant", "content", msg.getContent()));
+                } else {
+                    // USER (default)
+                    messages.add(Map.of("role", "user", "content", msg.getContent()));
+                }
+            }
+        }
+
+        b.put("messages", messages);
+
         if (stream) {
             b.put("stream", true);
             // Xin luôn số token ở chunk cuối; nhà cung cấp nào không trả thì ta
             // bỏ qua, không phải lỗi.
             b.put("stream_options", Map.of("include_usage", true));
         }
+
+        // Generation config (optional — only include when set)
+        if (request.getTemperature() != null) {
+            b.put("temperature", request.getTemperature());
+        }
+        if (request.getMaxTokens() != null) {
+            b.put("max_tokens", request.getMaxTokens());
+        }
+
         return b;
     }
 
     @Override
-    public LLMResponse generate(String prompt) {
+    public LLMResponse generate(LLMRequest request) {
         try {
             HttpEntity<String> req = new HttpEntity<>(
-                    objectMapper.writeValueAsString(body(prompt, false)), headers());
+                    objectMapper.writeValueAsString(body(request, false)), headers());
             String res = restTemplate.postForObject(chatUrl(), req, String.class);
             JsonNode root = objectMapper.readTree(res);
 
@@ -118,14 +179,14 @@ public class OpenAiCompatibleProvider implements LLMProvider {
     }
 
     @Override
-    public void generateStream(String prompt,
+    public void generateStream(LLMRequest request,
                                Consumer<String> onChunk,
                                Consumer<Throwable> onError,
                                Consumer<StreamCompletion> onComplete) {
         try {
             HttpHeaders h = headers();
             h.setAccept(List.of(MediaType.TEXT_EVENT_STREAM));
-            byte[] payload = objectMapper.writeValueAsBytes(body(prompt, true));
+            byte[] payload = objectMapper.writeValueAsBytes(body(request, true));
 
             streamingRestTemplate.execute(chatUrl(), HttpMethod.POST, (RequestCallback) req -> {
                 req.getHeaders().putAll(h);

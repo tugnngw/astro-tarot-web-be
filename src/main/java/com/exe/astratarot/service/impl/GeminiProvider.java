@@ -1,5 +1,7 @@
 package com.exe.astratarot.service.impl;
 
+import com.exe.astratarot.domain.dto.llm.LLMMessage;
+import com.exe.astratarot.domain.dto.llm.LLMRequest;
 import com.exe.astratarot.domain.dto.llm.LLMResponse;
 import com.exe.astratarot.domain.dto.llm.LLMTokenUsage;
 import com.exe.astratarot.domain.dto.llm.StreamCompletion;
@@ -27,14 +29,23 @@ import org.springframework.web.client.RestTemplate;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
 /**
  * Gemini provider implementation for LLM interactions.
  * Uses RestTemplate to call the Gemini API.
+ *
+ * <p>Supports structured requests with proper role separation:
+ * <ul>
+ *   <li>System instruction → Gemini {@code systemInstruction} field</li>
+ *   <li>User messages → {@code contents} with {@code role: "user"}</li>
+ *   <li>Assistant messages → {@code contents} with {@code role: "model"}</li>
+ * </ul>
  */
 @Service
 @Slf4j
@@ -77,13 +88,13 @@ public class GeminiProvider implements LLMProvider {
     }
 
     @Override
-    public LLMResponse generate(String prompt) {
+    public LLMResponse generate(LLMRequest request) {
         int retries = 3;
         long delayMs = 1000;
 
         for (int attempt = 0; attempt < retries; attempt++) {
             try {
-                return callGeminiApi(prompt);
+                return callGeminiApi(request);
             } catch (HttpClientErrorException e) {
                 HttpStatusCode statusCode = e.getStatusCode();
                 if (statusCode.value() == 429) { // Too Many Requests
@@ -113,9 +124,9 @@ public class GeminiProvider implements LLMProvider {
     /**
      * Synchronous call to Gemini API (non-streaming).
      */
-    private LLMResponse callGeminiApi(String prompt) {
+    private LLMResponse callGeminiApi(LLMRequest request) {
         try {
-            Map<String, Object> requestBody = buildRequestBody(prompt);
+            Map<String, Object> requestBody = buildRequestBody(request);
 
             // Set up headers
             HttpHeaders headers = new HttpHeaders();
@@ -125,10 +136,10 @@ public class GeminiProvider implements LLMProvider {
             String url = baseEndpoint() + ":generateContent?key=" + apiKey;
 
             // Create request entity
-            HttpEntity<String> request = new HttpEntity<>(objectMapper.writeValueAsString(requestBody), headers);
+            HttpEntity<String> req = new HttpEntity<>(objectMapper.writeValueAsString(requestBody), headers);
 
             // Call Gemini API
-            String response = restTemplate.postForObject(url, request, String.class);
+            String response = restTemplate.postForObject(url, req, String.class);
 
             // Parse response
             JsonNode responseNode = objectMapper.readTree(response);
@@ -176,25 +187,25 @@ public class GeminiProvider implements LLMProvider {
     }
 
     @Override
-    public void generateStream(String prompt,
+    public void generateStream(LLMRequest request,
                                Consumer<String> onChunk,
                                Consumer<Throwable> onError,
                                Consumer<StreamCompletion> onComplete) {
         try {
             String url = baseEndpoint() + ":streamGenerateContent?alt=sse&key=" + apiKey;
 
-            Map<String, Object> requestBody = buildRequestBody(prompt);
+            Map<String, Object> requestBody = buildRequestBody(request);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setAccept(Collections.singletonList(MediaType.TEXT_EVENT_STREAM));
 
-            HttpEntity<String> request = new HttpEntity<>(
+            HttpEntity<String> req = new HttpEntity<>(
                     objectMapper.writeValueAsString(requestBody), headers);
 
-            streamingRestTemplate.execute(url, HttpMethod.POST, (RequestCallback) req -> {
-                req.getHeaders().putAll(request.getHeaders());
-                req.getBody().write(objectMapper.writeValueAsBytes(requestBody));
+            streamingRestTemplate.execute(url, HttpMethod.POST, (RequestCallback) r -> {
+                r.getHeaders().putAll(req.getHeaders());
+                r.getBody().write(objectMapper.writeValueAsBytes(requestBody));
             }, (ClientHttpResponse response) -> {
                 try (BufferedReader reader = new BufferedReader(
                         new InputStreamReader(response.getBody(), StandardCharsets.UTF_8))) {
@@ -249,13 +260,78 @@ public class GeminiProvider implements LLMProvider {
         }
     }
 
-    private Map<String, Object> buildRequestBody(String prompt) {
+    /**
+     * Builds Gemini API request body from structured LLMRequest.
+     *
+     * <p>Maps:
+     * <ul>
+     *   <li>{@code systemInstruction} → Gemini {@code systemInstruction} field</li>
+     *   <li>{@code USER} messages → {@code contents} with {@code role: "user"}</li>
+     *   <li>{@code ASSISTANT} messages → {@code contents} with {@code role: "model"}</li>
+     * </ul>
+     *
+     * <p>Generation config (temperature, maxTokens) is included only when set.
+     */
+    private Map<String, Object> buildRequestBody(LLMRequest request) {
         Map<String, Object> requestBody = new HashMap<>();
-        Map<String, Object> contents = new HashMap<>();
-        Map<String, Object> parts = new HashMap<>();
-        parts.put("text", prompt);
-        contents.put("parts", new Object[]{parts});
-        requestBody.put("contents", new Object[]{contents});
+
+        // System instruction → systemInstruction field (not mixed into contents)
+        String systemInstruction = request.getSystemInstruction();
+        if (systemInstruction != null && !systemInstruction.isBlank()) {
+            Map<String, Object> systemPart = new HashMap<>();
+            systemPart.put("text", systemInstruction);
+            requestBody.put("systemInstruction", Map.of("parts", new Object[]{systemPart}));
+        }
+
+        // Conversation messages → contents array
+        List<Map<String, Object>> contents = new ArrayList<>();
+        List<LLMMessage> messages = request.getMessages();
+        if (messages != null) {
+            for (LLMMessage msg : messages) {
+                if (msg == null || msg.getContent() == null || msg.getContent().isBlank()) {
+                    continue;
+                }
+
+                Map<String, Object> content = new HashMap<>();
+                // Map role: USER → "user", ASSISTANT → "model" (Gemini convention)
+                if (msg.getRole() == LLMMessage.Role.USER) {
+                    content.put("role", "user");
+                } else if (msg.getRole() == LLMMessage.Role.ASSISTANT) {
+                    content.put("role", "model");
+                } else {
+                    // SYSTEM messages should not be here (handled via systemInstruction)
+                    // Skip or treat as user
+                    content.put("role", "user");
+                }
+
+                Map<String, Object> part = new HashMap<>();
+                part.put("text", msg.getContent());
+                content.put("parts", new Object[]{part});
+
+                contents.add(content);
+            }
+        }
+
+        // Fallback: if no contents, add empty array (Gemini requires at least one)
+        requestBody.put("contents", contents.toArray());
+
+        // Generation config (optional — only include when set)
+        Map<String, Object> generationConfig = new HashMap<>();
+        boolean hasGenerationConfig = false;
+
+        if (request.getTemperature() != null) {
+            generationConfig.put("temperature", request.getTemperature());
+            hasGenerationConfig = true;
+        }
+        if (request.getMaxTokens() != null) {
+            generationConfig.put("maxOutputTokens", request.getMaxTokens());
+            hasGenerationConfig = true;
+        }
+
+        if (hasGenerationConfig) {
+            requestBody.put("generationConfig", generationConfig);
+        }
+
         return requestBody;
     }
 

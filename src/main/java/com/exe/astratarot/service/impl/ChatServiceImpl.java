@@ -17,6 +17,7 @@ import com.exe.astratarot.domain.entity.User;
 import com.exe.astratarot.domain.enums.ChatStatus;
 import com.exe.astratarot.domain.enums.MessageType;
 import com.exe.astratarot.domain.enums.SenderType;
+import com.exe.astratarot.domain.enums.SessionType;
 import com.exe.astratarot.repository.ChatMessageRepository;
 import com.exe.astratarot.repository.ChatSessionRepository;
 import com.exe.astratarot.repository.ReadingCardRepository;
@@ -103,7 +104,8 @@ public class ChatServiceImpl implements ChatService {
             chatMessageRepository.save(userMessage);
 
             // Step 5: Build continuation prompt (with history, cards, astrology) and call AI
-            BuildPromptRequest promptRequest = buildContinuationPromptRequest(reading, user, session, message);
+            // Exclude current user message from history to avoid duplication
+            BuildPromptRequest promptRequest = buildContinuationPromptRequest(reading, user, session, message, userMessage.getId());
             LLMResponse llmResponse = aiTarotService.generateInterpretation(promptRequest);
             log.debug("AI continuation response received for readingId={}", readingId);
 
@@ -156,27 +158,50 @@ public class ChatServiceImpl implements ChatService {
                     .createdAt(aiMessage.getCreatedAt())
                     .build();
         } else {
-            // New flow: astrology profile only, no reading
-            // Fetch astrology context
-            Optional<AstrologyContextDTO> astroContext = astrologyContextService.getAstrologyContext(user.getId());
-            // Build prompt without cards
-            BuildPromptRequest promptRequest = BuildPromptRequest.builder()
-                    .userQuestion(message)
-                    .astrologyContext(astroContext.orElse(null))
-                    .drawnCardDetails(Collections.emptyList())
-                    .spreadName(null)
+            // Astrology-only flow: find or create ChatSession for this user
+            ChatSession session = findOrCreateAstrologySession(user);
+
+            // Validate session state
+            if (session.getStatus() == ChatStatus.CLOSED) {
+                throw new IllegalStateException("Chat session is closed for astrology chat");
+            }
+
+            // Save user's message
+            ChatMessage userMessage = ChatMessage.builder()
+                    .session(session)
+                    .senderType(SenderType.USER)
+                    .content(message)
+                    .messageType(MessageType.TEXT)
                     .build();
+            chatMessageRepository.save(userMessage);
+
+            // Build astrology prompt with conversation history
+            BuildPromptRequest promptRequest = buildAstrologyPromptRequest(user, session, message, userMessage.getId());
             LLMResponse llmResponse = aiTarotService.generateInterpretation(promptRequest);
-            // No session/message IDs for this lightweight flow
+
+            // Save AI response
             LLMTokenUsage tokenUsage = llmResponse.getTokenUsage();
             int promptTokens = tokenUsage != null ? tokenUsage.getPromptTokens() : 0;
             int completionTokens = tokenUsage != null ? tokenUsage.getCompletionTokens() : 0;
             int totalTokens = tokenUsage != null ? tokenUsage.getTotalTokens() : 0;
-            // Log usage (session null)
+
+            ChatMessage aiMessage = ChatMessage.builder()
+                    .session(session)
+                    .senderType(SenderType.AI)
+                    .content(llmResponse.getContent())
+                    .messageType(MessageType.TEXT)
+                    .build();
+            chatMessageRepository.save(aiMessage);
+
+            // Update session timestamp
+            session.setLastMessageAt(Instant.now());
+            chatSessionRepository.save(session);
+
+            // Log usage
             try {
                 aiUsageTrackingService.logChatContinuation(
                         user,
-                        null,
+                        session,
                         llmResponse.getModelInfo() != null ? "Gemini" : "unknown",
                         llmResponse.getModelInfo() != null ? llmResponse.getModelInfo() : "unknown",
                         llmResponse.getTokenUsage(),
@@ -184,15 +209,16 @@ public class ChatServiceImpl implements ChatService {
             } catch (Exception usageEx) {
                 log.warn("Failed to log AI usage for astrology-only chat", usageEx);
             }
+
             return ChatResponse.builder()
-                    .sessionId(null)
-                    .messageId(null)
+                    .sessionId(session.getId())
+                    .messageId(aiMessage.getId())
                     .reply(llmResponse.getContent())
                     .modelUsed(llmResponse.getModelInfo())
                     .promptTokens(promptTokens)
                     .completionTokens(completionTokens)
                     .totalTokens(totalTokens)
-                    .createdAt(Instant.now())
+                    .createdAt(aiMessage.getCreatedAt())
                     .build();
         }
     }
@@ -237,9 +263,9 @@ public class ChatServiceImpl implements ChatService {
                         .build();
                 chatMessageRepository.save(userMessage);
 
-                // Step 5: Build continuation prompt request
+                // Step 5: Build continuation prompt request (exclude current message from history)
                 BuildPromptRequest promptRequest = buildContinuationPromptRequest(
-                        reading, user, session, message);
+                        reading, user, session, message, userMessage.getId());
 
                 // Step 6: Stream from AI and handle callbacks
                 StringBuilder fullContent = new StringBuilder();
@@ -282,18 +308,67 @@ public class ChatServiceImpl implements ChatService {
                                     tokenUsage != null ? tokenUsage.getCompletionTokens() : 0));
                         });
             } else {
-                // Astrology-only flow (no readingId)
-                BuildPromptRequest promptRequest = buildAstrologyOnlyPrompt(user, message);
+                // Astrology-only flow (no readingId) — find or create session
+                ChatSession session = findOrCreateAstrologySession(user);
+                if (session.getStatus() == ChatStatus.CLOSED) {
+                    throw new IllegalStateException("Chat session is closed for astrology chat");
+                }
 
+                // Save USER message
+                ChatMessage userMessage = ChatMessage.builder()
+                        .session(session)
+                        .senderType(SenderType.USER)
+                        .content(message)
+                        .messageType(MessageType.TEXT)
+                        .build();
+                chatMessageRepository.save(userMessage);
+
+                BuildPromptRequest promptRequest = buildAstrologyPromptRequest(
+                        user, session, message, userMessage.getId());
+
+                StringBuilder fullContent = new StringBuilder();
                 aiTarotService.generateInterpretationStream(
                         promptRequest,
-                        onChunk,
-                        onError,
+                        chunk -> {
+                            fullContent.append(chunk);
+                            onChunk.accept(chunk);
+                        },
+                        error -> {
+                            log.error("Stream error for astrology chat userId={}: {}",
+                                    user.getId(), error.getMessage());
+                            onError.accept(error);
+                        },
                         completion -> {
+                            // Save AI response
+                            ChatMessage aiMessage = ChatMessage.builder()
+                                    .session(session)
+                                    .senderType(SenderType.AI)
+                                    .content(fullContent.toString())
+                                    .messageType(MessageType.TEXT)
+                                    .build();
+                            chatMessageRepository.save(aiMessage);
+
+                            // Update session timestamp
+                            session.setLastMessageAt(Instant.now());
+                            chatSessionRepository.save(session);
+
+                            // Log AI usage
+                            try {
+                                aiUsageTrackingService.logChatContinuation(
+                                        user,
+                                        session,
+                                        completion.getModelInfo() != null ? "Gemini" : "unknown",
+                                        completion.getModelInfo() != null ? completion.getModelInfo() : "unknown",
+                                        completion.getTokenUsage(),
+                                        null);
+                            } catch (Exception usageEx) {
+                                log.warn("Failed to log AI usage for astrology chat", usageEx);
+                            }
+
                             LLMTokenUsage usage = completion.getTokenUsage();
                             onComplete.accept(new StreamResult(
-                                    null,
-                                    null,
+                                    session.getId(),
+                                    aiMessage.getId(),
                                     completion.getModelInfo(),
                                     usage != null ? usage.getTotalTokens() : 0,
                                     usage != null ? usage.getPromptTokens() : 0,
@@ -389,17 +464,37 @@ public class ChatServiceImpl implements ChatService {
     }
 
     /**
+     * Finds or creates the astrology-only ChatSession for a user.
+     *
+     * <p>Uses sessionType=AI with tarotReading=null. Creates if not found.
+     */
+    private ChatSession findOrCreateAstrologySession(User user) {
+        return chatSessionRepository
+                .findByUserIdAndTarotReadingIsNullAndSessionType(user.getId(), SessionType.AI)
+                .orElseGet(() -> {
+                    ChatSession newSession = ChatSession.builder()
+                            .user(user)
+                            .tarotReading(null)
+                            .sessionType(SessionType.AI)
+                            .status(ChatStatus.ACTIVE)
+                            .build();
+                    return chatSessionRepository.save(newSession);
+                });
+    }
+
+    /**
      * Builds a continuation prompt request using the reading context, conversation history,
      * original question, astrology context, and the follow-up message.
      *
      * Implements token budget management Phase 1:
      * - Loads messages newest first
+     * - Excludes the current user message (just saved) from history
      * - Keeps adding messages until estimated tokens reach budget
      * - Stops before exceeding maxContextTokens
      * - Reverses order before formatting (so latest messages appear at end)
      * - Preserves original question, astrology context, card details (no trimming)
      */
-    private BuildPromptRequest buildContinuationPromptRequest(TarotReading reading, User user, ChatSession session, String message) {
+    private BuildPromptRequest buildContinuationPromptRequest(TarotReading reading, User user, ChatSession session, String message, UUID excludeMessageId) {
         // Step 1: Reconstruct card details from the reading (NOT trimmed)
         List<ReadingCard> readingCards = readingCardRepository.findByReading(reading);
         List<DrawnCardDetailDTO> cardDetails = new ArrayList<>();
@@ -422,14 +517,19 @@ public class ChatServiceImpl implements ChatService {
         Page<ChatMessage> allMessages = chatMessageRepository
                 .findBySessionIdOrderByCreatedAtAsc(session.getId(), historyPageable);
 
-        // Step 3: Trim conversation history to stay within token budget
+        // Step 3: Exclude current user message from history to avoid duplication
+        List<ChatMessage> historyMessages = allMessages.getContent().stream()
+                .filter(msg -> !msg.getId().equals(excludeMessageId))
+                .collect(Collectors.toList());
+
+        // Step 4: Trim conversation history to stay within token budget
         String conversationHistory = trimConversationHistoryByTokenBudget(
-                allMessages.getContent(), maxContextTokens);
+                historyMessages, maxContextTokens);
 
         log.debug("Token budget: maxContextTokens={}, conversationHistoryTokens={}",
                 maxContextTokens, tokenEstimatorService.estimateTokens(conversationHistory));
 
-        // Step 4: Fetch astrology context (NOT trimmed, preserved as-is)
+        // Step 5: Fetch astrology context (NOT trimmed, preserved as-is)
         Optional<AstrologyContextDTO> astrologyContext =
                 astrologyContextService.getAstrologyContext(user.getId());
 
@@ -518,15 +618,29 @@ public class ChatServiceImpl implements ChatService {
     }
 
     /**
-     * Builds a prompt request for astrology-only chat (no reading, no cards).
+     * Builds a prompt request for astrology-only chat with conversation history.
      */
-    private BuildPromptRequest buildAstrologyOnlyPrompt(User user, String message) {
+    private BuildPromptRequest buildAstrologyPromptRequest(User user, ChatSession session, String message, UUID excludeMessageId) {
+        // Load conversation history with token budgeting
+        Pageable historyPageable = PageRequest.of(0, 100, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<ChatMessage> allMessages = chatMessageRepository
+                .findBySessionIdOrderByCreatedAtAsc(session.getId(), historyPageable);
+
+        // Exclude current user message from history to avoid duplication
+        List<ChatMessage> historyMessages = allMessages.getContent().stream()
+                .filter(msg -> !msg.getId().equals(excludeMessageId))
+                .collect(Collectors.toList());
+
+        String conversationHistory = trimConversationHistoryByTokenBudget(
+                historyMessages, maxContextTokens);
+
         Optional<AstrologyContextDTO> astrologyContext =
                 astrologyContextService.getAstrologyContext(user.getId());
+
         return BuildPromptRequest.builder()
                 .userQuestion(message)
                 .originalQuestion(null)
-                .conversationHistory(null)
+                .conversationHistory(conversationHistory)
                 .astrologyContext(astrologyContext.orElse(null))
                 .drawnCardDetails(Collections.emptyList())
                 .spreadName("Astrology Chat")
