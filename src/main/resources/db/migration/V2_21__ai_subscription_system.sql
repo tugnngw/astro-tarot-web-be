@@ -1,4 +1,4 @@
--- V2_18: AI Subscription System
+-- V2_21: AI Subscription System
 -- Tạo bảng: subscription_plan, user_plan_purchase, ai_usage_daily, plan_change_audit_log
 
 -- ============================================================
