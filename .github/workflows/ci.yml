@@ -33,3 +33,102 @@ jobs:
       # không phải mở log ra dò.
       - name: Chạy test
         run: ./mvnw -B -ntp test
+
+  # ---------------------------------------------------------------------------
+  # Migration phải chạy được trên Postgres THẬT
+  # ---------------------------------------------------------------------------
+  # Job build ở trên chạy test trên H2. H2 nhận phần lớn SQL nhưng không phải
+  # Postgres, nên nó không bắt được lỗi kiểu Postgres — và Flyway thì không hề
+  # chạy trong test.
+  #
+  # Hậu quả đã xảy ra thật: ngày 30/09 hai nhánh cùng đánh số 2.18, Flyway từ
+  # chối khởi động, production chết vòng lặp. CI lúc đó xanh. Lần ấy mất gần
+  # một ngày mới lần ra, và thứ phát hiện ra nó là log Render chứ không phải CI.
+  #
+  # Job này dựng một Postgres sạch rồi áp TẤT CẢ migration theo đúng thứ tự,
+  # bằng chính phiên bản Flyway mà ứng dụng dùng. Hỏng ở đâu thì hỏng tại đây,
+  # trước khi gộp, chứ không phải lúc Render đang dựng lại.
+  migration:
+    name: Migration chạy được trên Postgres thật
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: astra
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Chốt chặn rẻ nhất, chạy trước khi dựng gì: hai file cùng số thì Flyway
+      # dừng hẳn. Bắt ở đây thì thông báo nói thẳng tên hai file, thay vì phải
+      # đọc một vệt stack trace dài trong log Render.
+      - name: Không có hai migration trùng số
+        run: |
+          trung=$(ls src/main/resources/db/migration \
+                  | sed -n 's/^V\([0-9_]*\)__.*/\1/p' | sort | uniq -d)
+          if [ -n "$trung" ]; then
+            echo "Hai migration cùng mang số: $trung"
+            ls src/main/resources/db/migration | grep -E "^V($(echo "$trung" | tr '\n' '|' | sed 's/|$//'))__"
+            exit 1
+          fi
+          echo "Không có số nào trùng."
+
+      # Dùng đúng phiên bản Flyway của pom.xml. Lệch phiên bản thì phép kiểm
+      # này mất ý nghĩa — bản khác có thể chấp nhận thứ bản thật từ chối.
+      - name: Áp toàn bộ migration
+        run: |
+          docker run --rm --network host \
+            -v "$PWD/src/main/resources/db/migration:/flyway/sql:ro" \
+            flyway/flyway:11.7.2 \
+            -url=jdbc:postgresql://localhost:5432/astra \
+            -user=postgres -password=ci \
+            -connectRetries=10 \
+            -locations=filesystem:/flyway/sql \
+            migrate
+
+      # Các file seed phải chạy lại được mà không nhân đôi dữ liệu: trên môi
+      # trường thật chúng đôi khi bị áp lại bằng tay, và một seed nhân đôi mỗi
+      # lần chạy là thứ chỉ lộ ra khi đã muộn.
+      #
+      # Flyway không kiểm được điều này — đã ghi vào lịch sử thì nó bỏ qua. Nên
+      # áp thẳng lại từng file seed bằng psql rồi so số hàng trước và sau.
+      - name: Seed chạy lại không nhân đôi dữ liệu
+        env:
+          PGPASSWORD: ci
+        run: |
+          dem() {
+            psql -h localhost -U postgres -d astra -tAc "
+              SELECT (SELECT count(*) FROM bookings)
+                   + (SELECT count(*) FROM reviews)
+                   + (SELECT count(*) FROM payment_transactions)
+                   + (SELECT count(*) FROM user_feedback)
+                   + (SELECT count(*) FROM reader_availability)"
+          }
+          truoc=$(dem)
+          # Chỉ áp lại những file TỰ NHẬN là chạy lại được, tức có chèn phòng
+          # thủ (NOT EXISTS hoặc ON CONFLICT). V1_3 gieo bộ bài bằng INSERT
+          # trần — Flyway không bao giờ chạy lại nó nên điều đó không sao, và
+          # bắt nó phải idempotent chỉ để qua phép kiểm này là làm ngược.
+          for f in src/main/resources/db/migration/V*seed*.sql; do
+            if ! grep -qiE "NOT EXISTS|ON CONFLICT" "$f"; then
+              echo "bỏ qua $f — không có chèn phòng thủ"
+              continue
+            fi
+            echo "áp lại $f"
+            psql -h localhost -U postgres -d astra -v ON_ERROR_STOP=1 -q -f "$f"
+          done
+          sau=$(dem)
+          echo "số hàng trước: $truoc — sau: $sau"
+          if [ "$truoc" != "$sau" ]; then
+            echo "Seed nhân đôi dữ liệu khi chạy lại."
+            exit 1
+          fi
