@@ -1,6 +1,7 @@
 package com.exe.astratarot.controller;
 
 import com.exe.astratarot.domain.dto.ai.*;
+import com.exe.astratarot.domain.dto.common.ApiResponse;
 import com.exe.astratarot.domain.entity.SubscriptionPlan;
 import com.exe.astratarot.domain.entity.UserPlanPurchase;
 import com.exe.astratarot.security.CustomUserDetails;
@@ -43,64 +44,64 @@ public class SubscriptionController {
     // -------- Public / User endpoints --------
 
     @GetMapping("/plans/active")
-    public ResponseEntity<List<SubscriptionPlan>> getActivePlans() {
-        return ResponseEntity.ok(subscriptionService.getAllActivePlans());
+    public ResponseEntity<ApiResponse<List<SubscriptionPlan>>> getActivePlans() {
+        return ResponseEntity.ok(ApiResponse.success(subscriptionService.getAllActivePlans()));
     }
 
     @PostMapping("/purchase")
-    public ResponseEntity<AIPlanResponse> createPurchase(
+    public ResponseEntity<ApiResponse<AIPlanResponse>> createPurchase(
             @RequestBody CreatePurchaseRequest request,
             @AuthenticationPrincipal CustomUserDetails userDetails,
             Authentication auth) {
         UUID userId = resolveUserId(userDetails, auth);
         AIPlanResponse response = subscriptionService.createPurchase(userId, request);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping("/users/{userId}/purchases/active")
-    public ResponseEntity<List<UserPlanPurchase>> getUserActivePurchases(
+    public ResponseEntity<ApiResponse<List<UserPlanPurchase>>> getUserActivePurchases(
             @PathVariable UUID userId,
             @AuthenticationPrincipal CustomUserDetails userDetails,
             Authentication auth) {
-        return ResponseEntity.ok(subscriptionService.getUserActivePurchases(userId));
+        return ResponseEntity.ok(ApiResponse.success(subscriptionService.getUserActivePurchases(userId)));
     }
 
     @GetMapping("/users/{userId}/ai-usage")
-    public ResponseEntity<List<AiUsageRecord>> getUserAIUsage(
+    public ResponseEntity<ApiResponse<List<AiUsageRecord>>> getUserAIUsage(
             @PathVariable UUID userId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @AuthenticationPrincipal CustomUserDetails userDetails,
             Authentication auth) {
-        return ResponseEntity.ok(subscriptionService.getUserAIUsage(userId, date));
+        return ResponseEntity.ok(ApiResponse.success(subscriptionService.getUserAIUsage(userId, date)));
     }
 
     // -------- Admin endpoints --------
 
     @GetMapping("/plans")
-    public ResponseEntity<List<SubscriptionPlan>> getAllPlans() {
-        return ResponseEntity.ok(subscriptionService.getAllPlans());
+    public ResponseEntity<ApiResponse<List<SubscriptionPlan>>> getAllPlans() {
+        return ResponseEntity.ok(ApiResponse.success(subscriptionService.getAllPlans()));
     }
 
     @PostMapping("/plans")
-    public ResponseEntity<SubscriptionPlan> createPlan(
+    public ResponseEntity<ApiResponse<SubscriptionPlan>> createPlan(
             @RequestBody CreatePlanRequest request) {
         SubscriptionPlan plan = subscriptionService.createPlan(request);
-        return ResponseEntity.ok(plan);
+        return ResponseEntity.ok(ApiResponse.success(plan));
     }
 
     @PutMapping("/plans/{planId}")
-    public ResponseEntity<SubscriptionPlan> updatePlan(
+    public ResponseEntity<ApiResponse<SubscriptionPlan>> updatePlan(
             @PathVariable UUID planId,
             @RequestBody UpdatePlanRequest request) {
         SubscriptionPlan updated = subscriptionService.updatePlan(planId, request);
-        return ResponseEntity.ok(updated);
+        return ResponseEntity.ok(ApiResponse.success(updated));
     }
 
     @PatchMapping("/user-purchases/{purchaseId}")
-    public ResponseEntity<UserPlanPurchase> updateUserPurchase(
+    public ResponseEntity<ApiResponse<UserPlanPurchase>> updateUserPurchase(
             @PathVariable UUID purchaseId,
             @RequestBody UpdateUserPurchaseRequest request) {
         UserPlanPurchase updated = subscriptionService.updateUserPurchase(purchaseId, request);
-        return ResponseEntity.ok(updated);
+        return ResponseEntity.ok(ApiResponse.success(updated));
     }
 }

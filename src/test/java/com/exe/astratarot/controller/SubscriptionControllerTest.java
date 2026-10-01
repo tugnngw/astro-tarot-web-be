@@ -106,9 +106,9 @@ class SubscriptionControllerTest {
 
         mockMvc.perform(get("/api/admin/subscriptions/plans/active"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].name").value("Basic 1 Day"))
-                .andExpect(jsonPath("$[0].dailyQuota").value(5))
-                .andExpect(jsonPath("$[0].price").value(15000));
+                .andExpect(jsonPath("$.data[0].name").value("Basic 1 Day"))
+                .andExpect(jsonPath("$.data[0].dailyQuota").value(5))
+                .andExpect(jsonPath("$.data[0].price").value(15000));
     }
 
     @Test
@@ -134,9 +134,9 @@ class SubscriptionControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(toJson(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.planName").value("Pro Monthly"))
-                .andExpect(jsonPath("$.dailyQuota").value(20))
-                .andExpect(jsonPath("$.price").value(199000));
+                .andExpect(jsonPath("$.data.planName").value("Pro Monthly"))
+                .andExpect(jsonPath("$.data.dailyQuota").value(20))
+                .andExpect(jsonPath("$.data.price").value(199000));
     }
 
     @Test
@@ -160,8 +160,8 @@ class SubscriptionControllerTest {
         mockMvc.perform(get("/api/admin/subscriptions/users/{userId}/purchases/active", TEST_USER_ID)
                         .header("Authorization", "Bearer " + TEST_TOKEN))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].planNameSnapshot").value("3-Day Combo"))
-                .andExpect(jsonPath("$[0].dailyQuotaSnapshot").value(10));
+                .andExpect(jsonPath("$.data[0].planNameSnapshot").value("3-Day Combo"))
+                .andExpect(jsonPath("$.data[0].dailyQuotaSnapshot").value(10));
     }
 
     @Test
@@ -176,8 +176,8 @@ class SubscriptionControllerTest {
                         .param("date", "2026-09-30")
                         .header("Authorization", "Bearer " + TEST_TOKEN))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].countUsed").value(3))
-                .andExpect(jsonPath("$[0].usageDate").value("2026-09-30"));
+                .andExpect(jsonPath("$.data[0].countUsed").value(3))
+                .andExpect(jsonPath("$.data[0].usageDate").value("2026-09-30"));
     }
 
     @Test
@@ -210,8 +210,8 @@ class SubscriptionControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(toJson(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("VIP 7 Days"))
-                .andExpect(jsonPath("$.dailyQuota").value(50));
+                .andExpect(jsonPath("$.data.name").value("VIP 7 Days"))
+                .andExpect(jsonPath("$.data.dailyQuota").value(50));
     }
 
     @Test
@@ -242,11 +242,11 @@ class SubscriptionControllerTest {
         mockMvc.perform(get("/api/admin/subscriptions/plans")
                         .header("Authorization", "Bearer " + TEST_TOKEN))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].name").value("Pro Monthly"))
-                .andExpect(jsonPath("$[0].isActive").value(true))
-                .andExpect(jsonPath("$[1].name").value("Old Plan"))
-                .andExpect(jsonPath("$[1].isActive").value(false));
+                .andExpect(jsonPath("$.data.length()").value(2))
+                .andExpect(jsonPath("$.data[0].name").value("Pro Monthly"))
+                .andExpect(jsonPath("$.data[0].isActive").value(true))
+                .andExpect(jsonPath("$.data[1].name").value("Old Plan"))
+                .andExpect(jsonPath("$.data[1].isActive").value(false));
     }
 
     @Test
@@ -277,8 +277,8 @@ class SubscriptionControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(toJson(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.dailyQuota").value(25))
-                .andExpect(jsonPath("$.price").value(250000))
-                .andExpect(jsonPath("$.description").value("Gói nâng cấp"));
+                .andExpect(jsonPath("$.data.dailyQuota").value(25))
+                .andExpect(jsonPath("$.data.price").value(250000))
+                .andExpect(jsonPath("$.data.description").value("Gói nâng cấp"));
     }
 }
