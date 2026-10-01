@@ -101,7 +101,7 @@ AND NOT EXISTS (
 INSERT INTO bookings (
     id, user_id, reader_profile_id, start_time, end_time,
     total_amount, status, payment_status,
-    deposit_amount, remaining_amount, phase,
+    deposit_amount, remaining_amount,
     created_at, updated_at
 )
 SELECT
@@ -111,7 +111,7 @@ SELECT
     date_trunc('day', NOW()) - (b.ngay || ' days')::interval + (b.gio || ' hours')::interval,
     date_trunc('day', NOW()) - (b.ngay || ' days')::interval + (b.gio || ' hours')::interval + interval '60 minutes',
     300000, 'COMPLETED', 'PAID',
-    300000, 0, 'FULL',
+    300000, 0,
     date_trunc('day', NOW()) - ((b.ngay + 3) || ' days')::interval,
     date_trunc('day', NOW()) - (b.ngay || ' days')::interval
 FROM (VALUES
@@ -136,7 +136,7 @@ AND NOT EXISTS (
 -- Xem khối cảnh báo ở đầu file: đây là dữ liệu demo, không phải tiền thật.
 INSERT INTO payment_transactions (
     id, booking_id, user_id, amount, payment_method,
-    external_transaction_id, status, metadata, created_at
+    external_transaction_id, status, phase, metadata, created_at
 )
 SELECT
     ('f9000000-0000-4000-8000-' || lpad(b.i::text, 12, '0'))::uuid,
@@ -146,6 +146,8 @@ SELECT
     'SEED_DEMO',
     'SEED-DEMO-' || lpad(b.i::text, 4, '0'),
     'SUCCESS',
+    -- Trả 100% ngay, nên phase là FULL chứ không phải DEPOSIT mặc định.
+    'FULL',
     jsonb_build_object(
         'nguon', 'migration V2_23',
         'ghi_chu', 'Du lieu demo. Khong co giao dich that, khong doi chieu duoc voi PayOS.'
