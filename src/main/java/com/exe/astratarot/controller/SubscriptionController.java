@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -43,11 +44,14 @@ public class SubscriptionController {
 
     // -------- Public / User endpoints --------
 
+    // Gói đang mở bán thì ai cũng xem được, kể cả khách chưa đăng nhập.
+    @PreAuthorize("permitAll()")
     @GetMapping("/plans/active")
     public ResponseEntity<ApiResponse<List<SubscriptionPlan>>> getActivePlans() {
         return ResponseEntity.ok(ApiResponse.success(subscriptionService.getAllActivePlans()));
     }
 
+    @PreAuthorize("isAuthenticated()")
     @PostMapping("/purchase")
     public ResponseEntity<ApiResponse<AIPlanResponse>> createPurchase(
             @RequestBody CreatePurchaseRequest request,
@@ -58,6 +62,9 @@ public class SubscriptionController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    // Chỉ xem được của CHÍNH MÌNH. userId nằm trên đường dẫn, nên không có
+    // dòng này thì đổi một chữ trong URL là đọc được dữ liệu người khác.
+    @PreAuthorize("#userId == authentication.principal.user.id or hasAuthority('USERS_MANAGE')")
     @GetMapping("/users/{userId}/purchases/active")
     public ResponseEntity<ApiResponse<List<UserPlanPurchase>>> getUserActivePurchases(
             @PathVariable UUID userId,
@@ -66,6 +73,9 @@ public class SubscriptionController {
         return ResponseEntity.ok(ApiResponse.success(subscriptionService.getUserActivePurchases(userId)));
     }
 
+    // Chỉ xem được của CHÍNH MÌNH. userId nằm trên đường dẫn, nên không có
+    // dòng này thì đổi một chữ trong URL là đọc được dữ liệu người khác.
+    @PreAuthorize("#userId == authentication.principal.user.id or hasAuthority('USERS_MANAGE')")
     @GetMapping("/users/{userId}/ai-usage")
     public ResponseEntity<ApiResponse<List<AiUsageRecord>>> getUserAIUsage(
             @PathVariable UUID userId,
@@ -77,11 +87,13 @@ public class SubscriptionController {
 
     // -------- Admin endpoints --------
 
+    @PreAuthorize("hasAuthority('PAYMENTS_MANAGE')")
     @GetMapping("/plans")
     public ResponseEntity<ApiResponse<List<SubscriptionPlan>>> getAllPlans() {
         return ResponseEntity.ok(ApiResponse.success(subscriptionService.getAllPlans()));
     }
 
+    @PreAuthorize("hasAuthority('PAYMENTS_MANAGE')")
     @PostMapping("/plans")
     public ResponseEntity<ApiResponse<SubscriptionPlan>> createPlan(
             @RequestBody CreatePlanRequest request) {
@@ -89,6 +101,7 @@ public class SubscriptionController {
         return ResponseEntity.ok(ApiResponse.success(plan));
     }
 
+    @PreAuthorize("hasAuthority('PAYMENTS_MANAGE')")
     @PutMapping("/plans/{planId}")
     public ResponseEntity<ApiResponse<SubscriptionPlan>> updatePlan(
             @PathVariable UUID planId,
@@ -97,6 +110,7 @@ public class SubscriptionController {
         return ResponseEntity.ok(ApiResponse.success(updated));
     }
 
+    @PreAuthorize("hasAuthority('PAYMENTS_MANAGE')")
     @PatchMapping("/user-purchases/{purchaseId}")
     public ResponseEntity<ApiResponse<UserPlanPurchase>> updateUserPurchase(
             @PathVariable UUID purchaseId,
