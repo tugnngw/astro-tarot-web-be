@@ -1,4 +1,4 @@
--- V2_23: User Wallet System (Ví người dùng ASTROTAROT)
+-- V2_24: User Wallet System (Ví người dùng ASTROTAROT)
 -- Tạo bảng: user_wallets, wallet_transactions
 
 -- ============================================================
