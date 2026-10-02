@@ -4,10 +4,12 @@ import com.exe.astratarot.config.security.SecurityUtils;
 import com.exe.astratarot.domain.dto.ai.*;
 import com.exe.astratarot.domain.entity.*;
 import com.exe.astratarot.domain.enums.TargetType;
+import com.exe.astratarot.domain.enums.WalletTransactionType;
 import com.exe.astratarot.exception.QuotaExceededException;
 import com.exe.astratarot.exception.ResourceNotFoundException;
 import com.exe.astratarot.repository.*;
 import com.exe.astratarot.service.SubscriptionService;
+import com.exe.astratarot.service.WalletService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +35,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final AiUsageDailyRepository aiUsageDailyRepository;
     private final PlanChangeAuditLogRepository auditLogRepository;
     private final UserRepository userRepository;
+    private final WalletService walletService;
 
     // ------------------------------------------------------------
     // 1. Create new purchase for user (snapshots plan data)
@@ -50,6 +53,16 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             throw new IllegalArgumentException("Plan is not active");
         }
 
+        UserPlanPurchase.PurchaseType purchaseType = request.getPurchaseType() != null
+                ? request.getPurchaseType()
+                : UserPlanPurchase.PurchaseType.MANUAL;
+
+        // Nếu thanh toán bằng ví và giá gói > 0: trừ tiền trong ví trước
+        if (purchaseType == UserPlanPurchase.PurchaseType.WALLET && plan.getPrice() != null && plan.getPrice() > 0) {
+            walletService.debit(user, plan.getPrice(), WalletTransactionType.AI_SUBSCRIPTION,
+                    plan.getId().toString(), "Mua gói AI " + plan.getName());
+        }
+
         // Snapshot data at purchase time
         Instant startAt = Instant.now();
         Instant endAt = startAt.plus(plan.getDurationDays(), ChronoUnit.DAYS);
@@ -63,7 +76,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .startAt(Timestamp.from(startAt))
                 .endAt(Timestamp.from(endAt))
                 .status(UserPlanPurchase.PurchaseStatus.ACTIVE)
-                .purchaseType(request.getPurchaseType() != null ? request.getPurchaseType() : UserPlanPurchase.PurchaseType.MANUAL)
+                .purchaseType(purchaseType)
                 .build();
 
         UserPlanPurchase savedPurchase = userPlanPurchaseRepository.save(purchase);

@@ -12,5 +12,7 @@ public enum PaymentPhase {
     /** Thanh toán nốt 50% còn lại */
     REMAINING,
     /** Trả 100% ngay khi đặt (còn < 12h tới giờ hẹn) */
-    FULL
+    FULL,
+    /** Nạp tiền vào ví người dùng ASTROTAROT */
+    TOPUP
 }
