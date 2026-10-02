@@ -1,4 +1,4 @@
--- V2_23: User Wallet System (Ví người dùng ASTROTAROT)
+-- V2_24: User Wallet System (Ví người dùng ASTROTAROT)
 -- Tạo bảng: user_wallets, wallet_transactions
 
 -- ============================================================
@@ -45,3 +45,21 @@ INSERT INTO user_wallets (id, user_id, balance)
 SELECT gen_random_uuid(), id, 0
 FROM users
 ON CONFLICT (user_id) DO NOTHING;
+
+-- ============================================================
+-- Nới ràng buộc phase cho lượt nạp ví
+-- ============================================================
+-- WalletServiceImpl ghi PaymentPhase.TOPUP vào payment_transactions.phase,
+-- nhưng ràng buộc dựng ở V2_17 chỉ cho ba giá trị:
+--
+--     CHECK (phase IN ('DEPOSIT', 'REMAINING', 'FULL'))
+--
+-- Nên mọi lượt nạp ví sẽ đổ ngay ở câu INSERT với lỗi vi phạm ràng buộc. Lỗi
+-- này không lộ ra lúc biên dịch cũng không lộ trong bộ test (test chạy H2 và
+-- không đi qua ràng buộc này), chỉ hiện khi có người bấm nạp tiền thật.
+ALTER TABLE payment_transactions
+    DROP CONSTRAINT IF EXISTS chk_payment_tx_phase;
+
+ALTER TABLE payment_transactions
+    ADD CONSTRAINT chk_payment_tx_phase
+    CHECK (phase IN ('DEPOSIT', 'REMAINING', 'FULL', 'TOPUP'));

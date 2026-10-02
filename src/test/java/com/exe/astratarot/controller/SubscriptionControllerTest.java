@@ -85,6 +85,23 @@ class SubscriptionControllerTest {
         when(userDetailsService.loadUserByUsername(TEST_USERNAME)).thenReturn(customUserDetails);
     }
 
+    /**
+     * Đổi người đang gọi sang Quản trị viên.
+     *
+     * setUp dựng sẵn một tài khoản vai USER, đúng cho các endpoint người dùng.
+     * Bốn endpoint quản trị đòi PAYMENTS_MANAGE — quyền chỉ ADMIN có — nên
+     * test nào gọi chúng phải tự đổi vai trước.
+     */
+    private void dungVaiAdmin() {
+        User admin = User.builder()
+                .id(TEST_USER_ID)
+                .username(TEST_USERNAME)
+                .role(UserRole.ADMIN)
+                .build();
+        when(userDetailsService.loadUserByUsername(TEST_USERNAME))
+                .thenReturn(new CustomUserDetails(admin));
+    }
+
     private String toJson(Object obj) throws Exception {
         return objectMapper.writeValueAsString(obj);
     }
@@ -203,6 +220,8 @@ class SubscriptionControllerTest {
                 .description("Gói VIP 7 ngày")
                 .build();
 
+        dungVaiAdmin();
+
         when(subscriptionService.createPlan(any(CreatePlanRequest.class))).thenReturn(created);
 
         mockMvc.perform(post("/api/admin/subscriptions/plans")
@@ -237,6 +256,7 @@ class SubscriptionControllerTest {
                 .isActive(false)
                 .build();
 
+        dungVaiAdmin();
         when(subscriptionService.getAllPlans()).thenReturn(List.of(activePlan, inactivePlan));
 
         mockMvc.perform(get("/api/admin/subscriptions/plans")
@@ -270,6 +290,7 @@ class SubscriptionControllerTest {
                 .description("Gói nâng cấp")
                 .build();
 
+        dungVaiAdmin();
         when(subscriptionService.updatePlan(eq(planId), any(UpdatePlanRequest.class))).thenReturn(updated);
 
         mockMvc.perform(put("/api/admin/subscriptions/plans/{planId}", planId)
@@ -280,5 +301,57 @@ class SubscriptionControllerTest {
                 .andExpect(jsonPath("$.data.dailyQuota").value(25))
                 .andExpect(jsonPath("$.data.price").value(250000))
                 .andExpect(jsonPath("$.data.description").value("Gói nâng cấp"));
+    }
+    // =====================================================================
+    // Chặn lỗ hổng: trước đây controller này không có @PreAuthorize nào
+    // =====================================================================
+    // Nó nằm dưới /api/admin/subscriptions, nhưng SecurityConfig không có luật
+    // nào cho /api/admin/** — chỉ một dòng permitAll cho plans/active. Thứ duy
+    // nhất chặn là .anyRequest().authenticated(), nghĩa là BẤT KỲ ai đăng nhập
+    // cũng sửa được giá gói và đọc được dữ liệu người khác.
+
+    @Test
+    @DisplayName("người dùng thường KHÔNG sửa được gói — 403")
+    void nguoiDungThuong_khongSuaDuocGoi() throws Exception {
+        // setUp đã dựng vai USER, cố ý không gọi dungVaiAdmin().
+        mockMvc.perform(put("/api/admin/subscriptions/plans/{planId}", UUID.randomUUID())
+                        .header("Authorization", "Bearer " + TEST_TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dailyQuota\":9999,\"price\":0}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("người dùng thường KHÔNG tạo được gói — 403")
+    void nguoiDungThuong_khongTaoDuocGoi() throws Exception {
+        mockMvc.perform(post("/api/admin/subscriptions/plans")
+                        .header("Authorization", "Bearer " + TEST_TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Tu che\",\"dailyQuota\":9999,\"price\":0}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("người dùng thường KHÔNG đọc được lượt mua của người khác — 403")
+    void nguoiDungThuong_khongDocDuocCuaNguoiKhac() throws Exception {
+        // Đổi một chữ trong URL là ra người khác. Đây là chỗ hai endpoint
+        // users/{userId}/… từng nhận userDetails rồi không dùng tới.
+        mockMvc.perform(get("/api/admin/subscriptions/users/{userId}/purchases/active",
+                        UUID.randomUUID())
+                        .header("Authorization", "Bearer " + TEST_TOKEN))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("người dùng thường VẪN đọc được lượt mua của chính mình")
+    void nguoiDungThuong_docDuocCuaChinhMinh() throws Exception {
+        // Siết quyền mà chặn luôn đường dùng bình thường thì là sửa hỏng.
+        when(subscriptionService.getUserActivePurchases(TEST_USER_ID))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/admin/subscriptions/users/{userId}/purchases/active",
+                        TEST_USER_ID)
+                        .header("Authorization", "Bearer " + TEST_TOKEN))
+                .andExpect(status().isOk());
     }
 }
