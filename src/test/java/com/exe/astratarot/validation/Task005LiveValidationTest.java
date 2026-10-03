@@ -15,6 +15,7 @@ import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
@@ -26,12 +27,45 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Gọi THẬT lên Gemini để xem chất lượng lời giải, không phải test tự động.
+ *
+ * <p>Mặc định bị bỏ qua. Muốn chạy thì đặt hai biến môi trường:
+ *
+ * <pre>
+ *   GEMINI_LIVE_TEST=1
+ *   GEMINI_API_KEY=&lt;khoá của bạn&gt;
+ * </pre>
+ *
+ * <p><b>Vì sao phải bật bằng tay.</b> Trước đây lớp này chạy mỗi lần đẩy code,
+ * với một khoá API viết thẳng vào mã nguồn. Hai hậu quả:
+ *
+ * <ul>
+ *   <li>Repo công khai, nên Google quét thấy khoá và vô hiệu hoá nó. Ngày
+ *       03/10/2026 toàn bộ lớp này đổ với <i>"Your API key was reported as
+ *       leaked"</i>, kéo CI của {@code main} đỏ — và vì CD không chờ CI nên
+ *       production vẫn deploy bình thường, không ai thấy gì.
+ *   <li>Mỗi lần đẩy code là một lần gọi API tính tiền, cho một phép kiểm mà
+ *       kết quả phụ thuộc vào mạng và vào hạn mức.
+ * </ul>
+ *
+ * <p>Một phép kiểm phụ thuộc dịch vụ ngoài thì không thuộc về CI: nó đỏ vì
+ * những lý do chẳng liên quan gì tới đoạn mã vừa sửa, và đỏ mãi thì người ta
+ * quen mắt rồi bỏ qua cả những cái đỏ thật.
+ *
+ * <p>Khoá giờ đọc từ môi trường. Đừng viết khoá vào đây lần nữa.
+ */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@EnabledIfEnvironmentVariable(
+        named = "GEMINI_LIVE_TEST",
+        matches = "1",
+        disabledReason = "Gọi thật lên Gemini: đặt GEMINI_LIVE_TEST=1 và GEMINI_API_KEY để chạy")
 public class Task005LiveValidationTest {
 
     private static PromptBuilderServiceImpl promptBuilderService;
     private static GeminiProvider geminiProvider;
-    private static final String API_KEY = "AIzaSyArcTiEe3Ubd0dUuVVhP4rQJ2LthHDJh_Y";
+    // Đọc từ môi trường. KHÔNG viết khoá vào mã nguồn — repo này công khai.
+    private static final String API_KEY = System.getenv("GEMINI_API_KEY");
     private static final String ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash";
 
     // Store state across turns to simulate realistic session continuity
@@ -41,6 +75,11 @@ public class Task005LiveValidationTest {
 
     @BeforeAll
     static void setUp() {
+        // Bật GEMINI_LIVE_TEST mà quên khoá thì dừng ngay với câu nói rõ lý do.
+        // Để chạy tiếp, lỗi sẽ là 403 từ Google — đọc xong còn tưởng khoá hỏng.
+        assertNotNull(API_KEY,
+                "Thiếu biến môi trường GEMINI_API_KEY. Đặt khoá rồi chạy lại.");
+
         promptBuilderService = new PromptBuilderServiceImpl();
 
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
