@@ -67,6 +67,61 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Cần lịch sử đầy đủ để so với nhánh gốc ở bước ngay dưới.
+          fetch-depth: 0
+
+      # Migration đã áp rồi thì KHÔNG được sửa nội dung nữa. Flyway lưu checksum
+      # của từng file lúc áp; đổi một ký tự là checksum lệch và nó từ chối khởi
+      # động.
+      #
+      # Đã xảy ra thật ngày 03/10: một commit thêm `IF NOT EXISTS` vào
+      # V2_13__create_blog_tables.sql cho dễ chạy lại ở máy, và production không
+      # dựng lại được nữa.
+      #
+      # Job migration ngay bên dưới KHÔNG bắt được chuyện này, dù nó chạy
+      # Postgres thật: nó dựng một database MỚI TINH, nơi chưa có checksum nào
+      # để mà lệch. Chỉ database đã chạy qua mới thấy — tức là chỉ production
+      # mới thấy. Nên phải kiểm bằng git chứ không kiểm bằng cách chạy thử.
+      #
+      # Chỉ so với nhánh gốc, nên file migration MỚI thêm trong chính nhánh này
+      # vẫn sửa thoải mái. Chỉ chặn khi đụng vào file đã nằm trên nhánh gốc.
+      - name: Không sửa migration đã có
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            goc="origin/${{ github.base_ref }}"
+          elif [ "${{ github.ref_name }}" = "main" ]; then
+            goc="${{ github.event.before }}"
+          else
+            echo "Nhánh đang làm dở, chưa kiểm."
+            exit 0
+          fi
+
+          case "$goc" in
+            0000000000000000000000000000000000000000 | "")
+              echo "Không có mốc để so, bỏ qua."
+              exit 0
+              ;;
+          esac
+          if ! git cat-file -e "$goc^{commit}" 2>/dev/null; then
+            echo "Không đọc được mốc $goc, bỏ qua."
+            exit 0
+          fi
+
+          sua=$(git diff --name-status "$goc"...HEAD \
+                  -- src/main/resources/db/migration/ \
+                | grep -E '^(M|D|R)' || true)
+
+          if [ -n "$sua" ]; then
+            echo "Những file migration sau bị SỬA, XOÁ hoặc ĐỔI TÊN:"
+            echo "$sua"
+            echo
+            echo "Chúng đã nằm trên $goc nên coi như đã áp ở production."
+            echo "Flyway so checksum và sẽ từ chối khởi động."
+            echo "Muốn đổi gì thì thêm MỘT FILE MỚI, đừng sửa file cũ."
+            exit 1
+          fi
+          echo "Chỉ thêm migration mới, không đụng file cũ."
 
       # Chốt chặn rẻ nhất, chạy trước khi dựng gì: hai file cùng số thì Flyway
       # dừng hẳn. Bắt ở đây thì thông báo nói thẳng tên hai file, thay vì phải
