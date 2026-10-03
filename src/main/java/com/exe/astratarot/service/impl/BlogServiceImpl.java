@@ -89,9 +89,9 @@ public class BlogServiceImpl implements BlogService {
             throw new AccessDeniedException("Bạn không có quyền cập nhật bài viết này");
         }
 
-        // Staff/Admin can only update DRAFT or PENDING articles
-        if (isStaff && !Set.of(BlogStatus.DRAFT, BlogStatus.PENDING).contains(blog.getStatus())) {
-            throw new IllegalArgumentException("Chỉ cập nhật được bài đang ở trạng thái DRAFT hoặc PENDING");
+        // Staff/Admin can only update DRAFT, PENDING or REJECTED articles
+        if (isStaff && !Set.of(BlogStatus.DRAFT, BlogStatus.PENDING, BlogStatus.REJECTED).contains(blog.getStatus())) {
+            throw new IllegalArgumentException("Chỉ cập nhật được bài đang ở trạng thái DRAFT, PENDING hoặc REJECTED");
         }
 
         // Update fields
@@ -114,11 +114,11 @@ public class BlogServiceImpl implements BlogService {
             blog.setThumbnailUrl(request.getThumbnailUrl());
         }
 
-        // PENDING blog updated -> reset to DRAFT and clear rejectionReason if any
-        if (blog.getStatus() == BlogStatus.PENDING) {
+        // PENDING or REJECTED blog updated -> reset to DRAFT and clear rejectionReason if any
+        if (blog.getStatus() == BlogStatus.PENDING || blog.getStatus() == BlogStatus.REJECTED) {
             blog.setStatus(BlogStatus.DRAFT);
             blog.setRejectionReason(null);
-        } else if (blog.getStatus() == BlogStatus.REJECTED || blog.getStatus() == BlogStatus.DRAFT) {
+        } else if (blog.getStatus() == BlogStatus.DRAFT) {
             blog.setRejectionReason(null);
         }
 
@@ -219,33 +219,25 @@ public class BlogServiceImpl implements BlogService {
 
     @Override
     @Transactional(readOnly = true)
-    public BlogListResponse listPublic(BlogStatus status, Pageable pageable) {
-        Page<Blog> page;
-        // Public endpoint: always PUBLISHED only, ignore any status param
-        page = blogRepository.findByStatus(BlogStatus.PUBLISHED, pageable);
-
+    public BlogListResponse listPublic(String keyword, Pageable pageable) {
+        String cleanKeyword = keyword != null ? keyword.trim() : "";
+        Page<Blog> page = blogRepository.findPublicWithFilter(cleanKeyword, pageable);
         return toListResponse(page);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public BlogListResponse listByAuthor(UUID authorId, Pageable pageable) {
-        // Author can see: DRAFT, PENDING, APPROVED, REJECTED, PUBLISHED
-        Set<BlogStatus> allowedStatuses = Set.of(
-                BlogStatus.DRAFT, BlogStatus.PENDING, BlogStatus.APPROVED,
-                BlogStatus.REJECTED, BlogStatus.PUBLISHED
-        );
-
-        Page<Blog> page = blogRepository.findByAuthorIdAndAllowedStatus(authorId, allowedStatuses, pageable);
-
+    public BlogListResponse listByAuthor(UUID authorId, BlogStatus status, String keyword, Pageable pageable) {
+        String cleanKeyword = keyword != null ? keyword.trim() : "";
+        Page<Blog> page = blogRepository.findByAuthorIdWithFilter(authorId, status, cleanKeyword, pageable);
         return toListResponse(page);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public BlogListResponse listAll(Pageable pageable) {
-        // Staff/Admin can see all articles with full details
-        Page<Blog> page = blogRepository.findAllWithDetails(pageable);
+    public BlogListResponse listAll(BlogStatus status, String keyword, Pageable pageable) {
+        String cleanKeyword = keyword != null ? keyword.trim() : "";
+        Page<Blog> page = blogRepository.findAllWithFilter(status, cleanKeyword, pageable);
         return toListResponse(page);
     }
 

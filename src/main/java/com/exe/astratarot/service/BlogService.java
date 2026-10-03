@@ -55,20 +55,20 @@ public interface BlogService {
     BlogResponse review(UUID actorId, UUID blogId, ReviewBlogRequest request);
 
     /**
-     * Danh sách bài viết theo status (công khai).
+     * Danh sách bài viết công khai (PUBLISHED) kèm tìm kiếm từ khóa.
      * - Chỉ thấy bài có status = PUBLISHED.
      */
-    BlogListResponse listPublic(BlogStatus status, Pageable pageable);
+    BlogListResponse listPublic(String keyword, Pageable pageable);
 
     /**
-     * Danh sách bài viết của author (internal).
+     * Danh sách bài viết của author (internal) kèm lọc trạng thái và từ khóa.
      */
-    BlogListResponse listByAuthor(UUID authorId, Pageable pageable);
+    BlogListResponse listByAuthor(UUID authorId, BlogStatus status, String keyword, Pageable pageable);
 
     /**
-     * Danh sách tất cả bài viết (admin/staff).
+     * Danh sách tất cả bài viết (admin/staff) kèm lọc trạng thái và từ khóa.
      */
-    BlogListResponse listAll(Pageable pageable);
+    BlogListResponse listAll(BlogStatus status, String keyword, Pageable pageable);
 
     /**
      * Lấy bài viết theo slug (công khai).

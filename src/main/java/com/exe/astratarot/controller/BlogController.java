@@ -41,12 +41,12 @@ public class BlogController {
     @GetMapping
     @PreAuthorize("permitAll()")
     public ResponseEntity<ApiResponse<BlogListResponse>> listPublished(
-            @RequestParam(required = false) BlogStatus status,
+            @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         Pageable pageable = PageRequest.of(page, size);
         return ResponseEntity.ok(ApiResponse.success(
-                blogService.listPublic(status, pageable)));
+                blogService.listPublic(keyword, pageable)));
     }
 
     /**
@@ -63,17 +63,18 @@ public class BlogController {
 
     /**
      * Xem tất cả bài viết (admin/staff).
-     * - Manager/Admin xem toàn bộ bài viết.
+     * - Manager/Admin xem toàn bộ bài viết có lọc status và keyword.
      */
     @GetMapping("/all")
     @PreAuthorize("hasAuthority('" + SecurityPermissions.BLOG_REVIEW + "')")
     public ResponseEntity<ApiResponse<BlogListResponse>> listAll(
             @RequestParam(required = false) BlogStatus status,
+            @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         Pageable pageable = PageRequest.of(page, size);
         return ResponseEntity.ok(ApiResponse.success(
-                blogService.listAll(pageable)));
+                blogService.listAll(status, keyword, pageable)));
     }
 
     /**

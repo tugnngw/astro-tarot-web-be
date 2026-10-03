@@ -75,16 +75,18 @@ public class StaffBlogController {
 
     /**
      * Xem danh sách bài viết của chính mình.
-     * - Author xem tất cả bài của mình (DRAFT, PENDING, APPROVED, REJECTED, PUBLISHED).
+     * - Author xem tất cả bài của mình có lọc theo status và keyword.
      */
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<BlogListResponse>> myBlogs(
             @AuthenticationPrincipal CustomUserDetails currentUser,
+            @RequestParam(required = false) com.exe.astratarot.domain.enums.BlogStatus status,
+            @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         Pageable pageable = PageRequest.of(page, size);
         return ResponseEntity.ok(ApiResponse.success(
-                blogService.listByAuthor(currentUser.getUser().getId(), pageable)));
+                blogService.listByAuthor(currentUser.getUser().getId(), status, keyword, pageable)));
     }
 
     /**

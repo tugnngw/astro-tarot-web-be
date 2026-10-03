@@ -2,7 +2,7 @@
 -- BLOG MODULE
 -- ============================================================
 
-CREATE TABLE blogs (
+CREATE TABLE IF NOT EXISTS blogs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title VARCHAR(255) NOT NULL,
     slug VARCHAR(255) NOT NULL UNIQUE,
@@ -18,10 +18,11 @@ CREATE TABLE blogs (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_blogs_status ON blogs(status);
-CREATE INDEX idx_blogs_author ON blogs(author_id);
-CREATE INDEX idx_blogs_slug ON blogs(slug);
+CREATE INDEX IF NOT EXISTS idx_blogs_status ON blogs(status);
+CREATE INDEX IF NOT EXISTS idx_blogs_author ON blogs(author_id);
+CREATE INDEX IF NOT EXISTS idx_blogs_slug ON blogs(slug);
 
 -- UPDATED_AT TRIGGER
+DROP TRIGGER IF EXISTS trg_blogs ON blogs;
 CREATE TRIGGER trg_blogs BEFORE UPDATE ON blogs
 FOR EACH ROW EXECUTE FUNCTION fn_set_updated_at();

@@ -115,19 +115,25 @@ class BlogServiceImplTest {
     }
 
     @Test
-    @DisplayName("Updating REJECTED blog by author throws IllegalArgumentException as expected by existing rules")
-    void update_RejectedBlog_ThrowsException() {
+    @DisplayName("Updating REJECTED blog by author changes status to DRAFT and clears rejectionReason")
+    void update_RejectedBlog_ChangesStatusToDraftAndClearsRejectionReason() {
         blog.setStatus(BlogStatus.REJECTED);
         blog.setRejectionReason("Needs fixing");
 
         when(blogRepository.findById(blogId)).thenReturn(Optional.of(blog));
         when(userRepository.findById(authorId)).thenReturn(Optional.of(author));
+        when(blogRepository.save(any(Blog.class))).thenAnswer(i -> i.getArgument(0));
 
         UpdateBlogRequest request = UpdateBlogRequest.builder()
                 .content("Fixed Content")
                 .build();
 
-        assertThrows(IllegalArgumentException.class, () -> blogService.update(authorId, blogId, request));
+        BlogResponse response = blogService.update(authorId, blogId, request);
+
+        assertEquals(BlogStatus.DRAFT, response.getStatus());
+        assertEquals("Fixed Content", response.getContent());
+        assertNull(response.getRejectionReason());
+        verify(blogRepository).save(blog);
     }
 
     @Test
@@ -196,5 +202,44 @@ class BlogServiceImplTest {
         BlogResponse response = blogService.submitForReview(authorId, blogId);
 
         assertEquals(BlogStatus.PENDING, response.getStatus());
+    }
+
+    @Test
+    @DisplayName("listPublic filters by keyword properly")
+    void listPublic_WithKeyword_FiltersCorrectly() {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 10);
+        when(blogRepository.findPublicWithFilter("tarot", pageable))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(java.util.List.of(blog)));
+
+        var response = blogService.listPublic("  tarot  ", pageable);
+
+        assertEquals(1, response.getContent().size());
+        verify(blogRepository).findPublicWithFilter("tarot", pageable);
+    }
+
+    @Test
+    @DisplayName("listAll filters by status and keyword properly")
+    void listAll_WithStatusAndKeyword_FiltersCorrectly() {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 10);
+        when(blogRepository.findAllWithFilter(BlogStatus.PENDING, "astro", pageable))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(java.util.List.of(blog)));
+
+        var response = blogService.listAll(BlogStatus.PENDING, "astro", pageable);
+
+        assertEquals(1, response.getContent().size());
+        verify(blogRepository).findAllWithFilter(BlogStatus.PENDING, "astro", pageable);
+    }
+
+    @Test
+    @DisplayName("listByAuthor filters by authorId, status and keyword properly")
+    void listByAuthor_WithStatusAndKeyword_FiltersCorrectly() {
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 10);
+        when(blogRepository.findByAuthorIdWithFilter(authorId, BlogStatus.DRAFT, "moon", pageable))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(java.util.List.of(blog)));
+
+        var response = blogService.listByAuthor(authorId, BlogStatus.DRAFT, "moon", pageable);
+
+        assertEquals(1, response.getContent().size());
+        verify(blogRepository).findByAuthorIdWithFilter(authorId, BlogStatus.DRAFT, "moon", pageable);
     }
 }

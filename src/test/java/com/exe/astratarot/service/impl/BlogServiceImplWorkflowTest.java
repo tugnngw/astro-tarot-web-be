@@ -74,7 +74,7 @@ class BlogServiceImplWorkflowTest {
     void setUp() {
         service = new BlogServiceImpl(blogRepository, userRepository);
 
-        tacGia = taiKhoan("Tác giả", UserRole.USER);
+        tacGia = taiKhoan("Tác giả", UserRole.STAFF);
         nhanVien = taiKhoan("Nhân viên", UserRole.STAFF);
         quanLy = taiKhoan("Quản lý", UserRole.MANAGER);
         nguoiLa = taiKhoan("Người lạ", UserRole.USER);
@@ -282,16 +282,49 @@ class BlogServiceImplWorkflowTest {
         }
 
         @Test
-        @DisplayName("Sửa bài bị TỪ CHỐI thì xoá lý do từ chối cũ")
+        @DisplayName("Nhân sự KHÔNG sửa được bài đã được duyệt")
+        void nhanSuKhongSuaBaiDaDuyet() {
+            Blog b = baiViet(BlogStatus.APPROVED);
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.update(nhanVien.getId(), b.getId(), sua("Sửa lén", null)));
+        }
+
+        @Test
+        @DisplayName("Sửa bài bị TỪ CHỐI: cập nhật nội dung, về DRAFT và xoá lý do từ chối")
         void suaBaiBiTuChoi() {
             Blog b = baiViet(BlogStatus.REJECTED);
             b.setRejectionReason("Thiếu dẫn nguồn");
 
             var kq = service.update(tacGia.getId(), b.getId(), sua("Đã bổ sung nguồn", null));
 
-            // Giữ lại lý do cũ sau khi đã sửa là để một lời chê treo trên một
-            // bài đã khác hẳn.
-            assertNull(kq.getRejectionReason());
+            // Cập nhật thành công, chuyển về DRAFT để chuẩn bị gửi duyệt lại,
+            // và xoá lý do từ chối cũ
+            assertAll(
+                    () -> assertEquals("Đã bổ sung nguồn", kq.getTitle()),
+                    () -> assertEquals(BlogStatus.DRAFT, kq.getStatus()),
+                    () -> assertNull(kq.getRejectionReason()));
+        }
+
+        @Test
+        @DisplayName("Luồng trọn vẹn: PENDING -> REJECTED -> SỬA -> DRAFT -> GỬI LẠI -> PENDING")
+        void luongTuChoiSuaVaGuiLaiDuyet() {
+            // 1. Bài đang PENDING
+            Blog b = baiViet(BlogStatus.PENDING);
+
+            // 2. Quản lý từ chối
+            var rejected = service.review(quanLy.getId(), b.getId(), duyet("REJECTED", "Cần thêm ảnh"));
+            assertEquals(BlogStatus.REJECTED, rejected.getStatus());
+            assertEquals("Cần thêm ảnh", rejected.getRejectionReason());
+
+            // 3. Tác giả (STAFF) sửa bài
+            var edited = service.update(tacGia.getId(), b.getId(), sua("Đã thêm ảnh", null));
+            assertEquals(BlogStatus.DRAFT, edited.getStatus());
+            assertNull(edited.getRejectionReason());
+
+            // 4. Tác giả gửi duyệt lại
+            var resubmitted = service.submitForReview(tacGia.getId(), b.getId());
+            assertEquals(BlogStatus.PENDING, resubmitted.getStatus());
         }
 
         @Test
@@ -457,23 +490,21 @@ class BlogServiceImplWorkflowTest {
     class DanhSach {
 
         @Test
-        @DisplayName("Danh sách CÔNG KHAI bỏ qua tham số trạng thái của client")
-        void congKhaiBoQuaThamSo() {
-            when(blogRepository.findByStatus(any(), any())).thenReturn(new PageImpl<>(List.of()));
+        @DisplayName("Danh sách CÔNG KHAI tìm kiếm từ khóa và xử lý khoảng trắng")
+        void congKhaiCoTimKiem() {
+            when(blogRepository.findPublicWithFilter(any(), any())).thenReturn(new PageImpl<>(List.of()));
 
-            service.listPublic(BlogStatus.DRAFT, PageRequest.of(0, 10));
+            service.listPublic("  tarot  ", PageRequest.of(0, 10));
 
-            // Tin tham số từ client thì ai cũng gọi ?status=DRAFT và đọc được
-            // bản nháp của người khác.
-            verify(blogRepository).findByStatus(
-                    org.mockito.ArgumentMatchers.eq(BlogStatus.PUBLISHED), any());
+            verify(blogRepository).findPublicWithFilter(
+                    org.mockito.ArgumentMatchers.eq("tarot"), any());
         }
 
         @Test
         @DisplayName("Danh sách công khai mang đủ thông tin phân trang")
         void congKhaiDuPhanTrang() {
             Blog b = baiViet(BlogStatus.PUBLISHED);
-            when(blogRepository.findByStatus(any(), any()))
+            when(blogRepository.findPublicWithFilter(any(), any()))
                     .thenReturn(new PageImpl<>(List.of(b), PageRequest.of(0, 10), 25));
 
             var kq = service.listPublic(null, PageRequest.of(0, 10));
@@ -487,29 +518,31 @@ class BlogServiceImplWorkflowTest {
         }
 
         @Test
-        @DisplayName("Danh sách của tác giả gồm cả năm trạng thái")
-        void danhSachCuaTacGia() {
-            when(blogRepository.findByAuthorIdAndAllowedStatus(any(), any(), any()))
+        @DisplayName("Danh sách của tác giả truyền đúng authorId, status và keyword")
+        void danhSachCuaTacGiaCoLoc() {
+            when(blogRepository.findByAuthorIdWithFilter(any(), any(), any(), any()))
                     .thenReturn(new PageImpl<>(List.of()));
 
-            service.listByAuthor(tacGia.getId(), PageRequest.of(0, 10));
+            service.listByAuthor(tacGia.getId(), BlogStatus.PENDING, "  chiêm tinh  ", PageRequest.of(0, 10));
 
-            @SuppressWarnings("unchecked")
-            org.mockito.ArgumentCaptor<java.util.Set<BlogStatus>> bat =
-                    org.mockito.ArgumentCaptor.forClass(java.util.Set.class);
-            verify(blogRepository).findByAuthorIdAndAllowedStatus(any(), bat.capture(), any());
-            // Thiếu một trạng thái là bài của chính họ biến mất khỏi trang của
-            // họ, và họ không có cách nào tìm lại.
-            assertEquals(5, bat.getValue().size());
+            verify(blogRepository).findByAuthorIdWithFilter(
+                    org.mockito.ArgumentMatchers.eq(tacGia.getId()),
+                    org.mockito.ArgumentMatchers.eq(BlogStatus.PENDING),
+                    org.mockito.ArgumentMatchers.eq("chiêm tinh"),
+                    any());
         }
 
         @Test
-        @DisplayName("Danh sách quản trị đọc từ truy vấn có đủ chi tiết")
-        void danhSachQuanTri() {
-            when(blogRepository.findAllWithDetails(any())).thenReturn(new PageImpl<>(List.of()));
+        @DisplayName("Danh sách quản trị truyền đúng status và keyword")
+        void danhSachQuanTriCoLoc() {
+            when(blogRepository.findAllWithFilter(any(), any(), any()))
+                    .thenReturn(new PageImpl<>(List.of()));
 
-            assertEquals(0, service.listAll(PageRequest.of(0, 10)).getTotalElements());
-            verify(blogRepository).findAllWithDetails(any());
+            assertEquals(0, service.listAll(BlogStatus.REJECTED, "bài lỗi", PageRequest.of(0, 10)).getTotalElements());
+            verify(blogRepository).findAllWithFilter(
+                    org.mockito.ArgumentMatchers.eq(BlogStatus.REJECTED),
+                    org.mockito.ArgumentMatchers.eq("bài lỗi"),
+                    any());
         }
     }
 }

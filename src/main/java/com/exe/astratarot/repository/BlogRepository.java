@@ -24,6 +24,77 @@ public interface BlogRepository extends JpaRepository<Blog, UUID> {
             """)
     Optional<Blog> findWithAuthorById(@Param("id") UUID id);
 
+    @Query(value = """
+            SELECT b FROM Blog b
+            JOIN FETCH b.author a
+            WHERE b.status = com.exe.astratarot.domain.enums.BlogStatus.PUBLISHED
+              AND (:keyword = '' OR LOWER(b.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                                 OR LOWER(b.summary) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                                 OR LOWER(a.fullName) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                                 OR LOWER(a.username) LIKE LOWER(CONCAT('%', :keyword, '%')))
+            ORDER BY b.createdAt DESC
+            """,
+            countQuery = """
+            SELECT COUNT(b) FROM Blog b
+            JOIN b.author a
+            WHERE b.status = com.exe.astratarot.domain.enums.BlogStatus.PUBLISHED
+              AND (:keyword = '' OR LOWER(b.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                                 OR LOWER(b.summary) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                                 OR LOWER(a.fullName) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                                 OR LOWER(a.username) LIKE LOWER(CONCAT('%', :keyword, '%')))
+            """)
+    Page<Blog> findPublicWithFilter(@Param("keyword") String keyword, Pageable pageable);
+
+    @Query(value = """
+            SELECT b FROM Blog b
+            JOIN FETCH b.author a
+            LEFT JOIN FETCH b.reviewer r
+            WHERE (:status IS NULL OR b.status = :status)
+              AND (:keyword = '' OR LOWER(b.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                                 OR LOWER(b.slug) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                                 OR LOWER(b.summary) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                                 OR LOWER(a.fullName) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                                 OR LOWER(a.username) LIKE LOWER(CONCAT('%', :keyword, '%')))
+            ORDER BY b.createdAt DESC
+            """,
+            countQuery = """
+            SELECT COUNT(b) FROM Blog b
+            JOIN b.author a
+            WHERE (:status IS NULL OR b.status = :status)
+              AND (:keyword = '' OR LOWER(b.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                                 OR LOWER(b.slug) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                                 OR LOWER(b.summary) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                                 OR LOWER(a.fullName) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                                 OR LOWER(a.username) LIKE LOWER(CONCAT('%', :keyword, '%')))
+            """)
+    Page<Blog> findAllWithFilter(@Param("status") BlogStatus status,
+                                 @Param("keyword") String keyword,
+                                 Pageable pageable);
+
+    @Query(value = """
+            SELECT b FROM Blog b
+            JOIN FETCH b.author a
+            LEFT JOIN FETCH b.reviewer r
+            WHERE b.author.id = :authorId
+              AND (:status IS NULL OR b.status = :status)
+              AND (:keyword = '' OR LOWER(b.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                                 OR LOWER(b.slug) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                                 OR LOWER(b.summary) LIKE LOWER(CONCAT('%', :keyword, '%')))
+            ORDER BY b.createdAt DESC
+            """,
+            countQuery = """
+            SELECT COUNT(b) FROM Blog b
+            WHERE b.author.id = :authorId
+              AND (:status IS NULL OR b.status = :status)
+              AND (:keyword = '' OR LOWER(b.title) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                                 OR LOWER(b.slug) LIKE LOWER(CONCAT('%', :keyword, '%'))
+                                 OR LOWER(b.summary) LIKE LOWER(CONCAT('%', :keyword, '%')))
+            """)
+    Page<Blog> findByAuthorIdWithFilter(@Param("authorId") UUID authorId,
+                                        @Param("status") BlogStatus status,
+                                        @Param("keyword") String keyword,
+                                        Pageable pageable);
+
     @Query("""
             SELECT b FROM Blog b
             JOIN FETCH b.author a
