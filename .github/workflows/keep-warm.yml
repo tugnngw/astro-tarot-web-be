@@ -27,14 +27,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Gọi /actuator/health bốn lần, cách nhau ba phút
+      - name: Gọi /ping bốn lần, cách nhau ba phút
         run: |
-          URL="https://astra-tarot-api.onrender.com/actuator/health"
+          # /ping không đụng database. /actuator/health thì Render chỉ chờ 5
+          # giây, mà đường đó còn hỏi Neon và Redis nên instance bị khởi động
+          # lại liên tục. Cloudflare cũng chặn actuator trên tên miền công khai.
+          URL="https://astra-tarot-api.onrender.com/ping"
+          : > /tmp/body.txt
           for i in 1 2 3 4; do
             # --max-time 90: máy chủ đang khởi động lại thì Render giữ kết nối
             # chờ, nên phải cho nó đủ thời gian mới biết là thức hay hỏng.
-            code=$(curl -s -o /tmp/body.txt -w '%{http_code}' --max-time 90 "$URL" || echo 000)
-            echo "lần $i: HTTP $code — $(head -c 120 /tmp/body.txt)"
+            # Không dùng `|| echo 000`: curl đã tự in 000, ghép thêm thành
+            # 000000 và lần so sánh với 200 luôn sai.
+            code=$(curl -s -o /tmp/body.txt -w '%{http_code}' --max-time 90 "$URL" || true)
+            echo "lần $i: HTTP ${code:-000} — $(head -c 120 /tmp/body.txt)"
             if [ "$i" -lt 4 ]; then sleep 180; fi
           done
           # Chỉ cần lần cuối thành công là đủ: những lần trước có thể rơi đúng

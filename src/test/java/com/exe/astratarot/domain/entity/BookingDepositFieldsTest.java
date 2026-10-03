@@ -81,7 +81,11 @@ class BookingDepositFieldsTest {
                 .isNotNull();
         assertThat(com.exe.astratarot.domain.enums.PaymentPhase.FULL)
                 .isNotNull();
+        // TOPUP thêm cùng tính năng ví. Ràng buộc CHECK trong CSDL cũng
+        // phải nới theo — xem V2_24, không thì mọi lượt nạp ví đổ ở INSERT.
+        assertThat(com.exe.astratarot.domain.enums.PaymentPhase.TOPUP)
+                .isNotNull();
         assertThat(com.exe.astratarot.domain.enums.PaymentPhase.values())
-                .hasSize(3);
+                .hasSize(4);
     }
 }

@@ -10,6 +10,7 @@ import com.exe.astratarot.domain.enums.BookingStatus;
 import com.exe.astratarot.domain.enums.PaymentPhase;
 import com.exe.astratarot.domain.enums.PaymentStatus;
 import com.exe.astratarot.domain.enums.TransactionStatus;
+import com.exe.astratarot.domain.enums.WalletTransactionType;
 import com.exe.astratarot.exception.ResourceNotFoundException;
 import com.exe.astratarot.repository.BookingRepository;
 import com.exe.astratarot.repository.PaymentTransactionRepository;
@@ -19,6 +20,7 @@ import com.exe.astratarot.service.EscrowService;
 import com.exe.astratarot.service.NotificationService;
 import com.exe.astratarot.service.NotificationTypes;
 import com.exe.astratarot.service.PaymentService;
+import com.exe.astratarot.service.WalletService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -61,6 +63,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentTransactionRepository transactionRepository;
     private final BookingRepository bookingRepository;
     private final EscrowService escrowService;
+    private final WalletService walletService;
     private final NotificationService notificationService;
     private final ActivityLogService activityLogService;
     private final PayOsClient payOsClient;
@@ -286,6 +289,18 @@ public class PaymentServiceImpl implements PaymentService {
             throw new IllegalArgumentException("Số tiền webhook không khớp giao dịch");
         }
 
+        if (tx.getPhase() == PaymentPhase.TOPUP) {
+            tx.setStatus(TransactionStatus.SUCCESS);
+            walletService.credit(tx.getUser(), tx.getAmount(), WalletTransactionType.TOPUP,
+                    orderKey, "Nạp tiền vào ví qua PayOS VietQR", "PAYOS");
+            notificationService.push(tx.getUser(), NotificationTypes.WALLET_TOPUP,
+                    "Nạp tiền vào ví thành công",
+                    "Đã nạp thành công " + tx.getAmount() + " ₫ vào Ví ASTROTAROT của bạn.",
+                    Map.of("orderCode", orderKey));
+            log.info("PayOS xác nhận nạp ví {} (orderCode={})", tx.getId(), orderKey);
+            return;
+        }
+
         markPaid(null, tx);
         log.info("PayOS xác nhận thanh toán {} (orderCode={})", tx.getId(), orderKey);
     }
@@ -360,12 +375,16 @@ public class PaymentServiceImpl implements PaymentService {
                 .findFirst()
                 .ifPresent(t -> t.setStatus(TransactionStatus.CANCELLED));
 
+        // Hoàn trực tiếp vào Ví ASTROTAROT của khách hàng
+        walletService.credit(booking.getUser(), amount, WalletTransactionType.BOOKING_REFUND,
+                booking.getId().toString(), "Hoàn tiền huỷ lịch hẹn #" + booking.getId(), "SYSTEM");
+
         notificationService.push(booking.getUser(), NotificationTypes.PAYMENT_REFUNDED,
-                "Lịch hẹn đã huỷ, tiền sẽ được hoàn",
-                "Khoản " + amount + " ₫ sẽ được chuyển lại trong 1-3 ngày làm việc.",
+                "Lịch hẹn đã huỷ, tiền đã vào ví",
+                "Khoản " + amount + " ₫ đã được hoàn trực tiếp vào Ví ASTROTAROT của bạn.",
                 Map.of("bookingId", booking.getId().toString(), NotificationTypes.SIDE, NotificationTypes.SIDE_CUSTOMER));
 
-        log.info("Hoàn tiền {} cho booking {}", amount, booking.getId());
+        log.info("Hoàn tiền {} cho booking {} vào ví người dùng {}", amount, booking.getId(), booking.getUser().getId());
     }
 
     /**

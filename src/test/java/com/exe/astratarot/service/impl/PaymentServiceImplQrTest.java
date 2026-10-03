@@ -54,7 +54,7 @@ class PaymentServiceImplQrTest {
         // PaymentServiceImpl nhận nhiều thành phần, nhưng phép kiểm này không
         // đi qua chúng — nên tiêm thẳng qua phản chiếu thay vì dựng cả bộ.
         service = new PaymentServiceImpl(
-                null, null, null, null, null, null, null, null, vietQrService);
+                null, null, null, null, null, null, null, null, null, vietQrService);
 
         giaoDich = new PaymentTransaction();
         giaoDich.setId(UUID.randomUUID());

@@ -1,10 +1,23 @@
 # Build stage
 FROM maven:3.9.9-eclipse-temurin-21 AS build
 WORKDIR /app
+
+# `-s .mvn/settings.xml` không phải trang trí: nó ép mọi lượt tải đi qua Maven
+# Central.
+#
+# `flyway-parent` khai thêm kho https://maven.pkg.github.com/flyway/... trong
+# pom của chính nó, và dự án kế thừa kho ấy qua flyway-core. Maven hỏi TỪNG
+# kho cho TỪNG artifact, mà GitHub Packages đòi xác thực — nên mỗi lượt hỏi là
+# một vòng chờ rồi thất bại. Đo được: 38 lượt gọi cho riêng một artifact
+# flyway, và log build đầy những dòng tải BOM của Google Cloud mà dự án không
+# hề dùng. Build trên Render vì thế mất hơn hai mươi phút.
+#
+# Với settings.xml, con số ấy về 0.
+COPY .mvn/settings.xml .mvn/settings.xml
 COPY pom.xml .
-RUN mvn dependency:go-offline -B
+RUN mvn -s .mvn/settings.xml dependency:go-offline -B
 COPY src ./src
-RUN mvn clean package -DskipTests
+RUN mvn -s .mvn/settings.xml clean package -DskipTests
 
 # Runtime stage
 FROM eclipse-temurin:21-jre-alpine
@@ -14,8 +27,10 @@ COPY --from=build /app/target/*.jar app.jar
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider "http://localhost:${PORT:-8080}/actuator/health" || exit 1
+# start-period phải đủ cho Spring Boot trên hộp 512 MB. 10 giây thì quá
+# trình còn đang nạp lớp đã bị đánh dấu chết. /ping không chờ database.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider "http://localhost:${PORT:-8080}/ping" || exit 1
 
 # Chia lại bộ nhớ cho hộp 512 MB của gói free.
 #
