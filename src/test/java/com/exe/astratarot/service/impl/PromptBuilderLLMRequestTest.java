@@ -211,21 +211,22 @@ class PromptBuilderLLMRequestTest {
     }
 
     @Test
-    @DisplayName("No hard length constraints in system instruction")
-    void noHardLengthConstraints() {
+    @DisplayName("Hard length constraints + maxTokens trần cứng")
+    void hardLengthConstraintsAndMaxTokens() {
         BuildPromptRequest r = yeuCau(null, cards(), null, "hỏi");
         LLMRequest req = service.buildLLMRequest(r);
 
         String sys = req.getSystemInstruction();
         assertFalse(sys.contains("ĐỦ Ý thì DỪNG"), "Should not contain ĐỦ Ý thì DỪNG");
-        assertFalse(sys.contains("Dừng lại"), "Should not contain Dừng lại");
-        assertFalse(sys.contains("Một câu kết nối"), "Should not contain Một câu kết nối");
-        assertFalse(sys.contains("Không cần kết luận"), "Should not contain Không cần kết luận");
         assertFalse(sys.contains("CẤU TRÚC BÀI ĐỌC LẦN ĐẦU"), "Should not contain first-reading-only structure");
         assertFalse(sys.contains("CẤU TRÚC CHAT TIẾP THEO"), "Should not contain continuation-only structure");
-        // Should have quality-focused guidance instead
         assertTrue(sys.contains("CÁCH TRẢ LỜI"), "Should have response approach section");
-        assertTrue(sys.contains("Ưu tiên chất lượng"), "Should prioritize quality over fixed length");
+        assertTrue(sys.contains("ĐỘ DÀI"), "Should have hard length section");
+        assertTrue(sys.contains("60-100 từ") || sys.contains("60–100 từ"),
+                "Should cap short yes/no answers");
+        assertNotNull(req.getMaxTokens(), "maxTokens must be set so Gemini gets maxOutputTokens");
+        assertTrue(req.getMaxTokens() > 0 && req.getMaxTokens() <= 600,
+                "maxTokens should be a tight ceiling, not unlimited");
     }
 
     @Test
@@ -235,10 +236,12 @@ class PromptBuilderLLMRequestTest {
         LLMRequest req = service.buildLLMRequest(r);
 
         String sys = req.getSystemInstruction();
-        assertTrue(sys.contains("Mình thấy"), "Should have conversational phrasing examples");
         assertTrue(sys.contains("nói chuyện"), "Should mention talking/conversation");
         assertTrue(sys.contains("Bạn là"), "Should have persona definition");
         assertTrue(sys.contains("GIỌNG NÓI"), "Should have voice/tone section");
+        assertTrue(sys.contains("Không dùng câu mở đầu khuôn mẫu")
+                        || sys.contains("CẤM TUYỆT ĐỐI"),
+                "Should ban canned openings");
     }
 
     @Test
