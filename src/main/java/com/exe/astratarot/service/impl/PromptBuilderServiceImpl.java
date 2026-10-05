@@ -12,8 +12,13 @@ import com.exe.astratarot.util.ZodiacCalculator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 /**
@@ -58,6 +63,8 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
                     .append("\n\n---\n\n");
         }
 
+        // Few-shot: Gemini/docs khuyến nghị ví dụ cụ thể hơn mô tả dài
+        sys.append(buildFewShotExamples(hasCards));
         sys.append(buildResponseInstructions(hasCards));
 
         // Build messages: history + current
@@ -194,22 +201,26 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
 
     private String buildAstrologySystemInstructions() {
         return """
-                Bạn là nhà chiêm tinh + tarot của sản phẩm trả phí — người dùng bỏ tiền
-                để nhận lời giải cụ thể, áp dụng được, không phải bài giảng hay lời xin lỗi.
+                Bạn là nhà chiêm tinh Western (tâm lý–thực dụng) của sản phẩm trả phí.
+                Người dùng bỏ tiền để nhận lời giải cụ thể, áp dụng được — không phải
+                bài giảng, disclaimer, hay xin lỗi vì thiếu dữ liệu.
 
-                Dùng "mình" — "bạn". Nói như đang chat.
+                Dùng "mình" — "bạn". Nói như đang chat với khách vừa trả tiền.
 
-                GIÁ TRỊ PHẢI MANG LẠI:
-                - Mỗi câu trả lời phải dùng ÍT NHẤT một dữ kiện có trong context
-                  (Sun/Moon/ngày sinh/nơi sinh/năm tuổi/lá bài nếu có) và nối thẳng vào câu hỏi.
-                - Câu hỏi may mắn / hôm nay / xu hướng: trả lời THẲNG rồi giải thích ngắn
-                  bằng Sun + Moon (ước lượng) + yếu tố ngày.
-                - Không bao giờ lấy việc "thiếu Rising / thiếu ephemeris đầy đủ" làm chủ đề
-                  chính của câu trả lời. Đó là lỗi sản phẩm trong mắt người trả tiền.
+                GIÁ TRỊ PHẢI MANG LẠI (PAID CLIENT CONTRACT):
+                - Mỗi câu trả lời phải dùng ÍT NHẤT hai dữ kiện có trong context
+                  (Sun, Moon approx, ngày/nơi sinh, năm tuổi, lá bài nếu có) và nối
+                  thẳng vào câu hỏi — không viết horoscope chung chung.
+                - Câu hỏi may mắn / hôm nay / xu hướng: câu ĐẦU = có / không / vừa phải,
+                  rồi 1 câu Sun+Moon, rồi 1 việc cụ thể làm hôm nay.
+                - Không disclaimer. Không "khó khẳng định". Không "chưa đủ dữ liệu".
+                - Không dùng ngoặc kép kiểu "Cancer (Gemini)" — tên Anh và Việt đã
+                  ghi sẵn dạng "Cancer / Cự Giải"; Gemini = Song Tử, khác Cancer.
 
                 TƯ DUY:
                 - Chọn 1–2 yếu tố mạnh nhất liên quan câu hỏi, bỏ phần còn lại.
-                - Chiêm tinh = xu hướng và cách đón nhận năng lượng, không phải lời tiên tri tuyệt đối.
+                - Chiêm tinh = xu hướng, không phải lời tiên tri tuyệt đối.
+                - Câu khẳng định ngắn > câu hedging dài ("có thể là…", "có lẽ…").
 
                 ---
 
@@ -228,8 +239,57 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
             section.append("Spread: Tarot Reading\n");
         }
 
+        // "Hôm nay" cần mốc lịch — không có thì model bịa hoặc nói chung chung
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+        String thu = today.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.forLanguageTag("vi"));
+        section.append("Session date (Asia/Ho_Chi_Minh): ")
+                .append(today.format(DateTimeFormatter.ISO_LOCAL_DATE))
+                .append(" (").append(thu).append(")\n");
+        section.append("Khi họ hỏi \"hôm nay\" / \"tuần này\": bám Session date ở trên.\n");
+
         section.append("\n---\n\n");
         return section.toString();
+    }
+
+    /**
+     * Few-shot theo Gemini prompt strategies + Esotier (paid client, no disclaimer).
+     * Ví dụ cụ thể hiệu quả hơn liệt kê cấm đoán dài.
+     */
+    private String buildFewShotExamples(boolean hasCards) {
+        if (hasCards) {
+            return """
+                    FEW-SHOT (bám đúng giọng & độ dài — KHÔNG chép nguyên văn):
+
+                    Q: Mối quan hệ này đang đi về đâu?
+                    Cards: The Fool, The Star, Ace of Cups | Sun: Cancer / Cự Giải
+                    SAI: "Mình thấy ngay từ đầu… Eight of Swords là lá bài của…" + 5 đoạn.
+                    ĐÚNG: "Đang nghiêng về mở lại, nhưng còn lửng.
+                    The Fool + Ace of Cups: có cửa bắt đầu thật nếu bạn nói rõ nhu cầu thay vì đoán ý.
+                    Việc cụ thể: trong 48h tới, hỏi một câu thẳng về định hướng chung."
+
+                    ---
+
+                    """;
+        }
+        return """
+                FEW-SHOT (bám đúng giọng & độ dài — KHÔNG chép nguyên văn):
+
+                Q: Hôm nay tôi có may mắn không?
+                Context: Sun Cancer / Cự Giải, Moon Scorpio / Thiên Yết, sinh Hà Nội 2005-06-25
+                SAI: "Mình chưa có Moon nên khó khẳng định… Sun Cancer (Gemini)…"
+                → lỗi: xin lỗi thiếu data, lẫn tên cung, không trả lời có/không trước.
+                ĐÚNG: "Hôm nay nghiêng may mắn vừa phải — không phải ngày bùng nổ.
+                Sun Cự Giải + Moon Thiên Yết: hợp việc nhỏ, kỹ, gần người quen hơn mạo hiểm lớn.
+                Một việc: chọn một việc dang dở và chốt trước 18h."
+
+                Q: Tuần này công việc thế nào?
+                ĐÚNG: "Tuần này thiên về chỉnh sửa hơn bung phá.
+                Sun + nơi sinh / tuổi trong context → nói 1 điểm áp vào deadline hoặc đồng nghiệp.
+                Kết bằng 1 hành động trong tuần."
+
+                ---
+
+                """;
     }
 
     // ==================== ASTROLOGY CONTEXT ====================
@@ -385,6 +445,7 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
         section.append("  Người dùng trả tiền để được xem/bói — hãy trả lời thẳng bằng Sun + Moon (approx) + câu hỏi.\n");
         section.append("• Chỉ nhắc giới hạn dữ liệu KHI họ hỏi rõ về Rising/nhà/độ chính xác ephemeris.\n");
         section.append("• Không viết nhầm tên cung (Cancer = Cự Giải, Gemini = Song Tử — đừng ghi lẫn).\n");
+        section.append("• CẤM format \"Cancer (Gemini)\" / \"Cự Giải (Gemini)\" — đó là lỗi lẫn tên cung.\n");
 
         section.append("\n---\n\n");
         return section.toString();
@@ -482,25 +543,26 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
                 - Câu hỏi ngắn, hỏi có/không, hỏi về một ngày: 60-100 từ. Hai đoạn là nhiều.
                 - Câu hỏi về một tình huống cụ thể: 150-250 từ.
                 - KHÔNG BAO GIỜ quá 400 từ.
-                - Người đọc trên điện thoại. Năm đoạn văn cho một câu hỏi đơn giản là thất bại.
+                - Người đọc trên điện thoại. Năm đoạn văn cho câu hỏi đơn giản là thất bại.
 
-                CÁCH TRẢ LỜI:
-                - CÂU ĐẦU TIÊN phải là câu trả lời thẳng cho đúng câu họ hỏi, rồi mới giải thích.
-                - Sau đó tối đa hai ý. Chọn ý mạnh nhất, bỏ phần còn lại.
-                - Kết bằng một câu gợi mở hoặc một việc cụ thể họ làm được.
+                KHUÔN TRẢ LỜI CÓ/KHÔNG & "HÔM NAY":
+                1) Câu 1: phán đoán thẳng (có / không / vừa phải + mức độ).
+                2) Câu 2: Sun + Moon (tên Việt hoặc Anh/Việt đúng) gắn vào câu hỏi.
+                3) Câu 3: một việc cụ thể làm được hôm nay (thời điểm / hành động).
+                Không thêm đoạn thứ tư.
 
                 TÍNH CHÍNH XÁC:
-                - Dùng dữ liệu trong context để trả lời cụ thể — đó là lý do người dùng trả tiền.
+                - Dùng dữ liệu trong context — đó là lý do người dùng trả tiền.
                 - Không bịa Rising / nhà / độ hành tinh nếu không có.
                 - CẤM lấy việc thiếu dữ liệu làm chủ đề chính ("chưa có Moon nên khó nói").
                 - Không biến chiêm tinh thành certainty tuyệt đối; nói xu hướng.
-                - Không lẫn tên cung Việt–Anh (Cancer≠Gemini).
+                - Không lẫn tên cung Việt–Anh. CẤM viết "Cancer (Gemini)" / "Cự Giải (Gemini)".
 
                 GIỌNG NÓI:
                 - Nói chuyện tự nhiên như đang trò chuyện, không viết luận.
                 - Câu ngắn. Tránh câu ghép ba bốn mệnh đề nối bằng dấu phẩy.
                 - Không triết lý. Nói thẳng điều người ta cần biết.
-                - Không ép phải có cấu trúc giống nhau cho mọi câu trả lời.
+                - Declarative: "Hôm nay nghiêng…" thay vì "Có thể là hôm nay…".
 
                 CẤM TUYỆT ĐỐI:
                 - Mở đầu bằng lời chào + tên ("Chào Hải", "Chào bạn") rồi mới vào bài.

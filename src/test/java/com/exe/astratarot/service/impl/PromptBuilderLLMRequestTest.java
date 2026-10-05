@@ -162,6 +162,8 @@ class PromptBuilderLLMRequestTest {
                 "Should forbid leading with missing-data apology");
         assertTrue(sys.contains("KHÔNG được tự bịa") || sys.contains("KHÔNG được tự"),
                 "Should still forbid inventing Rising/houses");
+        assertTrue(sys.contains("FEW-SHOT"), "Should include few-shot examples");
+        assertTrue(sys.contains("Session date"), "Should include session date for 'hôm nay'");
     }
 
     @Test
