@@ -5,7 +5,9 @@ import com.exe.astratarot.domain.dto.llm.LLMRequest;
 import com.exe.astratarot.domain.dto.llm.LLMResponse;
 import com.exe.astratarot.domain.dto.prompt.BuildPromptRequest;
 import com.exe.astratarot.domain.dto.prompt.DrawnCardDetailDTO;
+import com.exe.astratarot.service.LLMProvider;
 import com.exe.astratarot.service.impl.GeminiProvider;
+import com.exe.astratarot.service.impl.OpenAiCompatibleProvider;
 import com.exe.astratarot.service.impl.PromptBuilderServiceImpl;
 import com.exe.astratarot.util.ZodiacCalculator;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -27,29 +29,71 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * Probe tay: gọi Gemini với prompt production + hồ sơ giả lập user 2005.
- * Chạy: GEMINI_LIVE_TEST=1 + GEMINI_API_KEY thật (không phải dummy).
+ * Probe tay: gọi LLM (Groq/Cerebras/Gemini) với prompt production + hồ sơ 2005.
+ *
+ * <pre>
+ *   AI_QUALITY_PROBE=1   (hoặc GEMINI_LIVE_TEST=1)
+ *   # ưu tiên OpenAI-compatible nếu có:
+ *   LLM_OPENAI_API_KEY=...  LLM_OPENAI_BASE_URL=https://api.groq.com/openai/v1
+ *   LLM_OPENAI_MODEL=llama-3.3-70b-versatile
+ *   # hoặc GROQ_API_KEY / CEREBRAS_API_KEY
+ *   # hoặc GEMINI_API_KEY thật
+ * </pre>
  */
 @EnabledIf("com.exe.astratarot.validation.LiveGeminiGate#enabled")
 class AiQualityProbeTest {
 
     private static PromptBuilderServiceImpl promptBuilder;
-    private static GeminiProvider gemini;
-    private static final String API_KEY = System.getenv("GEMINI_API_KEY");
-    private static final String ENDPOINT =
-            System.getenv().getOrDefault(
-                    "GEMINI_API_ENDPOINT",
-                    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash");
+    private static LLMProvider llm;
+    private static String providerLabel;
 
     @BeforeAll
     static void setUp() {
-        assumeTrue(LiveGeminiGate.isUsableApiKey(API_KEY),
-                "Bỏ qua probe: GEMINI_API_KEY thiếu hoặc dummy");
+        assumeTrue(LiveGeminiGate.enabled(), "Bỏ qua probe: thiếu key LLM usable");
         promptBuilder = new PromptBuilderServiceImpl();
         RestTemplate rest = new RestTemplate(new SimpleClientHttpRequestFactory());
-        gemini = new GeminiProvider(rest, rest, new ObjectMapper());
-        ReflectionTestUtils.setField(gemini, "apiKey", API_KEY);
-        ReflectionTestUtils.setField(gemini, "apiEndpoint", ENDPOINT);
+        ObjectMapper mapper = new ObjectMapper();
+
+        if (LiveGeminiGate.hasUsableOpenAiCompatible()) {
+            String key = LiveGeminiGate.firstNonBlank(
+                    System.getenv("LLM_OPENAI_API_KEY"),
+                    System.getenv("GROQ_API_KEY"),
+                    System.getenv("CEREBRAS_API_KEY"));
+            String base = LiveGeminiGate.firstNonBlank(
+                    System.getenv("LLM_OPENAI_BASE_URL"),
+                    System.getenv("GROQ_API_KEY") != null ? "https://api.groq.com/openai/v1" : null,
+                    System.getenv("CEREBRAS_API_KEY") != null ? "https://api.cerebras.ai/v1" : null,
+                    "https://api.groq.com/openai/v1");
+            // Prefer explicit base; if only CEREBRAS key without GROQ, use cerebras URL
+            if (System.getenv("LLM_OPENAI_BASE_URL") == null
+                    && System.getenv("GROQ_API_KEY") == null
+                    && System.getenv("CEREBRAS_API_KEY") != null) {
+                base = "https://api.cerebras.ai/v1";
+            }
+            String model = LiveGeminiGate.firstNonBlank(
+                    System.getenv("LLM_OPENAI_MODEL"),
+                    System.getenv("GROQ_MODEL"),
+                    System.getenv("CEREBRAS_MODEL"),
+                    base.contains("cerebras") ? "llama-3.3-70b" : "llama-3.3-70b-versatile");
+
+            OpenAiCompatibleProvider openAi = new OpenAiCompatibleProvider(rest, rest, mapper);
+            ReflectionTestUtils.setField(openAi, "apiKey", key);
+            ReflectionTestUtils.setField(openAi, "baseUrl", base);
+            ReflectionTestUtils.setField(openAi, "model", model);
+            llm = openAi;
+            providerLabel = base + " / " + model;
+        } else {
+            String apiKey = System.getenv("GEMINI_API_KEY");
+            String endpoint = System.getenv().getOrDefault(
+                    "GEMINI_API_ENDPOINT",
+                    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash");
+            GeminiProvider gemini = new GeminiProvider(rest, rest, mapper);
+            ReflectionTestUtils.setField(gemini, "apiKey", apiKey);
+            ReflectionTestUtils.setField(gemini, "apiEndpoint", endpoint);
+            llm = gemini;
+            providerLabel = "gemini";
+        }
+        System.out.println("[PROBE] provider=" + providerLabel);
     }
 
     private AstrologyContextDTO profile2005() {
@@ -100,18 +144,13 @@ class AiQualityProbeTest {
         }
         LLMRequest req = promptBuilder.buildLLMRequest(b.build());
         System.out.println("\n===== Q: " + question + " (cards=" + withCards + ") =====");
-        System.out.println("--- sys excerpt (DATA SAFETY / Moon) ---");
-        String sys = req.getSystemInstruction();
-        int i = sys.indexOf("DATA SAFETY");
-        if (i >= 0) {
-            System.out.println(sys.substring(i, Math.min(sys.length(), i + 500)));
-        }
         System.out.println("--- natal snippet ---");
+        String sys = req.getSystemInstruction();
         int n = sys.indexOf("Natal Chart:");
         if (n >= 0) {
             System.out.println(sys.substring(n, Math.min(sys.length(), n + 450)));
         }
-        LLMResponse res = gemini.generate(req);
+        LLMResponse res = llm.generate(req);
         String ans = res.getContent();
         System.out.println("--- ANSWER ---\n" + ans + "\n");
         return ans;
@@ -128,7 +167,6 @@ class AiQualityProbeTest {
         assertFalse(
                 lower.contains("cự giải (gemini)") || lower.contains("cancer (gemini)"),
                 "Không được lẫn Cancer/Gemini:\n" + ans);
-        // Phải đủ ngắn-vừa và có nội dung
         assertTrue(ans.length() > 40, "Trả lời quá ngắn");
         assertTrue(ans.length() < 2500, "Trả lời vẫn quá dài");
     }
