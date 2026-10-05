@@ -17,6 +17,7 @@ import com.exe.astratarot.repository.ReadingCardRepository;
 import com.exe.astratarot.repository.TarotReadingRepository;
 import com.exe.astratarot.service.AITarotService;
 import com.exe.astratarot.service.AstrologyContextService;
+import com.exe.astratarot.service.SubscriptionService;
 import com.exe.astratarot.service.TokenEstimatorService;
 import com.exe.astratarot.service.AIUsageTrackingService;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,6 +69,9 @@ class ChatServiceConversationStateTest {
     @Mock
     private AIUsageTrackingService aiUsageTrackingService;
 
+    @Mock
+    private SubscriptionService subscriptionService;
+
     @InjectMocks
     private ChatServiceImpl chatService;
 
@@ -88,6 +92,8 @@ class ChatServiceConversationStateTest {
 
         // Set max token budget (normally injected via @Value)
         ReflectionTestUtils.setField(chatService, "maxContextTokens", 8000);
+
+        when(subscriptionService.canUseAI(any(UUID.class))).thenReturn(true);
 
         // Mock token estimator
         when(tokenEstimatorService.estimateTokens(any(String.class)))
