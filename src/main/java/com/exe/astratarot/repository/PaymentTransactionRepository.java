@@ -55,6 +55,23 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
     long countByStatus(TransactionStatus status);
 
     /**
+     * Tiền khách trả CHO LỊCH HẸN, không tính tiền nạp ví.
+     *
+     * <p>Cần tách ra vì phần chia cho Reader phải tính trên tiền của lịch hẹn.
+     * Bảng này chứa cả hai thứ: khách trả thẳng cho một buổi xem (phase
+     * DEPOSIT / REMAINING / FULL) và khách nạp tiền vào ví (phase TOPUP). Tiền
+     * nạp ví có thể dùng để mua gói AI, mà gói AI thì không có Reader nào dự
+     * phần — lấy tổng cả bảng rồi chia 85% cho Reader là tính nợ một khoản
+     * không ai được hưởng.
+     */
+    @Query("""
+            SELECT COALESCE(SUM(t.amount), 0) FROM PaymentTransaction t
+            WHERE t.status = :status AND t.phase <> :phase
+            """)
+    long sumAmountByStatusExcludingPhase(@Param("status") TransactionStatus status,
+                                         @Param("phase") PaymentPhase phase);
+
+    /**
      * Doanh thu theo từng tháng, mới nhất trước — cho biểu đồ đường.
      * Trả [nhãn tháng "YYYY-MM", tổng tiền]. Dùng native query vì JPQL không có
      * hàm cắt chuỗi ngày theo tháng.

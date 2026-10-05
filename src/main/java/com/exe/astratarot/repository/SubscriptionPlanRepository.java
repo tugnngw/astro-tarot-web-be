@@ -13,6 +13,9 @@ public interface SubscriptionPlanRepository extends JpaRepository<SubscriptionPl
 
     List<SubscriptionPlan> findByIsActiveTrue();
 
+    /** Số gói đang bày bán — cho màn Tổng quan của quản trị. */
+    long countByIsActiveTrue();
+
     Optional<SubscriptionPlan> findByPlanTypeAndIsActiveTrue(SubscriptionPlan.PlanType planType);
 
     List<SubscriptionPlan> findByPlanType(SubscriptionPlan.PlanType planType);
