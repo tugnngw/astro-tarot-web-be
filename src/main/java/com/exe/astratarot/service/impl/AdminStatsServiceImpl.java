@@ -1,5 +1,6 @@
 package com.exe.astratarot.service.impl;
 
+import com.exe.astratarot.service.BaoCaoNoiDungAiService;
 import java.sql.Timestamp;
 import com.exe.astratarot.repository.WalletTransactionRepository;
 import com.exe.astratarot.repository.UserPlanPurchaseRepository;
@@ -64,6 +65,7 @@ public class AdminStatsServiceImpl implements AdminStatsService {
     private final SubscriptionPlanRepository subscriptionPlanRepository;
     private final UserPlanPurchaseRepository userPlanPurchaseRepository;
     private final WalletTransactionRepository walletTransactionRepository;
+    private final BaoCaoNoiDungAiService baoCaoNoiDungAiService;
 
     private static final long USD_TO_VND = 25_000L;
 
@@ -186,7 +188,7 @@ public class AdminStatsServiceImpl implements AdminStatsService {
                 new AdminStatsResponse.UserStats(totalUsers, byRole, newUsers),
                 new AdminStatsResponse.ReaderStats(pendingApplications, activeProfiles),
                 new AdminStatsResponse.BookingStats(totalBookings, bookingByStatus),
-                new AdminStatsResponse.ModerationStats(pendingReports),
+                new AdminStatsResponse.ModerationStats(pendingReports, baoCaoNoiDungAiService.demChoXuLy()),
                 new AdminStatsResponse.ShopStats(activeProducts, clicks30d, clicksTotal),
                 new AdminStatsResponse.AiStats(
                         aiCalls,

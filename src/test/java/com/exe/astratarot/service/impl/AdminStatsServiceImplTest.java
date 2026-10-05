@@ -1,5 +1,6 @@
 package com.exe.astratarot.service.impl;
 
+import com.exe.astratarot.service.BaoCaoNoiDungAiService;
 import com.exe.astratarot.domain.enums.WalletTransactionType;
 import com.exe.astratarot.domain.enums.PaymentPhase;
 import com.exe.astratarot.repository.WalletTransactionRepository;
@@ -83,6 +84,7 @@ class AdminStatsServiceImplTest {
     @Mock private SubscriptionPlanRepository subscriptionPlanRepository;
     @Mock private UserPlanPurchaseRepository userPlanPurchaseRepository;
     @Mock private WalletTransactionRepository walletTransactionRepository;
+    @Mock private BaoCaoNoiDungAiService baoCaoNoiDungAiService;
 
     private AdminStatsServiceImpl service;
 
@@ -92,7 +94,8 @@ class AdminStatsServiceImplTest {
                 readerProfileRepository, bookingRepository, reportRepository, productRepository,
                 productClickRepository, aiUsageLogRepository, paymentTransactionRepository,
                 payoutRequestRepository, reviewRepository, feedbackService, marketingEventService,
-                subscriptionPlanRepository, userPlanPurchaseRepository, walletTransactionRepository);
+                subscriptionPlanRepository, userPlanPurchaseRepository, walletTransactionRepository,
+                baoCaoNoiDungAiService);
 
         // Mặc định: hệ thống trống trơn. Từng phép kiểm chỉ nói thêm phần nó cần.
         lenient().when(subscriptionPlanRepository.countByIsActiveTrue()).thenReturn(0L);
