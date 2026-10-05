@@ -25,8 +25,8 @@ import java.util.UUID;
  * Fetches the user's primary astrology profile and populates AstrologyContextDTO
  * with birth data and deterministic zodiac metadata (sun sign, element, modality).
  *
- * MVP Scope: Only birth data and deterministic metadata are populated.
- * Future fields (moon sign, rising sign, planetary positions, aspects) are NULL.
+ * MVP Scope: birth data + sun sign + approximate moon sign from mean lunar longitude.
+ * Rising / houses / precise ephemeris still planned for Swiss Ephemeris milestone.
  *
  * Caching:
  * - Cache name: astrology-context
@@ -50,7 +50,7 @@ public class AstrologyContextServiceImpl implements AstrologyContextService {
     private final DataEncryptionService dataEncryptionService;
 
     @Override
-    @Cacheable(cacheNames = "astrology-context", key = "#userId", unless = "#result == null || (#result.birthDate == null && #result.birthPlace == null)")
+    @Cacheable(cacheNames = "astrology-context-v2", key = "#userId", unless = "#result == null || (#result.birthDate == null && #result.birthPlace == null)")
     public Optional<AstrologyContextDTO> getAstrologyContext(UUID userId) {
         if (userId == null) {
             log.warn("Cannot fetch astrology context: userId is null");
@@ -79,6 +79,9 @@ public class AstrologyContextServiceImpl implements AstrologyContextService {
         String sunSign = ZodiacCalculator.calculateSunSign(entity.getBirthDate());
         String element = ZodiacCalculator.calculateElement(sunSign);
         String modality = ZodiacCalculator.calculateModality(sunSign);
+        // Ước lượng Moon từ ngày/giờ — đủ để chat tư vấn, không để AI xin lỗi vì thiếu.
+        String moonSign = ZodiacCalculator.approximateMoonSign(
+                entity.getBirthDate(), decrypted.birthTime);
 
         return AstrologyContextDTO.builder()
                 // Birth data (plain-text + decrypted)
@@ -88,12 +91,12 @@ public class AstrologyContextServiceImpl implements AstrologyContextService {
                 .latitude(decrypted.latitude)
                 .longitude(decrypted.longitude)
                 .timezone(entity.getTimezone())
-                // Deterministic zodiac metadata (MVP only)
+                // Deterministic zodiac metadata
                 .sunSign(sunSign)
                 .element(element)
                 .modality(modality)
-                // Future fields (NULL in MVP, Milestone 2+ with Swiss Ephemeris)
-                .moonSign(null)
+                .moonSign(moonSign)
+                // Rising cần lat/lng + ephemeris chính xác — chưa có Swiss Ephemeris
                 .risingSign(null)
                 .natalPlanetPositions(null)
                 .natalAspects(null)

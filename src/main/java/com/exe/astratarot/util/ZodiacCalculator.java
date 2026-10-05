@@ -1,6 +1,7 @@
 package com.exe.astratarot.util;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.MonthDay;
 import java.util.HashMap;
 import java.util.Map;
@@ -152,6 +153,103 @@ public class ZodiacCalculator {
         }
 
         return modality;
+    }
+
+    /**
+     * Tên tiếng Việt của cung (tránh model lẫn "Cancer (Gemini)").
+     */
+    public static String vietnameseSignName(String sunSign) {
+        if (sunSign == null || sunSign.isBlank()) {
+            throw new IllegalArgumentException("Sun sign cannot be null or blank");
+        }
+        String vi = SIGN_TO_VI.get(sunSign);
+        if (vi == null) {
+            throw new IllegalArgumentException("Unknown sun sign: " + sunSign);
+        }
+        return vi;
+    }
+
+    /**
+     * Ước lượng cung Mặt Trăng từ ngày (+ giờ nếu có).
+     *
+     * <p>Dùng kinh độ trung bình của Mặt Trăng (mean lunar longitude) —
+     * đủ ổn cho tư vấn chat; không thay Swiss Ephemeris khi cần độ chính xác
+     * nhà/độ. Kết quả gắn nhãn "approximate" ở tầng context nếu cần.
+     */
+    public static String approximateMoonSign(LocalDate birthDate, LocalTime birthTime) {
+        if (birthDate == null) {
+            throw new IllegalArgumentException("Birth date cannot be null");
+        }
+        LocalTime time = birthTime != null ? birthTime : LocalTime.NOON;
+        double jd = toJulianDay(birthDate, time);
+        double d = jd - 2451545.0; // days since J2000.0
+        // Meeus-style mean longitude of the Moon (degrees)
+        double L = 218.3164477 + 13.17639648 * d;
+        L = L % 360.0;
+        if (L < 0) {
+            L += 360.0;
+        }
+        int idx = (int) (L / 30.0);
+        if (idx < 0) {
+            idx = 0;
+        }
+        if (idx > 11) {
+            idx = 11;
+        }
+        return ZODIAC_ORDER[idx];
+    }
+
+    /** Con giáp theo năm âm lịch gần đúng (năm dương − 4) % 12. */
+    public static String approximateChineseZodiac(LocalDate birthDate) {
+        if (birthDate == null) {
+            throw new IllegalArgumentException("Birth date cannot be null");
+        }
+        // Đủ cho prompt; Tết Âm lịch không tính chi tiết.
+        int idx = Math.floorMod(birthDate.getYear() - 4, 12);
+        return CHINESE_ZODIAC[idx];
+    }
+
+    private static final String[] ZODIAC_ORDER = {
+            "Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo",
+            "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"
+    };
+
+    private static final String[] CHINESE_ZODIAC = {
+            "Rat", "Ox", "Tiger", "Rabbit", "Dragon", "Snake",
+            "Horse", "Goat", "Monkey", "Rooster", "Dog", "Pig"
+    };
+
+    private static final Map<String, String> SIGN_TO_VI = new HashMap<>();
+
+    static {
+        SIGN_TO_VI.put("Aries", "Bạch Dương");
+        SIGN_TO_VI.put("Taurus", "Kim Ngưu");
+        SIGN_TO_VI.put("Gemini", "Song Tử");
+        SIGN_TO_VI.put("Cancer", "Cự Giải");
+        SIGN_TO_VI.put("Leo", "Sư Tử");
+        SIGN_TO_VI.put("Virgo", "Xử Nữ");
+        SIGN_TO_VI.put("Libra", "Thiên Bình");
+        SIGN_TO_VI.put("Scorpio", "Thiên Yết");
+        SIGN_TO_VI.put("Sagittarius", "Nhân Mã");
+        SIGN_TO_VI.put("Capricorn", "Ma Kết");
+        SIGN_TO_VI.put("Aquarius", "Bảo Bình");
+        SIGN_TO_VI.put("Pisces", "Song Ngư");
+    }
+
+    private static double toJulianDay(LocalDate date, LocalTime time) {
+        int y = date.getYear();
+        int m = date.getMonthValue();
+        int d = date.getDayOfMonth();
+        double dayFrac = time.toSecondOfDay() / 86400.0;
+        if (m <= 2) {
+            y -= 1;
+            m += 12;
+        }
+        int A = y / 100;
+        int B = 2 - A + A / 4;
+        return Math.floor(365.25 * (y + 4716))
+                + Math.floor(30.6001 * (m + 1))
+                + d + dayFrac + B - 1524.5;
     }
 
     /**
