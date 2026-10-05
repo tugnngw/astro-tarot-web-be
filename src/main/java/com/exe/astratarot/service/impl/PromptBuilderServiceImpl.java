@@ -81,12 +81,12 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
      * generationConfig và mô hình viết tới khi nào nó muốn dừng. Hỏi "hôm nay
      * tôi có may mắn không" mà nhận về năm đoạn văn.
      *
-     * <p>1200 token xấp xỉ 700–800 từ tiếng Việt — đủ cho một lời giải ba lá
-     * có chiều sâu, mà vẫn chặn được những bài luận lan man. Đây là trần cứng,
-     * phần hướng dẫn trong lời nhắc mới là thứ định độ dài thường ngày; trần
-     * chỉ để chặn trường hợp mô hình quên mất mình đang nói gì.
+     * <p>450 token xấp xỉ 250–300 từ tiếng Việt — đủ cho câu trả lời thẳng
+     * + tối đa hai ý. Trước đây 1200 vẫn để mô hình viết ba đoạn dài cho câu
+     * hỏi có/không. Đây là trần cứng; hướng dẫn độ dài trong lời nhắc định
+     * mức thường ngày.
      */
-    private static final int GIOI_HAN_TOKEN_TRA_LOI = 1200;
+    private static final int GIOI_HAN_TOKEN_TRA_LOI = 450;
 
     @Override
     @Deprecated
@@ -424,10 +424,12 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
                 - Không ép phải có cấu trúc giống nhau cho mọi câu trả lời.
 
                 CẤM TUYỆT ĐỐI:
-                - Mở đầu bằng "Mình thấy ở đây có một điểm khá rõ" hoặc bất kỳ biến thể nào
-                  của nó. Câu ấy từng nằm trong hướng dẫn này làm ví dụ, và mô hình chép
-                  nguyên văn ở gần như mọi câu trả lời.
+                - Mở đầu bằng lời chào + tên ("Chào Hải", "Chào bạn") rồi mới vào bài.
+                - Mở đầu bằng "Mình thấy...", "Mình thấy ngay từ đầu...",
+                  "Mình thấy ở đây có một điểm khá rõ..." hoặc bất kỳ biến thể nào.
+                  Các câu ấy từng nằm trong hướng dẫn làm ví dụ, mô hình chép nguyên văn.
                 - Mở đầu bằng cách gọi tên người dùng rồi xuống dòng. Vào thẳng nội dung.
+                - Viết quá hai đoạn cho câu hỏi có/không hoặc hỏi về một ngày.
                 - Giải nghĩa lá bài từ A-Z. KHÔNG viết kiểu: "Eight of Swords là lá bài của..."
                 - Lặp tên lá bài
                 - "Ultimately" / "In conclusion" / "Bringing it all together"
@@ -468,10 +470,11 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
                 - Không ép phải có cấu trúc giống nhau cho mọi câu trả lời.
 
                 CẤM TUYỆT ĐỐI:
-                - Mở đầu bằng "Mình thấy ở đây có một điểm khá rõ" hoặc biến thể của nó.
-                  Câu ấy từng nằm trong hướng dẫn này làm ví dụ, và mô hình chép nguyên văn
-                  ở gần như mọi câu trả lời.
+                - Mở đầu bằng lời chào + tên ("Chào Hải", "Chào bạn") rồi mới vào bài.
+                - Mở đầu bằng "Mình thấy...", "Mình thấy ngay từ đầu...",
+                  "Mình thấy ở đây có một điểm khá rõ..." hoặc bất kỳ biến thể nào.
                 - Mở đầu bằng cách gọi tên người dùng rồi xuống dòng. Vào thẳng nội dung.
+                - Viết quá hai đoạn cho câu hỏi có/không hoặc hỏi về một ngày.
                 - Giải nghĩa từng vị trí hành tinh một cách máy móc
                 - "Ultimately" / "In conclusion" / "Bringing it all together"
                 - Giọng huyền bí: "Mình nhìn thấy...", "Cảm nhận năng lượng..."

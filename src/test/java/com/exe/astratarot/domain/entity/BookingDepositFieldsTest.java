@@ -85,7 +85,10 @@ class BookingDepositFieldsTest {
         // phải nới theo — xem V2_24, không thì mọi lượt nạp ví đổ ở INSERT.
         assertThat(com.exe.astratarot.domain.enums.PaymentPhase.TOPUP)
                 .isNotNull();
+        // AI_SUBSCRIPTION: mua gói AI qua PayOS (xem V2_31).
+        assertThat(com.exe.astratarot.domain.enums.PaymentPhase.AI_SUBSCRIPTION)
+                .isNotNull();
         assertThat(com.exe.astratarot.domain.enums.PaymentPhase.values())
-                .hasSize(4);
+                .hasSize(5);
     }
 }
