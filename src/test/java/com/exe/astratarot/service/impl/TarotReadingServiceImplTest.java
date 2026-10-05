@@ -25,6 +25,7 @@ import com.exe.astratarot.repository.UserRepository;
 import com.exe.astratarot.service.AITarotService;
 import com.exe.astratarot.service.AIUsageTrackingService;
 import com.exe.astratarot.service.AstrologyContextService;
+import com.exe.astratarot.service.SubscriptionService;
 import com.exe.astratarot.service.TarotDrawingService;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,6 +69,9 @@ class TarotReadingServiceImplTest {
     @Mock
     private AIUsageTrackingService aiUsageTrackingService;
 
+    @Mock
+    private SubscriptionService subscriptionService;
+
     @InjectMocks
     private TarotReadingServiceImpl tarotReadingService;
 
@@ -78,6 +82,9 @@ class TarotReadingServiceImplTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
+
+        when(subscriptionService.canUseAI(any(UUID.class))).thenReturn(true);
+
         // Mock AstrologyContextService to return empty (no context) by default
         // to maintain existing test behavior
         when(astrologyContextService.getAstrologyContext(any(UUID.class)))

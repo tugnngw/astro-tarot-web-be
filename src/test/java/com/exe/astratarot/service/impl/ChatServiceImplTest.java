@@ -24,6 +24,7 @@ import com.exe.astratarot.service.AITarotService;
 import com.exe.astratarot.service.AstrologyContextService;
 import com.exe.astratarot.service.ChatService;
 import com.exe.astratarot.service.AIUsageTrackingService;
+import com.exe.astratarot.service.SubscriptionService;
 import com.exe.astratarot.service.TokenEstimatorService;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -70,6 +71,9 @@ class ChatServiceImplTest {
     @Mock
     private AIUsageTrackingService aiUsageTrackingService;
 
+    @Mock
+    private SubscriptionService subscriptionService;
+
     @InjectMocks
     private ChatServiceImpl chatService;
 
@@ -87,6 +91,8 @@ class ChatServiceImplTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
+
+        when(subscriptionService.canUseAI(any(UUID.class))).thenReturn(true);
 
         // Mock TokenEstimatorService to estimate tokens as chars / 4
         when(tokenEstimatorService.estimateTokens(any(String.class)))
