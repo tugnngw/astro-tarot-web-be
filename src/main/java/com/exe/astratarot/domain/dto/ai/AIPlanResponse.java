@@ -20,4 +20,12 @@ public class AIPlanResponse {
     private Instant endAt;
     private Integer remainingDays;
     private boolean isActive;
+
+    /**
+     * Khi mua qua PayOS: link checkout. Gói chưa kích hoạt cho đến webhook.
+     * {@code purchaseId} lúc này có thể null; {@code isActive} = false.
+     */
+    private String checkoutUrl;
+    private String qrCode;
+    private boolean paymentPending;
 }

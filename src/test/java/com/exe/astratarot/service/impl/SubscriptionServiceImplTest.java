@@ -1,5 +1,7 @@
 package com.exe.astratarot.service.impl;
 
+import com.exe.astratarot.config.PayOsConfig.PayOsClient;
+import com.exe.astratarot.config.PayOsProperties;
 import com.exe.astratarot.config.security.SecurityUtils;
 import com.exe.astratarot.domain.dto.ai.*;
 import com.exe.astratarot.domain.entity.*;
@@ -7,6 +9,8 @@ import com.exe.astratarot.domain.enums.TargetType;
 import com.exe.astratarot.exception.QuotaExceededException;
 import com.exe.astratarot.exception.ResourceNotFoundException;
 import com.exe.astratarot.repository.*;
+import com.exe.astratarot.service.WalletService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,6 +23,10 @@ import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import vn.payos.PayOS;
+import vn.payos.model.v2.paymentRequests.CreatePaymentLinkRequest;
+import vn.payos.model.v2.paymentRequests.CreatePaymentLinkResponse;
+import vn.payos.service.blocking.v2.paymentRequests.PaymentRequestsService;
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -31,6 +39,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -53,6 +62,21 @@ class SubscriptionServiceImplTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private WalletService walletService;
+
+    @Mock
+    private PaymentTransactionRepository paymentTransactionRepository;
+
+    @Mock
+    private PayOsClient payOsClient;
+
+    @Mock
+    private PayOsProperties payOsProperties;
+
+    @Mock
+    private ObjectMapper objectMapper;
 
     @InjectMocks
     private SubscriptionServiceImpl subscriptionService;
@@ -103,7 +127,7 @@ class SubscriptionServiceImplTest {
     // ------------------------------------------------------------
 
     @Test
-    @DisplayName("Tạo purchase mới: chụp ảnh gói dịch vụ (snapshot) và lưu trạng thái ACTIVE")
+    @DisplayName("Tạo purchase mới (WALLET): chụp ảnh gói dịch vụ (snapshot) và lưu trạng thái ACTIVE")
     void createPurchase_Success_SnapshotsPlanAndSetsActive() {
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
         when(subscriptionPlanRepository.findById(planId)).thenReturn(Optional.of(standardPlan));
@@ -113,7 +137,7 @@ class SubscriptionServiceImplTest {
             return p;
         });
 
-        CreatePurchaseRequest request = new CreatePurchaseRequest(planId, UserPlanPurchase.PurchaseType.PAYOS);
+        CreatePurchaseRequest request = new CreatePurchaseRequest(planId, UserPlanPurchase.PurchaseType.WALLET);
         AIPlanResponse response = subscriptionService.createPurchase(userId, request);
 
         assertNotNull(response);
@@ -121,6 +145,7 @@ class SubscriptionServiceImplTest {
         assertEquals(20, response.getDailyQuota());
         assertEquals(199000L, response.getPrice());
         assertEquals(30, response.getRemainingDays());
+        assertFalse(response.isPaymentPending());
 
         ArgumentCaptor<UserPlanPurchase> purchaseCaptor = ArgumentCaptor.forClass(UserPlanPurchase.class);
         verify(userPlanPurchaseRepository).save(purchaseCaptor.capture());
@@ -132,10 +157,55 @@ class SubscriptionServiceImplTest {
         assertEquals(20, saved.getDailyQuotaSnapshot());
         assertEquals(199000L, saved.getPriceSnapshot());
         assertEquals(UserPlanPurchase.PurchaseStatus.ACTIVE, saved.getStatus());
-        assertEquals(UserPlanPurchase.PurchaseType.PAYOS, saved.getPurchaseType());
+        assertEquals(UserPlanPurchase.PurchaseType.WALLET, saved.getPurchaseType());
 
-        // Verify audit log
+        verify(walletService).debit(eq(user), eq(199000L), any(), any(), any());
         verify(auditLogRepository, atLeastOnce()).save(any(PlanChangeAuditLog.class));
+    }
+
+    @Test
+    @DisplayName("PAYOS: trả checkoutUrl, chưa kích hoạt purchase")
+    void createPurchase_PayOs_ReturnsCheckoutWithoutActivating() throws Exception {
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(subscriptionPlanRepository.findById(planId)).thenReturn(Optional.of(standardPlan));
+        when(payOsClient.enabled()).thenReturn(true);
+        when(payOsProperties.getReturnUrl()).thenReturn("https://app/ok");
+        when(payOsProperties.getCancelUrl()).thenReturn("https://app/cancel");
+        when(paymentTransactionRepository.findByExternalTransactionId(any())).thenReturn(Optional.empty());
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        when(paymentTransactionRepository.save(any(PaymentTransaction.class))).thenAnswer(i -> i.getArgument(0));
+
+        PayOS sdk = mock(PayOS.class);
+        PaymentRequestsService paymentRequests = mock(PaymentRequestsService.class);
+        CreatePaymentLinkResponse link = mock(CreatePaymentLinkResponse.class);
+        when(payOsClient.sdk()).thenReturn(sdk);
+        when(sdk.paymentRequests()).thenReturn(paymentRequests);
+        when(link.getCheckoutUrl()).thenReturn("https://pay.payos.vn/web/abc");
+        when(link.getQrCode()).thenReturn("qr-data");
+        when(link.getPaymentLinkId()).thenReturn("plink-1");
+        when(paymentRequests.create(any(CreatePaymentLinkRequest.class))).thenReturn(link);
+
+        CreatePurchaseRequest request = new CreatePurchaseRequest(planId, UserPlanPurchase.PurchaseType.PAYOS);
+        AIPlanResponse response = subscriptionService.createPurchase(userId, request);
+
+        assertTrue(response.isPaymentPending());
+        assertEquals("https://pay.payos.vn/web/abc", response.getCheckoutUrl());
+        assertNull(response.getPurchaseId());
+        assertFalse(response.isActive());
+        verify(userPlanPurchaseRepository, never()).save(any());
+        verify(paymentTransactionRepository).save(any(PaymentTransaction.class));
+    }
+
+    @Test
+    @DisplayName("PAYOS tắt cấu hình: báo lỗi rõ")
+    void createPurchase_PayOsDisabled_Throws() {
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(subscriptionPlanRepository.findById(planId)).thenReturn(Optional.of(standardPlan));
+        when(payOsClient.enabled()).thenReturn(false);
+
+        CreatePurchaseRequest request = new CreatePurchaseRequest(planId, UserPlanPurchase.PurchaseType.PAYOS);
+        assertThrows(IllegalStateException.class, () -> subscriptionService.createPurchase(userId, request));
+        verify(userPlanPurchaseRepository, never()).save(any());
     }
 
     @Test

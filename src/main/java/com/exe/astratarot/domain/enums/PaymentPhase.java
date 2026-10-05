@@ -1,10 +1,11 @@
 package com.exe.astratarot.domain.enums;
 
 /**
- * Giai đoạn thanh toán của một booking.
+ * Giai đoạn / loại thanh toán PayOS hoặc chuyển khoản.
  *
- * <p>Máy trạng thái: {@code UNPAID} → {@code DEPOSIT_PAID} → {@code PAID}.
- * Intent có thể mang phase FULL khi đặt sát giờ (còn < 12h).
+ * <p>Booking: {@code UNPAID} → {@code DEPOSIT_PAID} → {@code PAID}.
+ * Intent có thể mang phase FULL khi đặt sát giờ (còn &lt; 12h).
+ * Ví và gói AI dùng TOPUP / AI_SUBSCRIPTION (không gắn booking).
  */
 public enum PaymentPhase {
     /** Đặt cọc 50% khi còn ≥ 12h tới giờ hẹn */
@@ -14,5 +15,7 @@ public enum PaymentPhase {
     /** Trả 100% ngay khi đặt (còn < 12h tới giờ hẹn) */
     FULL,
     /** Nạp tiền vào ví người dùng ASTROTAROT */
-    TOPUP
+    TOPUP,
+    /** Mua gói cước AI — kích hoạt purchase sau khi PayOS xác nhận */
+    AI_SUBSCRIPTION
 }
