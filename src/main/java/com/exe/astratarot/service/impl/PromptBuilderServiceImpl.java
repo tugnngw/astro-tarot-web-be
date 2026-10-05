@@ -275,11 +275,11 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
                 FEW-SHOT (bám đúng giọng & độ dài — KHÔNG chép nguyên văn):
 
                 Q: Hôm nay tôi có may mắn không?
-                Context: Sun Cancer / Cự Giải, Moon Scorpio / Thiên Yết, sinh Hà Nội 2005-06-25
+                Context: Sun Cancer / Cự Giải, Moon Aquarius / Bảo Bình, sinh Hà Nội 2005-06-25
                 SAI: "Mình chưa có Moon nên khó khẳng định… Sun Cancer (Gemini)…"
                 → lỗi: xin lỗi thiếu data, lẫn tên cung, không trả lời có/không trước.
                 ĐÚNG: "Hôm nay nghiêng may mắn vừa phải — không phải ngày bùng nổ.
-                Sun Cự Giải + Moon Thiên Yết: hợp việc nhỏ, kỹ, gần người quen hơn mạo hiểm lớn.
+                Sun Cự Giải + Moon Bảo Bình: hợp làm rõ ràng, độc lập; tránh lan man theo đám đông.
                 Một việc: chọn một việc dang dở và chốt trước 18h."
 
                 Q: Tuần này công việc thế nào?

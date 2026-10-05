@@ -12,7 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
@@ -24,15 +24,13 @@ import java.util.Locale;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Probe tay: gọi Gemini với prompt production + hồ sơ giả lập user 2005.
- * Chạy: GEMINI_LIVE_TEST=1 + GEMINI_API_KEY (từ .env).
+ * Chạy: GEMINI_LIVE_TEST=1 + GEMINI_API_KEY thật (không phải dummy).
  */
-@EnabledIfEnvironmentVariable(
-        named = "GEMINI_LIVE_TEST",
-        matches = "1",
-        disabledReason = "Đặt GEMINI_LIVE_TEST=1 và GEMINI_API_KEY")
+@EnabledIf("com.exe.astratarot.validation.LiveGeminiGate#enabled")
 class AiQualityProbeTest {
 
     private static PromptBuilderServiceImpl promptBuilder;
@@ -45,7 +43,8 @@ class AiQualityProbeTest {
 
     @BeforeAll
     static void setUp() {
-        assertNotNull(API_KEY, "Thiếu GEMINI_API_KEY");
+        assumeTrue(LiveGeminiGate.isUsableApiKey(API_KEY),
+                "Bỏ qua probe: GEMINI_API_KEY thiếu hoặc dummy");
         promptBuilder = new PromptBuilderServiceImpl();
         RestTemplate rest = new RestTemplate(new SimpleClientHttpRequestFactory());
         gemini = new GeminiProvider(rest, rest, new ObjectMapper());

@@ -150,5 +150,25 @@ class AiAnswerQualityRubricTest {
         if (i >= 0) {
             System.out.println(sys.substring(i, Math.min(sys.length(), i + 420)));
         }
+
+        // Dump full system prompt for local review (không commit)
+        try {
+            java.nio.file.Path out = java.nio.file.Path.of("target", "ai-prompt-luck-astro.txt");
+            java.nio.file.Files.createDirectories(out.getParent());
+            java.nio.file.Files.writeString(out, sys + "\n\n=== USER ===\nHôm nay tôi có may mắn không?\n");
+            System.out.println("[PROMPT] dumped -> " + out.toAbsolutePath());
+        } catch (Exception e) {
+            fail("Không ghi được prompt dump: " + e.getMessage());
+        }
+    }
+
+    @Test
+    @DisplayName("LiveGeminiGate: dummy key không bật live")
+    void liveGateRejectsDummy() {
+        assertFalse(LiveGeminiGate.isUsableApiKey(null));
+        assertFalse(LiveGeminiGate.isUsableApiKey(""));
+        assertFalse(LiveGeminiGate.isUsableApiKey("dummy-gemini-key"));
+        assertFalse(LiveGeminiGate.isUsableApiKey("short"));
+        assertTrue(LiveGeminiGate.isUsableApiKey("AIzaSyDummyButLongEnoughKey1234567890"));
     }
 }

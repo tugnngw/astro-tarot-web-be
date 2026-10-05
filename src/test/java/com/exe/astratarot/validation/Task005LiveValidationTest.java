@@ -15,7 +15,7 @@ import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.api.condition.EnabledIf;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Gọi THẬT lên Gemini để xem chất lượng lời giải, không phải test tự động.
@@ -34,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <pre>
  *   GEMINI_LIVE_TEST=1
- *   GEMINI_API_KEY=&lt;khoá của bạn&gt;
+ *   GEMINI_API_KEY=&lt;khoá thật của bạn — không dùng dummy&gt;
  * </pre>
  *
  * <p><b>Vì sao phải bật bằng tay.</b> Trước đây lớp này chạy mỗi lần đẩy code,
@@ -56,10 +57,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>Khoá giờ đọc từ môi trường. Đừng viết khoá vào đây lần nữa.
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-@EnabledIfEnvironmentVariable(
-        named = "GEMINI_LIVE_TEST",
-        matches = "1",
-        disabledReason = "Gọi thật lên Gemini: đặt GEMINI_LIVE_TEST=1 và GEMINI_API_KEY để chạy")
+@EnabledIf("com.exe.astratarot.validation.LiveGeminiGate#enabled")
 public class Task005LiveValidationTest {
 
     private static PromptBuilderServiceImpl promptBuilderService;
@@ -75,10 +73,8 @@ public class Task005LiveValidationTest {
 
     @BeforeAll
     static void setUp() {
-        // Bật GEMINI_LIVE_TEST mà quên khoá thì dừng ngay với câu nói rõ lý do.
-        // Để chạy tiếp, lỗi sẽ là 403 từ Google — đọc xong còn tưởng khoá hỏng.
-        assertNotNull(API_KEY,
-                "Thiếu biến môi trường GEMINI_API_KEY. Đặt khoá rồi chạy lại.");
+        assumeTrue(LiveGeminiGate.isUsableApiKey(API_KEY),
+                "Bỏ qua live Gemini: GEMINI_API_KEY thiếu hoặc dummy");
 
         promptBuilderService = new PromptBuilderServiceImpl();
 
