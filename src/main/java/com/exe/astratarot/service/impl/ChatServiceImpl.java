@@ -25,6 +25,7 @@ import com.exe.astratarot.repository.TarotReadingRepository;
 import com.exe.astratarot.service.AITarotService;
 import com.exe.astratarot.service.AstrologyContextService;
 import com.exe.astratarot.service.ChatService;
+import com.exe.astratarot.service.SubscriptionService;
 import com.exe.astratarot.service.TokenEstimatorService;
 import com.exe.astratarot.service.AIUsageTrackingService;
 import jakarta.persistence.EntityNotFoundException;
@@ -66,6 +67,7 @@ public class ChatServiceImpl implements ChatService {
     private final AstrologyContextService astrologyContextService;
     private final TokenEstimatorService tokenEstimatorService;
     private final AIUsageTrackingService aiUsageTrackingService;
+    private final SubscriptionService subscriptionService;
 
     @org.springframework.beans.factory.annotation.Value("${ai.chat.max-context-tokens:6000}")
     private int maxContextTokens;
@@ -74,6 +76,7 @@ public class ChatServiceImpl implements ChatService {
     @Transactional
     public ChatResponse sendMessage(UUID readingId, User user, String message) {
         log.debug("Chat request: readingId={}, userId={}", readingId, user.getId());
+        requireAiQuota(user);
         if (readingId != null) {
             // Existing reading flow (unchanged)
             // Step 1: Verify TarotReading exists and belongs to user
@@ -108,6 +111,7 @@ public class ChatServiceImpl implements ChatService {
             BuildPromptRequest promptRequest = buildContinuationPromptRequest(reading, user, session, message, userMessage.getId());
             LLMResponse llmResponse = aiTarotService.generateInterpretation(promptRequest);
             log.debug("AI continuation response received for readingId={}", readingId);
+            recordAiQuota(user);
 
             // Step 6: Save AI response
             LLMTokenUsage tokenUsage = llmResponse.getTokenUsage();
@@ -178,6 +182,7 @@ public class ChatServiceImpl implements ChatService {
             // Build astrology prompt with conversation history
             BuildPromptRequest promptRequest = buildAstrologyPromptRequest(user, session, message, userMessage.getId());
             LLMResponse llmResponse = aiTarotService.generateInterpretation(promptRequest);
+            recordAiQuota(user);
 
             // Save AI response
             LLMTokenUsage tokenUsage = llmResponse.getTokenUsage();
@@ -233,6 +238,7 @@ public class ChatServiceImpl implements ChatService {
                                   Consumer<StreamResult> onComplete) {
         try {
             log.debug("Stream request: readingId={}, userId={}", readingId, user.getId());
+            requireAiQuota(user);
 
             if (readingId != null) {
                 // Step 1: Verify ownership
@@ -283,6 +289,7 @@ public class ChatServiceImpl implements ChatService {
                             // Save AI response and update session/reading
                             UUID messageId = saveAiResponseAndUpdate(reading, session,
                                     fullContent.toString(), completion);
+                            recordAiQuota(user);
 
                             // Log AI usage
                             try {
@@ -347,6 +354,7 @@ public class ChatServiceImpl implements ChatService {
                                     .messageType(MessageType.TEXT)
                                     .build();
                             chatMessageRepository.save(aiMessage);
+                            recordAiQuota(user);
 
                             // Update session timestamp
                             session.setLastMessageAt(Instant.now());
@@ -657,5 +665,22 @@ public class ChatServiceImpl implements ChatService {
                 .content(chatMessage.getContent())
                 .createdAt(chatMessage.getCreatedAt())
                 .build();
+    }
+
+    private void requireAiQuota(User user) {
+        if (!subscriptionService.canUseAI(user.getId())) {
+            throw new com.exe.astratarot.exception.QuotaExceededException(
+                    "Đã hết lượt dùng AI hôm nay. Nâng cấp gói hoặc đợi làm mới lúc 00:00 (giờ VN).");
+        }
+    }
+
+    private void recordAiQuota(User user) {
+        try {
+            subscriptionService.recordAIUsage(user.getId());
+        } catch (com.exe.astratarot.exception.QuotaExceededException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.warn("Ghi nhận hạn mức AI thất bại user={}: {}", user.getId(), ex.getMessage());
+        }
     }
 }

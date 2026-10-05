@@ -17,6 +17,7 @@ import com.exe.astratarot.service.AITarotService;
 import com.exe.astratarot.service.AIUsageTrackingService;
 import com.exe.astratarot.service.AstrologyContextService;
 import com.exe.astratarot.service.ChatService;
+import com.exe.astratarot.service.SubscriptionService;
 import com.exe.astratarot.service.TokenEstimatorService;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -82,6 +83,7 @@ class ChatServiceImplStreamTest {
     @Mock private AstrologyContextService astrologyContextService;
     @Mock private TokenEstimatorService tokenEstimatorService;
     @Mock private AIUsageTrackingService aiUsageTrackingService;
+    @Mock private SubscriptionService subscriptionService;
 
     private ChatServiceImpl service;
 
@@ -93,8 +95,10 @@ class ChatServiceImplStreamTest {
     void setUp() {
         service = new ChatServiceImpl(chatSessionRepository, chatMessageRepository,
                 tarotReadingRepository, readingCardRepository, aiTarotService,
-                astrologyContextService, tokenEstimatorService, aiUsageTrackingService);
+                astrologyContextService, tokenEstimatorService, aiUsageTrackingService,
+                subscriptionService);
         ReflectionTestUtils.setField(service, "maxContextTokens", 8000);
+        lenient().when(subscriptionService.canUseAI(any())).thenReturn(true);
 
         khach = User.builder().id(UUID.randomUUID()).build();
         luotTrai = TarotReading.builder()
