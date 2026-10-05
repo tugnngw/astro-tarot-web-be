@@ -1,10 +1,13 @@
 package com.exe.astratarot.service.impl;
 
 import com.exe.astratarot.domain.dto.user.ChangePasswordRequest;
+import com.exe.astratarot.domain.dto.user.DeleteAccountRequest;
 import com.exe.astratarot.domain.dto.user.ProfileResponse;
 import com.exe.astratarot.domain.dto.user.UpdateProfileRequest;
 import com.exe.astratarot.domain.entity.User;
 import com.exe.astratarot.domain.enums.Gender;
+import com.exe.astratarot.domain.enums.UserRole;
+import com.exe.astratarot.domain.enums.UserStatus;
 import com.exe.astratarot.exception.InvalidCredentialsException;
 import com.exe.astratarot.exception.ResourceNotFoundException;
 import com.exe.astratarot.repository.UserRepository;
@@ -19,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -42,6 +46,8 @@ public class UserProfileServiceImpl implements UserProfileService {
     private final PasswordEncoder passwordEncoder;
 
     private final com.exe.astratarot.repository.UserAvatarRepository userAvatarRepository;
+    private final com.exe.astratarot.repository.UserAstrologicalDataRepository
+            userAstrologicalDataRepository;
 
     // Giu lai de doc anh cu con sot tren dia (neu co); anh moi khong dung toi.
     @Value("${app.upload.dir:uploads}")
@@ -184,6 +190,108 @@ public class UserProfileServiceImpl implements UserProfileService {
                 .forEach(session -> session.setRevoked(true));
 
         log.info("User {} đã đổi mật khẩu, đã thu hồi các phiên đang mở", userId);
+    }
+
+    // =========================================================
+    // Tự xoá tài khoản
+    // =========================================================
+
+    /**
+     * Tên miền dành riêng cho địa chỉ không bao giờ tồn tại (RFC 2606).
+     *
+     * <p>Dùng nó thay vì xoá trắng ô email: cột email có ràng buộc NOT NULL và
+     * UNIQUE, mà để trống thì người thứ hai xoá tài khoản sẽ đụng khoá trùng.
+     * Ghép thêm id người dùng là chắc chắn không trùng.
+     *
+     * <p>Và chọn tên miền KHÔNG BAO GIỜ gửi được thư, phòng trường hợp một tác
+     * vụ gửi thư hàng loạt nào đó về sau quên lọc tài khoản đã xoá.
+     */
+    private static final String MIEN_DA_XOA = "@da-xoa.invalid";
+
+    @Override
+    @Transactional
+    public void deleteOwnAccount(UUID userId, DeleteAccountRequest request) {
+        User user = findUser(userId);
+
+        if (user.getPasswordHash() == null) {
+            throw new InvalidCredentialsException(
+                    "Tài khoản này đăng nhập bằng Google. Hãy đặt mật khẩu qua chức năng quên mật khẩu rồi xoá.");
+        }
+        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            throw new InvalidCredentialsException("Mật khẩu không đúng");
+        }
+
+        // Cùng chốt chặn với bản xoá của quản trị viên: mất quản trị viên cuối
+        // cùng là không ai vào được màn quản trị nữa, kể cả để tạo lại một
+        // người khác.
+        if (user.getRole() == UserRole.ADMIN
+                && userRepository.countByRoleAndDeletedAtIsNull(UserRole.ADMIN) <= 1) {
+            throw new IllegalArgumentException(
+                    "Bạn là quản trị viên duy nhất. Hãy cấp quyền quản trị cho người khác trước khi xoá tài khoản.");
+        }
+
+        // ---------------------------------------------------------------
+        // Ranh giới giữa xoá cứng và xoá mềm
+        // ---------------------------------------------------------------
+        // Một quy tắc duy nhất: GIỮ thứ mà bản ghi khác phụ thuộc vào hoặc sổ
+        // sách cần, GỠ thứ chỉ thuộc về riêng người này.
+        //
+        // Giữ (xoá mềm):
+        //   • hàng users — bookings, reviews, payment_transactions và
+        //     wallet_transactions đều trỏ tới nó. Xoá cứng thì hoặc gãy khoá
+        //     ngoại, hoặc xoá dây chuyền luôn lịch sử giao dịch.
+        //   • lịch hẹn, đánh giá, giao dịch — chúng là lịch sử của CẢ hai
+        //     phía. Xoá một đánh giá là lặng lẽ đổi điểm trung bình của một
+        //     Reader không liên quan gì tới quyết định này.
+        //
+        // Gỡ hẳn:
+        //   • hồ sơ chiêm tinh — ngày sinh, GIỜ sinh, nơi sinh kèm toạ độ. Đây
+        //     là dữ liệu định danh mạnh nhất app nắm giữ, không bản ghi nào
+        //     khác trỏ tới, và chẳng dính gì tới sổ sách. Giữ lại chính là giữ
+        //     đúng thứ mà một yêu cầu xoá tài khoản nhắm tới.
+        //   • ảnh đại diện — ảnh mặt người. Cùng lý do.
+        //
+        // Và gỡ thông tin cá nhân ngay trên hàng users được giữ lại. Giữ hàng
+        // để khoá ngoại không gãy là một chuyện; giữ tên và email của người ta
+        // trên đó lại là chuyện khác, không có lý do nào biện minh được.
+        var hoSoSao = userAstrologicalDataRepository.findAllByUserId(userId);
+        if (!hoSoSao.isEmpty()) {
+            userAstrologicalDataRepository.deleteAll(hoSoSao);
+        }
+        // Xoá cả tệp trên đĩa lẫn hàng trong bảng, đúng như removeAvatar làm.
+        deleteOldAvatarFile(user.getAvatar());
+        userAvatarRepository.deleteById(userId);
+
+        String dauVet = userId.toString().substring(0, 8);
+        user.setEmail("da-xoa-" + userId + MIEN_DA_XOA);
+        user.setUsername("da_xoa_" + dauVet);
+        user.setFullName("Người dùng đã xoá");
+        user.setPhone(null);
+        user.setBio(null);
+        user.setAddress(null);
+        user.setCity(null);
+        user.setCountry(null);
+        user.setAvatar(null);
+        user.setProviderId(null);
+        user.setPendingEmail(null);
+        // Xoá luôn mã xác minh và mã đặt lại mật khẩu: để lại là còn đường vào
+        // một tài khoản đã xoá.
+        user.setEmailVerificationToken(null);
+        user.setEmailVerificationExpiresAt(null);
+        user.setPasswordResetToken(null);
+        user.setPasswordResetExpiresAt(null);
+        // Băm mật khẩu thay bằng chuỗi vô nghĩa, không phải null: null mang
+        // nghĩa "tài khoản Google chưa đặt mật khẩu" ở chỗ khác trong mã.
+        user.setPasswordHash("{noop}" + UUID.randomUUID());
+        user.setStatus(UserStatus.INACTIVE);
+        user.setDeletedAt(Instant.now());
+        userRepository.save(user);
+
+        userSessionRepository.findByUserIdAndRevokedFalse(userId)
+                .forEach(session -> session.setRevoked(true));
+
+        log.info("User {} đã tự xoá tài khoản; đã gỡ dữ liệu cá nhân và {} hồ sơ chiêm tinh",
+                userId, hoSoSao.size());
     }
 
     // ---------------------------------------------------------

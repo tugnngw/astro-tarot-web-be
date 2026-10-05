@@ -16,9 +16,40 @@ public record AdminStatsResponse(
         ModerationStats moderation,
         ShopStats shop,
         AiStats ai,
+        SubscriptionStats subscriptions,
         RevenueStats revenue,
         TractionStats traction
 ) {
+    /**
+     * Việc BÁN gói AI — khác hẳn {@link AiStats} vốn chỉ đếm token đã tiêu.
+     *
+     * <p>Trước 05/10/2026 màn Tổng quan không có một con số nào về việc này:
+     * {@code AdminStatsServiceImpl} không đụng tới bảng {@code
+     * user_plan_purchase} lẫn {@code subscription_plan}. Nhìn vào màn quản trị
+     * thì biết AI tốn bao nhiêu token, nhưng không biết bán được bao nhiêu gói
+     * — tức là biết chi phí mà không biết doanh thu của đúng tính năng ấy.
+     *
+     * <p>Mọi con số đều lọc {@code priceSnapshot > 0}. Gói Free cũng sinh một
+     * hàng {@code user_plan_purchase}; đếm nó vào "đã bán" là thổi phồng bằng
+     * những lượt chẳng ai trả đồng nào.
+     *
+     * @param plansOnSale       số gói đang bày bán
+     * @param purchasesTotal    tổng lượt mua có thu tiền
+     * @param purchasesLast30Days lượt mua trong 30 ngày
+     * @param activeNow         số gói còn hiệu lực ngay lúc này
+     * @param revenueTotal      tổng tiền thu từ bán gói, theo giá CHỤP lúc mua
+     * @param revenueLast30Days phần trong 30 ngày
+     * @param purchasesByPlan   số lượt mua theo từng tên gói
+     */
+    public record SubscriptionStats(
+            long plansOnSale,
+            long purchasesTotal,
+            long purchasesLast30Days,
+            long activeNow,
+            long revenueTotal,
+            long revenueLast30Days,
+            Map<String, Long> purchasesByPlan
+    ) {}
     /**
      * @param total    tổng tài khoản còn hiệu lực (chưa xoá mềm)
      * @param byRole   số tài khoản theo từng vai trò

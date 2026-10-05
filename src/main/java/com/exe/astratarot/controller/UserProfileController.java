@@ -2,6 +2,7 @@ package com.exe.astratarot.controller;
 
 import com.exe.astratarot.domain.dto.common.ApiResponse;
 import com.exe.astratarot.domain.dto.user.ChangePasswordRequest;
+import com.exe.astratarot.domain.dto.user.DeleteAccountRequest;
 import com.exe.astratarot.domain.dto.user.ProfileResponse;
 import com.exe.astratarot.domain.dto.user.UpdateProfileRequest;
 import com.exe.astratarot.security.CustomUserDetails;
@@ -73,6 +74,24 @@ public class UserProfileController {
         userProfileService.changePassword(currentUserId(userDetails), request);
         return ResponseEntity.ok(ApiResponse.success(
                 "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.", null));
+    }
+
+    /**
+     * Người dùng tự xoá tài khoản của mình.
+     *
+     * <p>CH Play và App Store đều bắt buộc có đường này cho app cho phép đăng
+     * ký. Trước đây chỉ quản trị viên xoá được tài khoản người khác.
+     *
+     * <p>Đòi mật khẩu trong thân yêu cầu dù đang đăng nhập: việc này không lùi
+     * được, nên một phiên bị đánh cắp không được phép làm nó.
+     */
+    @DeleteMapping
+    public ResponseEntity<ApiResponse<Void>> deleteOwnAccount(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody DeleteAccountRequest request) {
+        userProfileService.deleteOwnAccount(currentUserId(userDetails), request);
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đã xoá tài khoản. Cảm ơn bạn đã dùng AstroTarot.", null));
     }
 
     private UUID currentUserId(CustomUserDetails userDetails) {

@@ -1,5 +1,10 @@
 package com.exe.astratarot.service.impl;
 
+import com.exe.astratarot.domain.enums.WalletTransactionType;
+import com.exe.astratarot.domain.enums.PaymentPhase;
+import com.exe.astratarot.repository.WalletTransactionRepository;
+import com.exe.astratarot.repository.UserPlanPurchaseRepository;
+import com.exe.astratarot.repository.SubscriptionPlanRepository;
 import com.exe.astratarot.domain.entity.ReaderApplication;
 import com.exe.astratarot.domain.enums.BookingStatus;
 import com.exe.astratarot.domain.enums.PayoutStatus;
@@ -75,6 +80,9 @@ class AdminStatsServiceImplTest {
     @Mock private ReviewRepository reviewRepository;
     @Mock private FeedbackService feedbackService;
     @Mock private MarketingEventService marketingEventService;
+    @Mock private SubscriptionPlanRepository subscriptionPlanRepository;
+    @Mock private UserPlanPurchaseRepository userPlanPurchaseRepository;
+    @Mock private WalletTransactionRepository walletTransactionRepository;
 
     private AdminStatsServiceImpl service;
 
@@ -83,9 +91,19 @@ class AdminStatsServiceImplTest {
         service = new AdminStatsServiceImpl(userRepository, readerApplicationRepository,
                 readerProfileRepository, bookingRepository, reportRepository, productRepository,
                 productClickRepository, aiUsageLogRepository, paymentTransactionRepository,
-                payoutRequestRepository, reviewRepository, feedbackService, marketingEventService);
+                payoutRequestRepository, reviewRepository, feedbackService, marketingEventService,
+                subscriptionPlanRepository, userPlanPurchaseRepository, walletTransactionRepository);
 
         // Mặc định: hệ thống trống trơn. Từng phép kiểm chỉ nói thêm phần nó cần.
+        lenient().when(subscriptionPlanRepository.countByIsActiveTrue()).thenReturn(0L);
+        lenient().when(userPlanPurchaseRepository.demLuotMuaCoThuTien()).thenReturn(0L);
+        lenient().when(userPlanPurchaseRepository.demLuotMuaTu(any())).thenReturn(0L);
+        lenient().when(userPlanPurchaseRepository.demGoiConHan(any())).thenReturn(0L);
+        lenient().when(userPlanPurchaseRepository.tongTienBanGoi()).thenReturn(0L);
+        lenient().when(userPlanPurchaseRepository.tienBanGoiTu(any())).thenReturn(0L);
+        lenient().when(userPlanPurchaseRepository.demTheoTenGoi()).thenReturn(List.of());
+        lenient().when(walletTransactionRepository.sumAmountByTypeAndStatus(any(), any())).thenReturn(0L);
+        lenient().when(paymentTransactionRepository.sumAmountByStatusExcludingPhase(any(), any())).thenReturn(0L);
         lenient().when(userRepository.countByRoleAndDeletedAtIsNull(any())).thenReturn(0L);
         lenient().when(userRepository.countByCreatedAtAfterAndDeletedAtIsNull(any())).thenReturn(0L);
         lenient().when(readerApplicationRepository.countByStatus(any())).thenReturn(0L);
@@ -164,20 +182,81 @@ class AdminStatsServiceImplTest {
     }
 
     @Test
-    @DisplayName("Phí nền tảng và phần Reader cộng lại đúng bằng tổng thu")
+    @DisplayName("Phí nền tảng và phần Reader cộng lại đúng bằng tiền của LỊCH HẸN")
     void phiVaPhanReader() {
+        // 10 triệu tiền vào, nhưng chỉ 6 triệu là của lịch hẹn.
         when(paymentTransactionRepository.sumAmountByStatus(TransactionStatus.SUCCESS))
                 .thenReturn(10_000_000L);
+        when(paymentTransactionRepository.sumAmountByStatusExcludingPhase(
+                TransactionStatus.SUCCESS, PaymentPhase.TOPUP))
+                .thenReturn(6_000_000L);
 
         var r = service.getStats().revenue();
 
-        // Hai con số này hiện cạnh nhau trên màn hình, nên lệch là thấy ngay —
-        // nhưng chỉ khi có người cộng lại.
         assertAll(
+                // Tiền vào vẫn là tiền vào, không đổi nghĩa.
                 () -> assertEquals(10_000_000L, r.grossRevenue()),
-                () -> assertEquals(10_000_000L * EscrowServiceImpl.PLATFORM_FEE_PERCENT / 100,
+                // Nhưng chia chác thì tính trên 6 triệu của lịch hẹn, không
+                // phải 10 triệu. Bốn triệu kia là tiền nạp ví, có thể dùng mua
+                // gói AI — việc Reader không dự phần.
+                () -> assertEquals(6_000_000L * EscrowServiceImpl.PLATFORM_FEE_PERCENT / 100,
                         r.platformFee()),
-                () -> assertEquals(10_000_000L, r.platformFee() + r.readerShare()));
+                () -> assertEquals(6_000_000L, r.platformFee() + r.readerShare()));
+    }
+
+    @Test
+    @DisplayName("Tiền nạp ví KHÔNG bị chia cho Reader")
+    void tienNapViKhongChiaChoReader() {
+        // Toàn bộ tiền vào là nạp ví: không một buổi xem nào diễn ra.
+        when(paymentTransactionRepository.sumAmountByStatus(TransactionStatus.SUCCESS))
+                .thenReturn(5_000_000L);
+        when(paymentTransactionRepository.sumAmountByStatusExcludingPhase(
+                TransactionStatus.SUCCESS, PaymentPhase.TOPUP))
+                .thenReturn(0L);
+
+        var r = service.getStats().revenue();
+
+        // Bản cũ lấy readerShare = grossRevenue * 85% nên báo nợ Reader 4,25
+        // triệu trong khi chưa ai làm gì để được hưởng.
+        assertAll(
+                () -> assertEquals(5_000_000L, r.grossRevenue()),
+                () -> assertEquals(0L, r.readerShare()),
+                () -> assertEquals(0L, r.platformFee()));
+    }
+
+    @Test
+    @DisplayName("Lịch hẹn trả BẰNG VÍ vẫn được tính cho Reader")
+    void lichHenTraBangViVanTinh() {
+        // Đường này không sinh hàng nào ở payment_transactions, chỉ có ở
+        // wallet_transactions. Nhìn mỗi bảng kia là bỏ sót sạch.
+        when(paymentTransactionRepository.sumAmountByStatusExcludingPhase(
+                TransactionStatus.SUCCESS, PaymentPhase.TOPUP))
+                .thenReturn(0L);
+        when(walletTransactionRepository.sumAmountByTypeAndStatus(
+                WalletTransactionType.BOOKING_PAYMENT, TransactionStatus.SUCCESS))
+                .thenReturn(2_000_000L);
+
+        var r = service.getStats().revenue();
+
+        assertEquals(2_000_000L, r.platformFee() + r.readerShare());
+    }
+
+    @Test
+    @DisplayName("Tiền bán gói AI vào thẳng lãi của nền tảng")
+    void tienBanGoiVaoLaiNenTang() {
+        when(userPlanPurchaseRepository.tongTienBanGoi()).thenReturn(800_000L);
+        when(userPlanPurchaseRepository.demLuotMuaCoThuTien()).thenReturn(7L);
+        when(userPlanPurchaseRepository.demGoiConHan(any())).thenReturn(3L);
+
+        var kq = service.getStats();
+
+        assertAll(
+                () -> assertEquals(7L, kq.subscriptions().purchasesTotal()),
+                () -> assertEquals(800_000L, kq.subscriptions().revenueTotal()),
+                () -> assertEquals(3L, kq.subscriptions().activeNow()),
+                // Không có lịch hẹn nào nên platformFee = 0; lãi đúng bằng tiền
+                // bán gói, trọn vẹn không chia cho ai.
+                () -> assertEquals(800_000L, kq.revenue().netProfit()));
     }
 
     @Test
