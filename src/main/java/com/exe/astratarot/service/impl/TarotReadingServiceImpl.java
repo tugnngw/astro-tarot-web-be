@@ -28,8 +28,10 @@ import com.exe.astratarot.repository.UserRepository;
 import com.exe.astratarot.service.AITarotService;
 import com.exe.astratarot.service.AIUsageTrackingService;
 import com.exe.astratarot.service.AstrologyContextService;
+import com.exe.astratarot.service.SubscriptionService;
 import com.exe.astratarot.service.TarotDrawingService;
 import com.exe.astratarot.service.TarotReadingService;
+import com.exe.astratarot.exception.QuotaExceededException;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -74,12 +76,15 @@ public class TarotReadingServiceImpl implements TarotReadingService {
     private final ChatSessionRepository chatSessionRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final AIUsageTrackingService aiUsageTrackingService;
+    private final SubscriptionService subscriptionService;
 
     @org.springframework.beans.factory.annotation.Value("${ai.chat.max-context-tokens:6000}")
     private int maxContextTokens;
 
     @Override
     public TarotReadingResultDTO initiateAiTarotReading(User user, StartTarotReadingRequest request) {
+        requireAiQuota(user);
+
         // Step 1: Validate user (already provided from authenticated context)
 
         // Step 2: Draw cards (pure logic, no reading entity needed)
@@ -105,6 +110,7 @@ public class TarotReadingServiceImpl implements TarotReadingService {
 
         LLMResponse llmResponse = aiTarotService.generateInterpretation(promptRequest);
         log.info("Gemini interpretation received. Model: {}", llmResponse.getModelInfo());
+        recordAiQuota(user);
 
         // Step 6: Persist reading and cards (inside @Transactional)
         TarotReadingResultDTO result = saveReadingAndReturnResult(user, request, enrichedCards, llmResponse);
@@ -136,6 +142,7 @@ public class TarotReadingServiceImpl implements TarotReadingService {
             Consumer<TarotReadingService.StreamReadingResult> onComplete) {
         try {
             log.debug("Stream request: userId={}, numberOfCards={}", user.getId(), request.getNumberOfCards());
+            requireAiQuota(user);
 
             // Step 1: Draw cards (pure logic, no transaction)
             List<CardDrawDTO> drawnCardDtos = tarotDrawingService.drawCards(
@@ -183,6 +190,7 @@ public class TarotReadingServiceImpl implements TarotReadingService {
                                     enrichedCards,
                                     fullContent.toString(),
                                     completion);
+                            recordAiQuota(user);
 
                             // Step 7: Notify completion with result
                             LLMTokenUsage tokenUsage = completion.getTokenUsage();
@@ -542,5 +550,22 @@ public class TarotReadingServiceImpl implements TarotReadingService {
                         r.getSessionType() != null ? r.getSessionType().name() : null,
                         r.getAiModelUsed(),
                         r.getCreatedAt()));
+    }
+
+    private void requireAiQuota(User user) {
+        if (!subscriptionService.canUseAI(user.getId())) {
+            throw new QuotaExceededException(
+                    "Đã hết lượt dùng AI hôm nay. Nâng cấp gói hoặc đợi làm mới lúc 00:00 (giờ VN).");
+        }
+    }
+
+    private void recordAiQuota(User user) {
+        try {
+            subscriptionService.recordAIUsage(user.getId());
+        } catch (QuotaExceededException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.warn("Ghi nhận hạn mức AI thất bại user={}: {}", user.getId(), ex.getMessage());
+        }
     }
 }

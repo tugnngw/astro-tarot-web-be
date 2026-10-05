@@ -18,6 +18,7 @@ import com.exe.astratarot.repository.TarotReadingRepository;
 import com.exe.astratarot.service.AITarotService;
 import com.exe.astratarot.service.AIUsageTrackingService;
 import com.exe.astratarot.service.AstrologyContextService;
+import com.exe.astratarot.service.SubscriptionService;
 import com.exe.astratarot.service.TarotDrawingService;
 import com.exe.astratarot.service.TarotReadingService;
 import lombok.extern.slf4j.Slf4j;
@@ -76,6 +77,9 @@ class TarotReadingServiceStreamTest {
     @Mock
     private AIUsageTrackingService aiUsageTrackingService;
 
+    @Mock
+    private SubscriptionService subscriptionService;
+
     private com.exe.astratarot.service.impl.TarotReadingServiceImpl tarotReadingService;
 
     private static final UUID TEST_USER_ID = UUID.randomUUID();
@@ -94,8 +98,10 @@ class TarotReadingServiceStreamTest {
                 astrologyContextService,
                 chatSessionRepository,
                 chatMessageRepository,
-                aiUsageTrackingService
+                aiUsageTrackingService,
+                subscriptionService
         );
+        lenient().when(subscriptionService.canUseAI(any())).thenReturn(true);
     }
 
     @Test

@@ -77,16 +77,18 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             throw new IllegalArgumentException("Plan is not active");
         }
 
-        UserPlanPurchase.PurchaseType purchaseType = request.getPurchaseType() != null
-                ? request.getPurchaseType()
-                : UserPlanPurchase.PurchaseType.MANUAL;
-
         long price = plan.getPrice() != null ? plan.getPrice() : 0L;
-
-        // Gói miễn phí: kích hoạt ngay
-        if (price <= 0) {
-            return activatePurchase(user, plan, UserPlanPurchase.PurchaseType.MANUAL);
+        if (price <= 0 || plan.getPlanType() == SubscriptionPlan.PlanType.FREE) {
+            throw new IllegalArgumentException(
+                    "Gói miễn phí là mặc định (" + FREE_DAILY_QUOTA + " lượt/ngày), không cần đăng ký.");
         }
+
+        if (request.getPurchaseType() == null) {
+            throw new IllegalArgumentException("Thiếu phương thức thanh toán.");
+        }
+        UserPlanPurchase.PurchaseType purchaseType = request.getPurchaseType();
+
+        assertMayAcquirePlan(userId, plan);
 
         return switch (purchaseType) {
             case WALLET -> {
@@ -95,7 +97,13 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 yield activatePurchase(user, plan, UserPlanPurchase.PurchaseType.WALLET);
             }
             case PAYOS -> createPayOsCheckout(user, plan);
-            case MANUAL -> activatePurchase(user, plan, UserPlanPurchase.PurchaseType.MANUAL);
+            case MANUAL -> {
+                if (!SecurityUtils.isAdmin()) {
+                    throw new IllegalArgumentException(
+                            "Chỉ quản trị viên mới có thể gán gói thủ công.");
+                }
+                yield activatePurchase(user, plan, UserPlanPurchase.PurchaseType.MANUAL);
+            }
             case STRIPE -> throw new IllegalArgumentException(
                     "Thanh toán thẻ quốc tế chưa được hỗ trợ. Vui lòng dùng Ví hoặc PayOS.");
         };
@@ -108,7 +116,62 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         SubscriptionPlan plan = subscriptionPlanRepository.findById(planId)
                 .orElseThrow(() -> new ResourceNotFoundException("Plan not found"));
+        assertMayAcquirePlan(userId, plan);
         return activatePurchase(user, plan, UserPlanPurchase.PurchaseType.PAYOS);
+    }
+
+    /**
+     * Một gói tháng đang active → chỉ cho nâng cấp (quota hoặc giá cao hơn).
+     * Không cho mua lại cùng planId. DAY_PASS vẫn mua thêm được.
+     */
+    private void assertMayAcquirePlan(UUID userId, SubscriptionPlan plan) {
+        List<UserPlanPurchase> active = listTrulyActivePurchases(userId);
+
+        boolean samePlan = active.stream().anyMatch(p -> plan.getId().equals(p.getPlanId()));
+        if (samePlan) {
+            throw new IllegalArgumentException("Bạn đang dùng gói này rồi.");
+        }
+
+        if (plan.getPlanType() != SubscriptionPlan.PlanType.MONTHLY) {
+            return;
+        }
+
+        Optional<UserPlanPurchase> currentMonthly = active.stream()
+                .filter(p -> resolvePlanType(p) == SubscriptionPlan.PlanType.MONTHLY)
+                .findFirst();
+
+        if (currentMonthly.isEmpty()) {
+            return;
+        }
+
+        UserPlanPurchase cur = currentMonthly.get();
+        int curQuota = cur.getDailyQuotaSnapshot() != null ? cur.getDailyQuotaSnapshot() : 0;
+        long curPrice = cur.getPriceSnapshot() != null ? cur.getPriceSnapshot() : 0L;
+        int newQuota = plan.getDailyQuota() != null ? plan.getDailyQuota() : 0;
+        long newPrice = plan.getPrice() != null ? plan.getPrice() : 0L;
+
+        boolean upgrade = newQuota > curQuota || newPrice > curPrice;
+        if (!upgrade) {
+            throw new IllegalArgumentException(
+                    "Bạn đang có gói tháng đang hiệu lực. Chỉ được nâng cấp lên gói có hạn mức hoặc giá cao hơn.");
+        }
+    }
+
+    private List<UserPlanPurchase> listTrulyActivePurchases(UUID userId) {
+        return userPlanPurchaseRepository
+                .findByUserIdAndStatus(userId, UserPlanPurchase.PurchaseStatus.ACTIVE)
+                .stream()
+                .filter(UserPlanPurchase::isActive)
+                .toList();
+    }
+
+    private SubscriptionPlan.PlanType resolvePlanType(UserPlanPurchase purchase) {
+        if (purchase.getPlan() != null && purchase.getPlan().getPlanType() != null) {
+            return purchase.getPlan().getPlanType();
+        }
+        return subscriptionPlanRepository.findById(purchase.getPlanId())
+                .map(SubscriptionPlan::getPlanType)
+                .orElse(null);
     }
 
     private AIPlanResponse activatePurchase(User user, SubscriptionPlan plan,
@@ -294,12 +357,15 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     // 6. Extend previous packages to SUPERSEDED
     // ------------------------------------------------------------
     private void extendPreviousPackages(UUID userId, UUID newPurchaseId, SubscriptionPlan.PlanType newPlanType) {
+        if (newPlanType != SubscriptionPlan.PlanType.MONTHLY) {
+            return;
+        }
+
         List<UserPlanPurchase> previousPurchases = userPlanPurchaseRepository.findByUserIdAndIdNotAndStatus(
                 userId, newPurchaseId, UserPlanPurchase.PurchaseStatus.ACTIVE);
 
         for (UserPlanPurchase purchase : previousPurchases) {
-            if (purchase.getPlan() != null && purchase.getPlan().getPlanType() == newPlanType
-                    && newPlanType == SubscriptionPlan.PlanType.MONTHLY) {
+            if (resolvePlanType(purchase) == SubscriptionPlan.PlanType.MONTHLY) {
                 purchase.setStatus(UserPlanPurchase.PurchaseStatus.SUPERSEDED);
                 userPlanPurchaseRepository.save(purchase);
 

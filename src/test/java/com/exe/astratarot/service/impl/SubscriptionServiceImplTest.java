@@ -113,6 +113,9 @@ class SubscriptionServiceImplTest {
         mockedSecurityUtils.when(SecurityUtils::getCurrentUserUUID).thenReturn(userId);
         mockedSecurityUtils.when(SecurityUtils::getCurrentUserId).thenReturn(userId.toString());
         mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(true);
+
+        when(userPlanPurchaseRepository.findByUserIdAndStatus(eq(userId),
+                eq(UserPlanPurchase.PurchaseStatus.ACTIVE))).thenReturn(List.of());
     }
 
     @AfterEach
@@ -225,6 +228,55 @@ class SubscriptionServiceImplTest {
         when(subscriptionPlanRepository.findById(planId)).thenReturn(Optional.of(standardPlan));
 
         CreatePurchaseRequest request = new CreatePurchaseRequest(planId, UserPlanPurchase.PurchaseType.STRIPE);
+        assertThrows(IllegalArgumentException.class, () -> subscriptionService.createPurchase(userId, request));
+    }
+
+    @Test
+    @DisplayName("Không cho mua lại gói tháng ngang/thấp hơn khi đang có gói tháng")
+    void createPurchase_MonthlyDowngrade_Rejected() {
+        SubscriptionPlan cheaper = SubscriptionPlan.builder()
+                .id(UUID.randomUUID())
+                .name("Basic")
+                .planType(SubscriptionPlan.PlanType.MONTHLY)
+                .dailyQuota(10)
+                .price(99000L)
+                .durationDays(30)
+                .isActive(true)
+                .build();
+
+        Instant now = Instant.now();
+        UserPlanPurchase existing = UserPlanPurchase.builder()
+                .id(UUID.randomUUID())
+                .userId(userId)
+                .planId(planId)
+                .plan(standardPlan)
+                .dailyQuotaSnapshot(20)
+                .priceSnapshot(199000L)
+                .status(UserPlanPurchase.PurchaseStatus.ACTIVE)
+                .startAt(Timestamp.from(now.minus(1, ChronoUnit.DAYS)))
+                .endAt(Timestamp.from(now.plus(20, ChronoUnit.DAYS)))
+                .build();
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(subscriptionPlanRepository.findById(cheaper.getId())).thenReturn(Optional.of(cheaper));
+        when(userPlanPurchaseRepository.findByUserIdAndStatus(userId, UserPlanPurchase.PurchaseStatus.ACTIVE))
+                .thenReturn(List.of(existing));
+
+        CreatePurchaseRequest request = new CreatePurchaseRequest(cheaper.getId(), UserPlanPurchase.PurchaseType.WALLET);
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> subscriptionService.createPurchase(userId, request));
+        assertTrue(ex.getMessage().contains("nâng cấp"));
+        verify(walletService, never()).debit(any(), anyLong(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("User thường không được MANUAL activate")
+    void createPurchase_ManualAsUser_Rejected() {
+        mockedSecurityUtils.when(SecurityUtils::isAdmin).thenReturn(false);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(subscriptionPlanRepository.findById(planId)).thenReturn(Optional.of(standardPlan));
+
+        CreatePurchaseRequest request = new CreatePurchaseRequest(planId, UserPlanPurchase.PurchaseType.MANUAL);
         assertThrows(IllegalArgumentException.class, () -> subscriptionService.createPurchase(userId, request));
     }
 

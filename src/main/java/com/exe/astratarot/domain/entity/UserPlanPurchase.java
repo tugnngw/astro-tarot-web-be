@@ -75,9 +75,10 @@ public class UserPlanPurchase {
     }
 
     public boolean isActive() {
-        return status == PurchaseStatus.ACTIVE &&
-               Instant.now().isBefore(endAt.toInstant()) &&
-               Instant.now().isAfter(startAt.toInstant());
+        Instant now = Instant.now();
+        return status == PurchaseStatus.ACTIVE
+                && !now.isBefore(startAt.toInstant())
+                && now.isBefore(endAt.toInstant());
     }
 
     public int getRemainingDays() {

@@ -12,6 +12,7 @@ import com.exe.astratarot.repository.UserRepository;
 import com.exe.astratarot.service.AITarotService;
 import com.exe.astratarot.service.AIUsageTrackingService;
 import com.exe.astratarot.service.AstrologyContextService;
+import com.exe.astratarot.service.SubscriptionService;
 import com.exe.astratarot.service.TarotDrawingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -58,6 +59,7 @@ class TarotReadingServiceImplHistoryTest {
     @Mock private ChatSessionRepository chatSessionRepository;
     @Mock private ChatMessageRepository chatMessageRepository;
     @Mock private AIUsageTrackingService aiUsageTrackingService;
+    @Mock private SubscriptionService subscriptionService;
 
     private TarotReadingServiceImpl service;
 
@@ -68,7 +70,7 @@ class TarotReadingServiceImplHistoryTest {
         service = new TarotReadingServiceImpl(userRepository, tarotCardRepository,
                 tarotReadingRepository, readingCardRepository, tarotDrawingService,
                 aiTarotService, astrologyContextService, chatSessionRepository,
-                chatMessageRepository, aiUsageTrackingService);
+                chatMessageRepository, aiUsageTrackingService, subscriptionService);
 
         khach = User.builder().id(UUID.randomUUID()).build();
     }
