@@ -1,5 +1,9 @@
 package com.exe.astratarot.service.impl;
 
+import com.exe.astratarot.repository.UserAstrologicalDataRepository;
+import com.exe.astratarot.domain.enums.UserStatus;
+import com.exe.astratarot.domain.entity.UserAstrologicalData;
+import com.exe.astratarot.domain.dto.user.DeleteAccountRequest;
 import com.exe.astratarot.domain.dto.user.ChangePasswordRequest;
 import com.exe.astratarot.domain.dto.user.UpdateProfileRequest;
 import com.exe.astratarot.domain.entity.User;
@@ -34,6 +38,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -67,6 +74,7 @@ class UserProfileServiceImplTest {
     @Mock private UserRepository userRepository;
     @Mock private UserSessionRepository userSessionRepository;
     @Mock private UserAvatarRepository userAvatarRepository;
+    @Mock private UserAstrologicalDataRepository userAstrologicalDataRepository;
 
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -76,7 +84,7 @@ class UserProfileServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new UserProfileServiceImpl(userRepository, userSessionRepository,
-                passwordEncoder, userAvatarRepository);
+                passwordEncoder, userAvatarRepository, userAstrologicalDataRepository);
         ReflectionTestUtils.setField(service, "uploadDir", "uploads");
 
         nguoiDung = new User();
@@ -398,6 +406,156 @@ class UserProfileServiceImplTest {
             // Báo "mật khẩu hiện tại không đúng" ở đây là bắt người ta đoán mãi
             // một thứ chưa từng tồn tại.
             assertTrue(loi.getMessage().contains("Google"));
+        }
+    }
+
+    // =====================================================================
+    // Tự xoá tài khoản
+    // =====================================================================
+
+    @Nested
+    @DisplayName("Tự xoá tài khoản")
+    class TuXoaTaiKhoan {
+
+        private final DeleteAccountRequest dung =
+                new DeleteAccountRequest("matkhaucu123");
+
+        @Test
+        @DisplayName("Sai mật khẩu thì không xoá gì cả")
+        void saiMatKhau() {
+            assertThrows(InvalidCredentialsException.class,
+                    () -> service.deleteOwnAccount(nguoiDung.getId(),
+                            new DeleteAccountRequest("matkhausai")));
+
+            // Quan trọng hơn cả việc ném lỗi: phải chắc chắn KHÔNG có gì bị
+            // đụng tới. Một bản vá sau này đặt nhầm thứ tự lệnh có thể xoá
+            // trước rồi mới kiểm mật khẩu.
+            assertNull(nguoiDung.getDeletedAt());
+            verify(userAstrologicalDataRepository, never()).deleteAll(any());
+            verify(userAvatarRepository, never()).deleteById(any());
+        }
+
+        @Test
+        @DisplayName("Tài khoản Google chưa đặt mật khẩu thì chỉ đường khác")
+        void taiKhoanGoogle() {
+            nguoiDung.setPasswordHash(null);
+            var loi = assertThrows(InvalidCredentialsException.class,
+                    () -> service.deleteOwnAccount(nguoiDung.getId(), dung));
+            assertTrue(loi.getMessage().contains("quên mật khẩu"));
+            assertNull(nguoiDung.getDeletedAt());
+        }
+
+        @Test
+        @DisplayName("Quản trị viên cuối cùng không tự xoá được")
+        void quanTriVienCuoiCung() {
+            nguoiDung.setRole(UserRole.ADMIN);
+            when(userRepository.countByRoleAndDeletedAtIsNull(UserRole.ADMIN)).thenReturn(1L);
+
+            var loi = assertThrows(IllegalArgumentException.class,
+                    () -> service.deleteOwnAccount(nguoiDung.getId(), dung));
+            assertTrue(loi.getMessage().contains("quản trị viên duy nhất"));
+            assertNull(nguoiDung.getDeletedAt());
+        }
+
+        @Test
+        @DisplayName("Còn quản trị viên khác thì xoá được")
+        void conQuanTriVienKhac() {
+            nguoiDung.setRole(UserRole.ADMIN);
+            when(userRepository.countByRoleAndDeletedAtIsNull(UserRole.ADMIN)).thenReturn(2L);
+
+            service.deleteOwnAccount(nguoiDung.getId(), dung);
+            assertNotNull(nguoiDung.getDeletedAt());
+        }
+
+        @Test
+        @DisplayName("Xoá MỀM hàng users, không xoá cứng")
+        void xoaMemHangUsers() {
+            service.deleteOwnAccount(nguoiDung.getId(), dung);
+
+            assertAll(
+                    () -> assertNotNull(nguoiDung.getDeletedAt()),
+                    () -> assertEquals(UserStatus.INACTIVE, nguoiDung.getStatus()),
+                    // Hàng vẫn còn: bookings, reviews và payment_transactions
+                    // đều trỏ tới nó.
+                    () -> verify(userRepository, never()).delete(any(User.class)),
+                    () -> verify(userRepository, never()).deleteById(any()));
+        }
+
+        @Test
+        @DisplayName("Gỡ sạch thông tin cá nhân trên hàng được giữ lại")
+        void goThongTinCaNhan() {
+            service.deleteOwnAccount(nguoiDung.getId(), dung);
+
+            assertAll(
+                    () -> assertEquals("Người dùng đã xoá", nguoiDung.getFullName()),
+                    () -> assertNull(nguoiDung.getPhone()),
+                    () -> assertNull(nguoiDung.getBio()),
+                    () -> assertNull(nguoiDung.getAddress()),
+                    () -> assertNull(nguoiDung.getCity()),
+                    () -> assertNull(nguoiDung.getCountry()),
+                    () -> assertNull(nguoiDung.getAvatar()),
+                    // Email đổi chứ không để trống: cột này NOT NULL và UNIQUE,
+                    // để trống thì người thứ hai xoá tài khoản sẽ đụng khoá
+                    // trùng.
+                    () -> assertTrue(nguoiDung.getEmail().endsWith("@da-xoa.invalid")),
+                    () -> assertFalse(nguoiDung.getEmail().contains("khach@example.com")));
+        }
+
+        @Test
+        @DisplayName("Email cũ được trả lại để đăng ký lại được")
+        void traLaiEmailCu() {
+            String emailCu = nguoiDung.getEmail();
+            service.deleteOwnAccount(nguoiDung.getId(), dung);
+
+            // Giữ nguyên email trên hàng đã xoá thì người ta vĩnh viễn không
+            // dùng lại được chính địa chỉ của mình để đăng ký.
+            assertNotEquals(emailCu, nguoiDung.getEmail());
+        }
+
+        @Test
+        @DisplayName("Xoá HẲN hồ sơ chiêm tinh và ảnh đại diện")
+        void xoaHanDuLieuRiengTu() {
+            var hoSo = new UserAstrologicalData();
+            when(userAstrologicalDataRepository.findAllByUserId(nguoiDung.getId()))
+                    .thenReturn(List.of(hoSo));
+
+            service.deleteOwnAccount(nguoiDung.getId(), dung);
+
+            // Ngày sinh, giờ sinh, nơi sinh kèm toạ độ là dữ liệu định danh
+            // mạnh nhất app nắm giữ, và không bản ghi nào khác trỏ tới nó.
+            verify(userAstrologicalDataRepository).deleteAll(List.of(hoSo));
+            verify(userAvatarRepository).deleteById(nguoiDung.getId());
+        }
+
+        @Test
+        @DisplayName("Thu hồi mọi phiên đang mở")
+        void thuHoiPhien() {
+            var phien = new UserSession();
+            phien.setRevoked(false);
+            when(userSessionRepository.findByUserIdAndRevokedFalse(nguoiDung.getId()))
+                    .thenReturn(List.of(phien));
+
+            service.deleteOwnAccount(nguoiDung.getId(), dung);
+
+            assertTrue(phien.getRevoked());
+        }
+
+        @Test
+        @DisplayName("Xoá mã đặt lại mật khẩu, không để đường vào tài khoản đã xoá")
+        void xoaMaDatLaiMatKhau() {
+            nguoiDung.setPasswordResetToken("ma-cu");
+            nguoiDung.setEmailVerificationToken("ma-xac-minh");
+
+            service.deleteOwnAccount(nguoiDung.getId(), dung);
+
+            assertAll(
+                    () -> assertNull(nguoiDung.getPasswordResetToken()),
+                    () -> assertNull(nguoiDung.getEmailVerificationToken()),
+                    // Băm mật khẩu phải khác null: null mang nghĩa "tài khoản
+                    // Google chưa đặt mật khẩu" ở chỗ khác trong mã.
+                    () -> assertNotNull(nguoiDung.getPasswordHash()),
+                    () -> assertFalse(passwordEncoder.matches("matkhaucu123",
+                            nguoiDung.getPasswordHash())));
         }
     }
 }
