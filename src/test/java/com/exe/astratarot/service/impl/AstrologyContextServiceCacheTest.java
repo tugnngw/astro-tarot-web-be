@@ -185,8 +185,9 @@ class AstrologyContextServiceCacheTest {
         assertEquals("Fire", dto.getElement());
         assertEquals("Cardinal", dto.getModality());
 
-        // Future fields should be NULL in MVP
-        assertNull(dto.getMoonSign());
+        // Moon ước lượng từ ngày/giờ — không còn null
+        assertNotNull(dto.getMoonSign());
+        assertFalse(dto.getMoonSign().isBlank());
         assertNull(dto.getRisingSign());
         assertNull(dto.getNatalPlanetPositions());
         assertNull(dto.getNatalAspects());
