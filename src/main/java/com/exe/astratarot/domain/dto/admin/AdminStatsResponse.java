@@ -72,7 +72,13 @@ public record AdminStatsResponse(
     /**
      * @param pendingReports báo cáo vi phạm chờ xử lý
      */
-    public record ModerationStats(long pendingReports) {}
+    /**
+     * @param pendingReports   báo cáo vi phạm chờ xử lý (tố cáo NGƯỜI)
+     * @param pendingAiReports báo cáo nội dung AI chờ xử lý — việc khác hẳn:
+     *                         kỷ luật một tài khoản, với sửa một lời nhắc của
+     *                         mô hình
+     */
+    public record ModerationStats(long pendingReports, long pendingAiReports) {}
 
     /**
      * @param activeProducts   sản phẩm đang bán có gắn link liên kết

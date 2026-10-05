@@ -1,5 +1,7 @@
 package com.exe.astratarot.controller;
 
+import com.exe.astratarot.service.BaoCaoNoiDungAiService;
+import com.exe.astratarot.domain.dto.ai.BaoCaoNoiDungAiRequest;
 import com.exe.astratarot.domain.dto.common.ApiResponse;
 import com.exe.astratarot.domain.dto.llm.LLMTokenUsage;
 import com.exe.astratarot.domain.dto.reading.StartTarotReadingRequest;
@@ -38,6 +40,26 @@ import java.util.Map;
 public class AIReadingController {
 
     private final TarotReadingService tarotReadingService;
+    private final BaoCaoNoiDungAiService baoCaoNoiDungAiService;
+
+    /**
+     * Báo một lời giải do AI sinh là không ổn.
+     *
+     * <p>Chính sách AI tạo sinh của CH Play buộc ứng dụng có nội dung do AI
+     * sinh phải cho người dùng báo cáo ngay trong ứng dụng. Trước đây app
+     * không có đường nào, và đó là một lý do bị từ chối.
+     *
+     * <p>Luôn trả 200 kể cả khi người dùng bấm lại lần hai — với họ thì lần
+     * nào cũng là "đã báo rồi", báo một lỗi đỏ ở đây chỉ gây hoang mang.
+     */
+    @PostMapping("/reports")
+    public ResponseEntity<ApiResponse<Void>> baoCaoNoiDung(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody BaoCaoNoiDungAiRequest request) {
+        baoCaoNoiDungAiService.bao(userDetails.getUser(), request);
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đã nhận báo cáo. Cảm ơn bạn đã giúp chúng tôi cải thiện.", null));
+    }
 
     /**
      * Initiates an AI Tarot reading (synchronous, blocking).
