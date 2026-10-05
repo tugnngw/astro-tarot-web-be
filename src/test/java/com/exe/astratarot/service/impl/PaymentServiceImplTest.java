@@ -48,6 +48,12 @@ class PaymentServiceImplTest {
     private EscrowService escrowService;
 
     @Mock
+    private com.exe.astratarot.service.WalletService walletService;
+
+    @Mock
+    private com.exe.astratarot.service.SubscriptionService subscriptionService;
+
+    @Mock
     private NotificationService notificationService;
 
     @Mock

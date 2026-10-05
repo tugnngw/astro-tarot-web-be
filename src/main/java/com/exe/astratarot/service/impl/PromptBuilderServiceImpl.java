@@ -69,8 +69,24 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
         return LLMRequest.builder()
                 .systemInstruction(sys.toString())
                 .messages(messages)
+                .maxTokens(GIOI_HAN_TOKEN_TRA_LOI)
                 .build();
     }
+
+    /**
+     * Trần token cho một lời giải.
+     *
+     * <p>Trước đây KHÔNG đặt trần nào: {@code LLMRequest.maxTokens} để null ở
+     * mọi nơi, nên {@code GeminiProvider} bỏ hẳn {@code maxOutputTokens} khỏi
+     * generationConfig và mô hình viết tới khi nào nó muốn dừng. Hỏi "hôm nay
+     * tôi có may mắn không" mà nhận về năm đoạn văn.
+     *
+     * <p>1200 token xấp xỉ 700–800 từ tiếng Việt — đủ cho một lời giải ba lá
+     * có chiều sâu, mà vẫn chặn được những bài luận lan man. Đây là trần cứng,
+     * phần hướng dẫn trong lời nhắc mới là thứ định độ dài thường ngày; trần
+     * chỉ để chặn trường hợp mô hình quên mất mình đang nói gì.
+     */
+    private static final int GIOI_HAN_TOKEN_TRA_LOI = 1200;
 
     @Override
     @Deprecated
@@ -158,8 +174,8 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
                 - Các lá còn lại chỉ dùng để hỗ trợ, không phân tích riêng
 
                 VIẾT NHƯ ĐANG NÓI CHUYỆN:
-                - "Mình thấy...", "Có vẻ như...", "Điều mình để ý là..."
-                - "Nếu nhìn theo góc độ này...", "Mình nghĩ điều đáng quan tâm nhất là..."
+                - Nói thẳng, gần gũi — như đang chat, không như đang viết luận.
+                - Không dùng câu mở đầu khuôn mẫu. Mỗi lần trả lời mở khác nhau.
 
                 KHÔNG: Giảng nghĩa lá bài — Lặp tên lá bài — Mở đầu/kết luận dài
                 KHÔNG: "Ultimately", "In conclusion", "Bringing it all together"
@@ -169,7 +185,6 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
                 TRÁNH GIỌNG HUYỀN BÍ:
                 KHÔNG dùng: "Mình nhìn thấy...", "Mình cảm nhận được năng lượng..."
                 "Các lá bài đang muốn nhắn nhủ...", "Vũ trụ đang nói với bạn..."
-                THAY BẰNG: "Mình thấy...", "Có vẻ như...", "Nếu nhìn từ trải bài này..."
 
                 ---
 
@@ -188,8 +203,8 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
                 - Dùng chiêm tinh như một công cụ để thấu hiểu, không phải để tiên đoán
 
                 VIẾT NHƯ ĐANG NÓI CHUYỆN:
-                - "Mình thấy...", "Có vẻ như...", "Điều mình để ý là..."
-                - "Mặt Trời của bạn đang ở...", "Điều thú vị trong biểu đồ của bạn là..."
+                - Nói thẳng, gần gũi — như đang chat, không như đang viết luận.
+                - Không dùng câu mở đầu khuôn mẫu. Mỗi lần trả lời mở khác nhau.
 
                 KHÔNG: Giảng nghĩa các cung/hành tinh — Lặp tên các vị trí
                 KHÔNG: "Ultimately", "In conclusion", "Bringing it all together"
@@ -379,13 +394,21 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
 
     private String buildTarotResponseInstructions() {
         return """
+                ĐỘ DÀI — ĐÂY LÀ RÀNG BUỘC CỨNG:
+                - Câu hỏi ngắn, hỏi có/không, hỏi về một ngày: 60-100 từ. Hai đoạn là nhiều.
+                - Câu hỏi về một tình huống cụ thể: 150-250 từ.
+                - Chỉ vượt 250 từ khi người dùng hỏi nhiều ý rõ rệt trong cùng một câu.
+                - KHÔNG BAO GIỜ quá 400 từ.
+                - Người đọc trên điện thoại. Năm đoạn văn cho một câu hỏi đơn giản là thất bại,
+                  dù từng đoạn viết hay đến đâu.
+
                 CÁCH TRẢ LỜI:
-                - Trả lời trực tiếp câu hỏi trước.
-                - Sau đó giải thích các điểm quan trọng liên quan.
-                - Khi câu hỏi cần phân tích nhiều khía cạnh, hãy phân tích đủ các khía cạnh đó.
-                - Không cố kéo dài câu trả lời chỉ để tăng độ dài.
-                - Không cắt ngắn câu trả lời khi vẫn còn thông tin quan trọng cần giải thích.
-                - Ưu tiên chất lượng, chiều sâu và tính liên quan hơn độ dài cố định.
+                - CÂU ĐẦU TIÊN phải là câu trả lời thẳng cho đúng câu họ hỏi.
+                  Họ hỏi "hôm nay có may mắn không" thì câu đầu phải nói có hoặc không,
+                  rồi mới giải thích. Đừng mở bài, đừng dẫn dắt, đừng mô tả lá bài trước.
+                - Sau đó tối đa hai ý giải thích. Chọn ý mạnh nhất, bỏ phần còn lại.
+                - Thà bỏ sót một ý hay còn hơn chôn câu trả lời dưới bốn đoạn văn.
+                - Kết bằng một câu gợi mở hoặc một việc cụ thể họ làm được hôm nay.
 
                 TÍNH CHÍNH XÁC:
                 - Chỉ sử dụng dữ liệu được cung cấp trong context.
@@ -396,11 +419,15 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
 
                 GIỌNG NÓI:
                 - Nói chuyện tự nhiên như đang trò chuyện, không viết luận.
-                - Có thể dùng: "Mình thấy ở đây có một điểm khá rõ...", "Điểm mình chú ý nhất là..."
-                - Không lặp lại cùng một mẫu câu mở đầu.
+                - Câu ngắn. Tránh câu ghép ba bốn mệnh đề nối bằng dấu phẩy.
+                - Không triết lý. Nói thẳng điều người ta cần biết.
                 - Không ép phải có cấu trúc giống nhau cho mọi câu trả lời.
 
                 CẤM TUYỆT ĐỐI:
+                - Mở đầu bằng "Mình thấy ở đây có một điểm khá rõ" hoặc bất kỳ biến thể nào
+                  của nó. Câu ấy từng nằm trong hướng dẫn này làm ví dụ, và mô hình chép
+                  nguyên văn ở gần như mọi câu trả lời.
+                - Mở đầu bằng cách gọi tên người dùng rồi xuống dòng. Vào thẳng nội dung.
                 - Giải nghĩa lá bài từ A-Z. KHÔNG viết kiểu: "Eight of Swords là lá bài của..."
                 - Lặp tên lá bài
                 - "Ultimately" / "In conclusion" / "Bringing it all together"
@@ -415,13 +442,16 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
 
     private String buildAstrologyResponseInstructions() {
         return """
+                ĐỘ DÀI — ĐÂY LÀ RÀNG BUỘC CỨNG:
+                - Câu hỏi ngắn, hỏi có/không, hỏi về một ngày: 60-100 từ. Hai đoạn là nhiều.
+                - Câu hỏi về một tình huống cụ thể: 150-250 từ.
+                - KHÔNG BAO GIỜ quá 400 từ.
+                - Người đọc trên điện thoại. Năm đoạn văn cho một câu hỏi đơn giản là thất bại.
+
                 CÁCH TRẢ LỜI:
-                - Trả lời trực tiếp câu hỏi trước.
-                - Sau đó giải thích các điểm quan trọng liên quan.
-                - Khi câu hỏi cần phân tích nhiều khía cạnh, hãy phân tích đủ các khía cạnh đó.
-                - Không cố kéo dài câu trả lời chỉ để tăng độ dài.
-                - Không cắt ngắn câu trả lời khi vẫn còn thông tin quan trọng cần giải thích.
-                - Ưu tiên chất lượng, chiều sâu và tính liên quan hơn độ dài cố định.
+                - CÂU ĐẦU TIÊN phải là câu trả lời thẳng cho đúng câu họ hỏi, rồi mới giải thích.
+                - Sau đó tối đa hai ý. Chọn ý mạnh nhất, bỏ phần còn lại.
+                - Kết bằng một câu gợi mở hoặc một việc cụ thể họ làm được.
 
                 TÍNH CHÍNH XÁC:
                 - Chỉ sử dụng dữ liệu được cung cấp trong context.
@@ -433,11 +463,15 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
 
                 GIỌNG NÓI:
                 - Nói chuyện tự nhiên như đang trò chuyện, không viết luận.
-                - Có thể dùng: "Mình thấy ở đây có một điểm khá rõ...", "Điểm mình chú ý nhất là..."
-                - Không lặp lại cùng một mẫu câu mở đầu.
+                - Câu ngắn. Tránh câu ghép ba bốn mệnh đề nối bằng dấu phẩy.
+                - Không triết lý. Nói thẳng điều người ta cần biết.
                 - Không ép phải có cấu trúc giống nhau cho mọi câu trả lời.
 
                 CẤM TUYỆT ĐỐI:
+                - Mở đầu bằng "Mình thấy ở đây có một điểm khá rõ" hoặc biến thể của nó.
+                  Câu ấy từng nằm trong hướng dẫn này làm ví dụ, và mô hình chép nguyên văn
+                  ở gần như mọi câu trả lời.
+                - Mở đầu bằng cách gọi tên người dùng rồi xuống dòng. Vào thẳng nội dung.
                 - Giải nghĩa từng vị trí hành tinh một cách máy móc
                 - "Ultimately" / "In conclusion" / "Bringing it all together"
                 - Giọng huyền bí: "Mình nhìn thấy...", "Cảm nhận năng lượng..."

@@ -1,28 +1,43 @@
 package com.exe.astratarot.service.impl;
 
+import com.exe.astratarot.config.PayOsConfig.PayOsClient;
+import com.exe.astratarot.config.PayOsProperties;
 import com.exe.astratarot.config.security.SecurityUtils;
 import com.exe.astratarot.domain.dto.ai.*;
 import com.exe.astratarot.domain.entity.*;
+import com.exe.astratarot.domain.enums.PaymentPhase;
 import com.exe.astratarot.domain.enums.TargetType;
+import com.exe.astratarot.domain.enums.TransactionStatus;
 import com.exe.astratarot.domain.enums.WalletTransactionType;
 import com.exe.astratarot.exception.QuotaExceededException;
 import com.exe.astratarot.exception.ResourceNotFoundException;
 import com.exe.astratarot.repository.*;
 import com.exe.astratarot.service.SubscriptionService;
 import com.exe.astratarot.service.WalletService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import vn.payos.model.v2.paymentRequests.CreatePaymentLinkRequest;
+import vn.payos.model.v2.paymentRequests.CreatePaymentLinkResponse;
 
+import java.security.SecureRandom;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SubscriptionServiceImpl implements SubscriptionService {
@@ -36,6 +51,15 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final PlanChangeAuditLogRepository auditLogRepository;
     private final UserRepository userRepository;
     private final WalletService walletService;
+    private final PaymentTransactionRepository paymentTransactionRepository;
+    private final PayOsClient payOsClient;
+    private final PayOsProperties payOsProperties;
+    private final ObjectMapper objectMapper;
+
+    private final SecureRandom secureRandom = new SecureRandom();
+
+    @Value("${app.frontend-url:http://localhost:8081}")
+    private String frontendUrl;
 
     // ------------------------------------------------------------
     // 1. Create new purchase for user (snapshots plan data)
@@ -57,18 +81,43 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 ? request.getPurchaseType()
                 : UserPlanPurchase.PurchaseType.MANUAL;
 
-        // Nếu thanh toán bằng ví và giá gói > 0: trừ tiền trong ví trước
-        if (purchaseType == UserPlanPurchase.PurchaseType.WALLET && plan.getPrice() != null && plan.getPrice() > 0) {
-            walletService.debit(user, plan.getPrice(), WalletTransactionType.AI_SUBSCRIPTION,
-                    plan.getId().toString(), "Mua gói AI " + plan.getName());
+        long price = plan.getPrice() != null ? plan.getPrice() : 0L;
+
+        // Gói miễn phí: kích hoạt ngay
+        if (price <= 0) {
+            return activatePurchase(user, plan, UserPlanPurchase.PurchaseType.MANUAL);
         }
 
-        // Snapshot data at purchase time
+        return switch (purchaseType) {
+            case WALLET -> {
+                walletService.debit(user, price, WalletTransactionType.AI_SUBSCRIPTION,
+                        plan.getId().toString(), "Mua gói AI " + plan.getName());
+                yield activatePurchase(user, plan, UserPlanPurchase.PurchaseType.WALLET);
+            }
+            case PAYOS -> createPayOsCheckout(user, plan);
+            case MANUAL -> activatePurchase(user, plan, UserPlanPurchase.PurchaseType.MANUAL);
+            case STRIPE -> throw new IllegalArgumentException(
+                    "Thanh toán thẻ quốc tế chưa được hỗ trợ. Vui lòng dùng Ví hoặc PayOS.");
+        };
+    }
+
+    @Override
+    @Transactional
+    public AIPlanResponse activatePaidPurchase(UUID userId, UUID planId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        SubscriptionPlan plan = subscriptionPlanRepository.findById(planId)
+                .orElseThrow(() -> new ResourceNotFoundException("Plan not found"));
+        return activatePurchase(user, plan, UserPlanPurchase.PurchaseType.PAYOS);
+    }
+
+    private AIPlanResponse activatePurchase(User user, SubscriptionPlan plan,
+                                            UserPlanPurchase.PurchaseType purchaseType) {
         Instant startAt = Instant.now();
         Instant endAt = startAt.plus(plan.getDurationDays(), ChronoUnit.DAYS);
 
         UserPlanPurchase purchase = UserPlanPurchase.builder()
-                .userId(userId)
+                .userId(user.getId())
                 .planId(plan.getId())
                 .planNameSnapshot(plan.getName())
                 .dailyQuotaSnapshot(plan.getDailyQuota())
@@ -81,17 +130,15 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
         UserPlanPurchase savedPurchase = userPlanPurchaseRepository.save(purchase);
 
-        // Extend / supersede previous packages of the same monthly subscription if applicable
-        extendPreviousPackages(userId, savedPurchase.getId(), plan.getPlanType());
+        extendPreviousPackages(user.getId(), savedPurchase.getId(), plan.getPlanType());
 
-        // Audit log
         auditLogRepository.save(PlanChangeAuditLog.builder()
                 .targetType(TargetType.USER_PURCHASE)
                 .targetId(savedPurchase.getId())
                 .fieldName("STATUS")
                 .oldValue(null)
                 .newValue(savedPurchase.getStatus().name())
-                .changedBy(userId)
+                .changedBy(user.getId())
                 .build());
 
         return AIPlanResponse.builder()
@@ -103,6 +150,82 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .endAt(endAt)
                 .remainingDays(plan.getDurationDays())
                 .isActive(savedPurchase.isActive())
+                .paymentPending(false)
+                .build();
+    }
+
+    /**
+     * Tạo link PayOS — chưa kích hoạt gói. Webhook AI_SUBSCRIPTION mới gọi
+     * {@link #activatePaidPurchase}.
+     */
+    private AIPlanResponse createPayOsCheckout(User user, SubscriptionPlan plan) {
+        if (!payOsClient.enabled()) {
+            throw new IllegalStateException("Cổng PayOS chưa được cấu hình trên hệ thống");
+        }
+
+        long amount = plan.getPrice();
+        long orderCode = nextOrderCode();
+        String returnUrl = firstNonBlank(payOsProperties.getReturnUrl(),
+                trimSlash(frontendUrl) + "/subscription?payment=success");
+        String cancelUrl = firstNonBlank(payOsProperties.getCancelUrl(),
+                trimSlash(frontendUrl) + "/subscription?payment=cancel");
+
+        String description = "AI " + plan.getName();
+        if (description.length() > 25) {
+            description = description.substring(0, 25);
+        }
+
+        CreatePaymentLinkRequest payRequest = CreatePaymentLinkRequest.builder()
+                .orderCode(orderCode)
+                .amount(amount)
+                .description(description)
+                .returnUrl(returnUrl)
+                .cancelUrl(cancelUrl)
+                .buyerName(user.getFullName() != null && !user.getFullName().isBlank()
+                        ? user.getFullName() : user.getUsername())
+                .buyerEmail(user.getEmail())
+                .build();
+
+        CreatePaymentLinkResponse link;
+        try {
+            link = payOsClient.sdk().paymentRequests().create(payRequest);
+        } catch (Exception e) {
+            log.error("Tạo link PayOS gói AI thất bại user={} plan={}: {}",
+                    user.getId(), plan.getId(), e.getMessage());
+            throw new IllegalStateException("Không tạo được link thanh toán PayOS: " + e.getMessage(), e);
+        }
+
+        Map<String, Object> meta = new HashMap<>();
+        meta.put("checkoutUrl", link.getCheckoutUrl());
+        meta.put("qrCode", link.getQrCode());
+        meta.put("paymentLinkId", link.getPaymentLinkId());
+        meta.put("planId", plan.getId().toString());
+        meta.put("purpose", "AI_SUBSCRIPTION");
+
+        paymentTransactionRepository.save(PaymentTransaction.builder()
+                .booking(null)
+                .user(user)
+                .amount(amount)
+                .phase(PaymentPhase.AI_SUBSCRIPTION)
+                .paymentMethod("PAYOS")
+                .externalTransactionId(String.valueOf(orderCode))
+                .status(TransactionStatus.PENDING)
+                .metadata(writeJson(meta))
+                .build());
+
+        log.info("Tạo PayOS checkout gói AI order={} user={} plan={} amount={}",
+                orderCode, user.getId(), plan.getId(), amount);
+
+        return AIPlanResponse.builder()
+                .purchaseId(null)
+                .planName(plan.getName())
+                .dailyQuota(plan.getDailyQuota())
+                .price(plan.getPrice())
+                .remainingDays(plan.getDurationDays())
+                .isActive(false)
+                .checkoutUrl(link.getCheckoutUrl())
+                .qrCode(link.getQrCode())
+                .paymentPending(true)
                 .build();
     }
 
@@ -175,7 +298,8 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 userId, newPurchaseId, UserPlanPurchase.PurchaseStatus.ACTIVE);
 
         for (UserPlanPurchase purchase : previousPurchases) {
-            if (purchase.getPlan() != null && purchase.getPlan().getPlanType() == newPlanType && newPlanType == SubscriptionPlan.PlanType.MONTHLY) {
+            if (purchase.getPlan() != null && purchase.getPlan().getPlanType() == newPlanType
+                    && newPlanType == SubscriptionPlan.PlanType.MONTHLY) {
                 purchase.setStatus(UserPlanPurchase.PurchaseStatus.SUPERSEDED);
                 userPlanPurchaseRepository.save(purchase);
 
@@ -196,6 +320,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     // ------------------------------------------------------------
     @Override
     @Transactional
+    @CacheEvict(cacheNames = "subscription-plans-active", allEntries = true)
     public SubscriptionPlan createPlan(CreatePlanRequest request) {
         if (request.getPlanType() == SubscriptionPlan.PlanType.FREE) {
             SubscriptionPlan existingFree = subscriptionPlanRepository
@@ -218,7 +343,6 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
         SubscriptionPlan savedPlan = subscriptionPlanRepository.save(plan);
 
-        // Audit log
         UUID adminId = SecurityUtils.getCurrentUserUUID();
         auditLogRepository.save(PlanChangeAuditLog.builder()
                 .targetType(TargetType.PLAN)
@@ -237,6 +361,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     // ------------------------------------------------------------
     @Override
     @Transactional
+    @CacheEvict(cacheNames = "subscription-plans-active", allEntries = true)
     public SubscriptionPlan updatePlan(UUID planId, UpdatePlanRequest request) {
         SubscriptionPlan plan = subscriptionPlanRepository.findById(planId)
                 .orElseThrow(() -> new ResourceNotFoundException("Plan not found"));
@@ -329,6 +454,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     // 10. Get all active plans
     // ------------------------------------------------------------
     @Override
+    @Cacheable(cacheNames = "subscription-plans-active", unless = "#result == null || #result.isEmpty()")
     public List<SubscriptionPlan> getAllActivePlans() {
         return subscriptionPlanRepository.findByIsActiveTrue();
     }
@@ -376,5 +502,37 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     @Override
     public int getDailyQuotaForUser(UUID userId, LocalDate date) {
         return getQuotaForToday(userId);
+    }
+
+    private long nextOrderCode() {
+        for (int i = 0; i < 8; i++) {
+            long code = Instant.now().getEpochSecond() * 1000L + secureRandom.nextInt(1000);
+            if (paymentTransactionRepository.findByExternalTransactionId(String.valueOf(code)).isEmpty()) {
+                return code;
+            }
+        }
+        throw new IllegalStateException("Không sinh được orderCode PayOS duy nhất");
+    }
+
+    private String writeJson(Map<String, Object> meta) {
+        try {
+            return objectMapper.writeValueAsString(meta);
+        } catch (Exception e) {
+            throw new IllegalStateException("Không ghi được metadata gói AI", e);
+        }
+    }
+
+    private static String firstNonBlank(String a, String b) {
+        if (a != null && !a.isBlank()) {
+            return a;
+        }
+        return b;
+    }
+
+    private static String trimSlash(String url) {
+        if (url == null) {
+            return "";
+        }
+        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
 }

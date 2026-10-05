@@ -13,6 +13,11 @@ public interface SubscriptionService {
 
     AIPlanResponse createPurchase(UUID userId, CreatePurchaseRequest request);
 
+    /**
+     * Kích hoạt gói sau khi PayOS (hoặc admin) xác nhận thanh toán AI_SUBSCRIPTION.
+     */
+    AIPlanResponse activatePaidPurchase(UUID userId, UUID planId);
+
     boolean canUseAI(UUID userId);
 
     void recordAIUsage(UUID userId);

@@ -23,7 +23,7 @@ import java.time.Duration;
  * Configures:
  * - JSON serialization (no Java native serialization)
  * - TTL: 24 hours for all cache entries
- * - Cache names: astrology-context
+ * - Cache names: astrology-context, subscription-plans-active
  * - Production-ready error handling
  *
  * Usage:
@@ -43,7 +43,7 @@ public class RedisConfig {
      *
      * - Default TTL: 24 hours
      * - Serialization: GenericJackson2JsonRedisSerializer (JSON, no Java native serialization)
-     * - Cache names: astrology-context
+     * - Cache names: astrology-context, subscription-plans-active
      */
     @Bean
     public CacheManager cacheManager(RedisConnectionFactory connectionFactory) {

@@ -20,6 +20,7 @@ import com.exe.astratarot.service.EscrowService;
 import com.exe.astratarot.service.NotificationService;
 import com.exe.astratarot.service.NotificationTypes;
 import com.exe.astratarot.service.PaymentService;
+import com.exe.astratarot.service.SubscriptionService;
 import com.exe.astratarot.service.WalletService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -64,6 +65,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final BookingRepository bookingRepository;
     private final EscrowService escrowService;
     private final WalletService walletService;
+    private final SubscriptionService subscriptionService;
     private final NotificationService notificationService;
     private final ActivityLogService activityLogService;
     private final PayOsClient payOsClient;
@@ -301,6 +303,11 @@ public class PaymentServiceImpl implements PaymentService {
             return;
         }
 
+        if (tx.getPhase() == PaymentPhase.AI_SUBSCRIPTION) {
+            settleAiSubscription(tx, orderKey);
+            return;
+        }
+
         markPaid(null, tx);
         log.info("PayOS xác nhận thanh toán {} (orderCode={})", tx.getId(), orderKey);
     }
@@ -321,6 +328,16 @@ public class PaymentServiceImpl implements PaymentService {
         PaymentTransaction tx = findTransaction(transactionId);
         if (tx.getStatus() != TransactionStatus.PENDING) {
             throw new IllegalArgumentException("Giao dịch này đã được xử lý rồi");
+        }
+        if (tx.getPhase() == PaymentPhase.TOPUP) {
+            tx.setStatus(TransactionStatus.SUCCESS);
+            walletService.credit(tx.getUser(), tx.getAmount(), WalletTransactionType.TOPUP,
+                    tx.getExternalTransactionId(), "Nạp tiền vào ví (admin xác nhận)", "MANUAL");
+            return toResponse(tx);
+        }
+        if (tx.getPhase() == PaymentPhase.AI_SUBSCRIPTION) {
+            settleAiSubscription(tx, tx.getExternalTransactionId());
+            return toResponse(tx);
         }
         markPaid(actorId, tx);
         return toResponse(tx);
@@ -424,6 +441,22 @@ public class PaymentServiceImpl implements PaymentService {
     // =========================================================
     // Tiện ích
     // =========================================================
+
+    private void settleAiSubscription(PaymentTransaction tx, String orderKey) {
+        Map<String, Object> meta = readMeta(tx.getMetadata());
+        Object planRaw = meta.get("planId");
+        if (planRaw == null || String.valueOf(planRaw).isBlank()) {
+            throw new IllegalStateException("Giao dịch gói AI thiếu planId trong metadata");
+        }
+        UUID planId = UUID.fromString(String.valueOf(planRaw));
+        tx.setStatus(TransactionStatus.SUCCESS);
+        var activated = subscriptionService.activatePaidPurchase(tx.getUser().getId(), planId);
+        notificationService.push(tx.getUser(), NotificationTypes.PAYMENT_CONFIRMED,
+                "Đã kích hoạt gói AI",
+                "Gói " + activated.getPlanName() + " đã được kích hoạt sau thanh toán thành công.",
+                Map.of("planId", planId.toString(), "orderCode", String.valueOf(orderKey)));
+        log.info("PayOS xác nhận gói AI {} plan={} (orderCode={})", tx.getId(), planId, orderKey);
+    }
 
     private void markPaid(UUID actorId, PaymentTransaction tx) {
         Booking booking = tx.getBooking();
