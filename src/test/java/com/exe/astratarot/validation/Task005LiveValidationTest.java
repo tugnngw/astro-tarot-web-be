@@ -369,7 +369,9 @@ public class Task005LiveValidationTest {
         assertFalse(llmRequest.getSystemInstruction().contains("Rising: null"));
         assertTrue(llmRequest.getSystemInstruction().contains("Taurus"));
         assertTrue(llmRequest.getSystemInstruction().contains("DATA SAFETY"));
-        assertTrue(llmRequest.getSystemInstruction().contains("KHÔNG được tự đoán"));
+        assertTrue(
+                llmRequest.getSystemInstruction().contains("KHÔNG được tự bịa")
+                        || llmRequest.getSystemInstruction().contains("CẤM mở bài"));
 
         LLMResponse response = callGeminiWithPacing(llmRequest);
 

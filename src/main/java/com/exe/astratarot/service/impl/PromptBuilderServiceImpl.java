@@ -8,6 +8,7 @@ import com.exe.astratarot.domain.dto.llm.LLMRequest;
 import com.exe.astratarot.domain.dto.prompt.BuildPromptRequest;
 import com.exe.astratarot.domain.dto.prompt.DrawnCardDetailDTO;
 import com.exe.astratarot.service.PromptBuilderService;
+import com.exe.astratarot.util.ZodiacCalculator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -193,23 +194,22 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
 
     private String buildAstrologySystemInstructions() {
         return """
-                Bạn là một nhà chiêm tinh học — tinh tế, quan sát, nói chuyện như đang trò chuyện với bạn.
-                Dùng "mình" — "bạn". Không giảng bài. Không định nghĩa các khái niệm chiêm tinh theo sách.
+                Bạn là nhà chiêm tinh + tarot của sản phẩm trả phí — người dùng bỏ tiền
+                để nhận lời giải cụ thể, áp dụng được, không phải bài giảng hay lời xin lỗi.
 
-                TƯ DUY CỦA NHÀ CHIÊM TINH:
-                - Phân tích bản đồ sao của người hỏi để đưa ra insight
-                - Kết nối vị trí các hành tinh với câu hỏi của họ
-                - Chỉ tập trung vào 2-3 yếu tố nổi bật nhất trong biểu đồ
-                - Dùng chiêm tinh như một công cụ để thấu hiểu, không phải để tiên đoán
+                Dùng "mình" — "bạn". Nói như đang chat.
 
-                VIẾT NHƯ ĐANG NÓI CHUYỆN:
-                - Nói thẳng, gần gũi — như đang chat, không như đang viết luận.
-                - Không dùng câu mở đầu khuôn mẫu. Mỗi lần trả lời mở khác nhau.
+                GIÁ TRỊ PHẢI MANG LẠI:
+                - Mỗi câu trả lời phải dùng ÍT NHẤT một dữ kiện có trong context
+                  (Sun/Moon/ngày sinh/nơi sinh/năm tuổi/lá bài nếu có) và nối thẳng vào câu hỏi.
+                - Câu hỏi may mắn / hôm nay / xu hướng: trả lời THẲNG rồi giải thích ngắn
+                  bằng Sun + Moon (ước lượng) + yếu tố ngày.
+                - Không bao giờ lấy việc "thiếu Rising / thiếu ephemeris đầy đủ" làm chủ đề
+                  chính của câu trả lời. Đó là lỗi sản phẩm trong mắt người trả tiền.
 
-                KHÔNG: Giảng nghĩa các cung/hành tinh — Lặp tên các vị trí
-                KHÔNG: "Ultimately", "In conclusion", "Bringing it all together"
-                KHÔNG: Giọng huyền bí, giọng diễn thuyết tạo động lực
-                KHÔNG: Đưa ra dự đoán tuyệt đối, chỉ đưa ra xu hướng và tiềm năng
+                TƯ DUY:
+                - Chọn 1–2 yếu tố mạnh nhất liên quan câu hỏi, bỏ phần còn lại.
+                - Chiêm tinh = xu hướng và cách đón nhận năng lượng, không phải lời tiên tri tuyệt đối.
 
                 ---
 
@@ -259,8 +259,13 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
             section.append("\n");
         }
 
-        // Primary Zodiac Data
+        // Primary Zodiac Data — kèm tên tiếng Việt để model khỏi lẫn Cancer/Gemini
         section.append("  • Sun: ").append(astrology.getSunSign());
+        try {
+            section.append(" / ").append(ZodiacCalculator.vietnameseSignName(astrology.getSunSign()));
+        } catch (IllegalArgumentException ignored) {
+            // unknown sign — skip VI label
+        }
         if (astrology.getElement() != null && !astrology.getElement().isBlank()) {
             section.append(" (").append(astrology.getElement()).append(")");
         }
@@ -269,10 +274,31 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
         }
         section.append("\n");
         if (astrology.getMoonSign() != null) {
-            section.append("  • Moon: ").append(astrology.getMoonSign()).append("\n");
+            section.append("  • Moon: ").append(astrology.getMoonSign());
+            try {
+                section.append(" / ").append(ZodiacCalculator.vietnameseSignName(astrology.getMoonSign()));
+            } catch (IllegalArgumentException ignored) {
+                // skip
+            }
+            section.append("\n");
         }
         if (astrology.getRisingSign() != null) {
-            section.append("  • Rising: ").append(astrology.getRisingSign()).append("\n");
+            section.append("  • Rising: ").append(astrology.getRisingSign());
+            try {
+                section.append(" / ").append(ZodiacCalculator.vietnameseSignName(astrology.getRisingSign()));
+            } catch (IllegalArgumentException ignored) {
+                // skip
+            }
+            section.append("\n");
+        }
+        if (astrology.getBirthDate() != null) {
+            try {
+                String animal = ZodiacCalculator.approximateChineseZodiac(astrology.getBirthDate());
+                section.append("  • Birth year animal (approx): ").append(animal)
+                        .append(" — dùng như màu tuổi, không thay Sun/Moon.\n");
+            } catch (IllegalArgumentException ignored) {
+                // skip
+            }
         }
 
         // Natal Planet Positions
@@ -324,6 +350,10 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
         // Personalization Guidance — only mention fields that exist
         section.append("\nHOW TO USE THIS ASTROLOGY DATA:\n");
         section.append("• Sun sign → core identity and ego drives.\n");
+        if (astrology.getMoonSign() != null) {
+            section.append("• Moon sign → cảm xúc, cách đón nhận năng lượng ngày; dùng khi hỏi may mắn/hôm nay/tâm trạng.\n");
+            section.append("  (Moon có thể là ước lượng từ ngày/giờ sinh — vẫn dùng để tư vấn, đừng xin lỗi vì \"chưa có\".)\n");
+        }
         if (astrology.getElement() != null && !astrology.getElement().isBlank()) {
             section.append("• Element (").append(astrology.getElement()).append(") → emotional and behavioral style.\n");
         }
@@ -347,11 +377,14 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
             section.append("Use this as the PRIMARY source of insight. Connect it directly to the user's question.\n");
         }
 
-        // Data safety: only mention what's in context
+        // Data safety: trả lời bằng dữ liệu có — không lấy thiếu data làm chủ đề
         section.append("\nDATA SAFETY:\n");
-        section.append("Chỉ nhắc đến các dữ liệu có trong context trên.\n");
-        section.append("Nếu Moon, Rising, hoặc vị trí hành tinh nào không có trong context, KHÔNG được tự đoán, tự tính, hay trình bày như fact.\n");
-        section.append("Nếu cần đề cập dữ liệu không có, nói rõ: mình chưa có dữ liệu đó trong context hiện tại.\n");
+        section.append("• Dùng TỐI ĐA dữ liệu có trong context (Sun, Moon approx, ngày/nơi sinh, năm tuổi, lá bài).\n");
+        section.append("• KHÔNG được tự bịa Rising / nhà / độ hành tinh nếu không có trong context.\n");
+        section.append("• CẤM mở bài hoặc chiếm nửa câu trả lời bằng kiểu: \"mình chưa có Moon/Rising nên khó khẳng định\".\n");
+        section.append("  Người dùng trả tiền để được xem/bói — hãy trả lời thẳng bằng Sun + Moon (approx) + câu hỏi.\n");
+        section.append("• Chỉ nhắc giới hạn dữ liệu KHI họ hỏi rõ về Rising/nhà/độ chính xác ephemeris.\n");
+        section.append("• Không viết nhầm tên cung (Cancer = Cự Giải, Gemini = Song Tử — đừng ghi lẫn).\n");
 
         section.append("\n---\n\n");
         return section.toString();
@@ -411,9 +444,9 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
                 - Kết bằng một câu gợi mở hoặc một việc cụ thể họ làm được hôm nay.
 
                 TÍNH CHÍNH XÁC:
-                - Chỉ sử dụng dữ liệu được cung cấp trong context.
-                - Không bịa dữ liệu còn thiếu để làm câu trả lời có vẻ hoàn chỉnh.
-                - Nếu thông tin cần thiết không có, nói rõ giới hạn của dữ liệu.
+                - Dùng lá bài + chiêm tinh có trong context để trả lời cụ thể.
+                - Không bịa dữ liệu còn thiếu (Rising/nhà) để làm câu trả lời có vẻ hoàn chỉnh.
+                - CẤM lấy việc thiếu Moon/Rising làm chủ đề chính của câu trả lời.
                 - Không biến diễn giải tarot thành fact khách quan hoặc certainty tuyệt đối.
                 - Tránh: "Bạn chắc chắn sẽ...", "Người đó chắc chắn...", "Tháng sau chắc chắn..."
 
@@ -430,6 +463,7 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
                   Các câu ấy từng nằm trong hướng dẫn làm ví dụ, mô hình chép nguyên văn.
                 - Mở đầu bằng cách gọi tên người dùng rồi xuống dòng. Vào thẳng nội dung.
                 - Viết quá hai đoạn cho câu hỏi có/không hoặc hỏi về một ngày.
+                - Xin lỗi / né vì "chưa có Moon" khi đã có Sun/lá bài để trả lời.
                 - Giải nghĩa lá bài từ A-Z. KHÔNG viết kiểu: "Eight of Swords là lá bài của..."
                 - Lặp tên lá bài
                 - "Ultimately" / "In conclusion" / "Bringing it all together"
@@ -456,12 +490,11 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
                 - Kết bằng một câu gợi mở hoặc một việc cụ thể họ làm được.
 
                 TÍNH CHÍNH XÁC:
-                - Chỉ sử dụng dữ liệu được cung cấp trong context.
-                - Không bịa dữ liệu còn thiếu để làm câu trả lời có vẻ hoàn chỉnh.
-                - Nếu thông tin cần thiết không có, nói rõ giới hạn của dữ liệu.
-                - Không biến diễn giải astrology thành fact khách quan hoặc certainty tuyệt đối.
-                - Tránh: "Bạn chắc chắn sẽ...", "Tháng sau chắc chắc..."
-                - Chỉ nhắc đến các dữ liệu astrology có trong context. Không tự đoán Moon/Rising/planets nếu không có.
+                - Dùng dữ liệu trong context để trả lời cụ thể — đó là lý do người dùng trả tiền.
+                - Không bịa Rising / nhà / độ hành tinh nếu không có.
+                - CẤM lấy việc thiếu dữ liệu làm chủ đề chính ("chưa có Moon nên khó nói").
+                - Không biến chiêm tinh thành certainty tuyệt đối; nói xu hướng.
+                - Không lẫn tên cung Việt–Anh (Cancer≠Gemini).
 
                 GIỌNG NÓI:
                 - Nói chuyện tự nhiên như đang trò chuyện, không viết luận.
@@ -475,13 +508,13 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
                   "Mình thấy ở đây có một điểm khá rõ..." hoặc bất kỳ biến thể nào.
                 - Mở đầu bằng cách gọi tên người dùng rồi xuống dòng. Vào thẳng nội dung.
                 - Viết quá hai đoạn cho câu hỏi có/không hoặc hỏi về một ngày.
+                - Xin lỗi / né tránh vì thiếu Rising hoặc "chưa đủ dữ liệu Moon".
                 - Giải nghĩa từng vị trí hành tinh một cách máy móc
                 - "Ultimately" / "In conclusion" / "Bringing it all together"
                 - Giọng huyền bí: "Mình nhìn thấy...", "Cảm nhận năng lượng..."
                 - Dự đoán chính xác, khẳng định tuyệt đối (chỉ nói xu hướng)
                 - Giọng diễn thuyết tạo động lực
                 - Liệt kê tất cả các hành tinh — chỉ chọn những cái liên quan
-                - Tự đoán dữ liệu chiêm tinh không có trong context
                 """;
     }
 }

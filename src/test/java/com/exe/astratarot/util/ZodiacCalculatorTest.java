@@ -6,6 +6,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -194,6 +195,30 @@ class ZodiacCalculatorTest {
 
         String modality = ZodiacCalculator.calculateModality(sunSign);
         assertEquals("Cardinal", modality);
+    }
+
+    @Test
+    @DisplayName("vietnameseSignName: Cancer = Cự Giải, Gemini = Song Tử")
+    void vietnameseNames() {
+        assertEquals("Cự Giải", ZodiacCalculator.vietnameseSignName("Cancer"));
+        assertEquals("Song Tử", ZodiacCalculator.vietnameseSignName("Gemini"));
+    }
+
+    @Test
+    @DisplayName("approximateMoonSign: deterministic non-blank for a known date")
+    void approximateMoonSignStable() {
+        LocalDate d = LocalDate.of(2005, 6, 15);
+        String moon = ZodiacCalculator.approximateMoonSign(d, LocalTime.of(12, 0));
+        assertNotNull(moon);
+        assertFalse(moon.isBlank());
+        // Same inputs → same sign
+        assertEquals(moon, ZodiacCalculator.approximateMoonSign(d, LocalTime.of(12, 0)));
+    }
+
+    @Test
+    @DisplayName("approximateChineseZodiac: 2005 → Rooster")
+    void chineseZodiac2005() {
+        assertEquals("Rooster", ZodiacCalculator.approximateChineseZodiac(LocalDate.of(2005, 6, 15)));
     }
 
     @Test

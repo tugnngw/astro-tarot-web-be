@@ -254,7 +254,7 @@ class PromptBuilderServiceImplContextTest {
             // bản đồ sao lại nhận một bài giải Tarot không có lá bài nào.
             assertAll(
                     () -> assertTrue(nhac.contains("Primary Source of Insight")),
-                    () -> assertTrue(nhac.contains("nhà chiêm tinh học")),
+                    () -> assertTrue(nhac.contains("nhà chiêm tinh")),
                     () -> assertFalse(nhac.contains("TAROT CARDS")),
                     () -> assertFalse(nhac.contains("Supporting Context")));
         }
@@ -264,7 +264,7 @@ class PromptBuilderServiceImplContextTest {
         void danhSachBaiNull() {
             String nhac = service.buildPrompt(yeuCau(chiemTinhDayDu(), null));
 
-            assertTrue(nhac.contains("nhà chiêm tinh học"));
+            assertTrue(nhac.contains("nhà chiêm tinh"));
         }
 
         @Test

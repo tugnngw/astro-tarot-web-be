@@ -115,13 +115,15 @@ class AstrologyContextServiceImplTest {
         assertEquals(new BigDecimal("-74.0060"), dto.getLongitude());
         assertEquals("America/New_York", dto.getTimezone());
 
-        // Deterministic zodiac metadata (MVP)
+        // Deterministic zodiac metadata
         assertEquals("Aries", dto.getSunSign());
         assertEquals("Fire", dto.getElement());
         assertEquals("Cardinal", dto.getModality());
 
-        // Future fields (NULL in MVP)
-        assertNull(dto.getMoonSign());
+        // Moon ước lượng từ ngày/giờ — không còn null để AI khỏi xin lỗi
+        assertNotNull(dto.getMoonSign());
+        assertFalse(dto.getMoonSign().isBlank());
+        // Rising vẫn cần ephemeris đầy đủ
         assertNull(dto.getRisingSign());
         assertNull(dto.getNatalPlanetPositions());
         assertNull(dto.getNatalAspects());
