@@ -2,7 +2,7 @@
 
 Astro Tarot Web là nền tảng sử dụng AI kết hợp chiêm tinh và bài Tarot để cung cấp dịch vụ xem bói cá nhân hóa. Nền tảng kết nối người dùng với các chuyên gia Tarot để thực hiện các buổi xem trực tiếp, tạo ra một thị trường nơi AI cung cấp dịch vụ xem ban đầu và chuyên gia con người cung cấp dịch vụ sâu hơn.
 
-**Dữ liệu demo để test:** xem [SEED.md](./SEED.md) (Flyway `V2_4`, mật khẩu chung `admin123`).
+**Dữ liệu demo để test:** xem [SEED.md](./SEED.md) (Flyway `V2_4`). Mật khẩu của các tài khoản demo đã bị vô hiệu hoá — đặt lại qua màn Quản trị.
 
 Công nghệ sử dụng
 

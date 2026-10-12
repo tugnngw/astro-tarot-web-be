@@ -128,7 +128,8 @@ Successfully applied N migrations to schema "public", now at version vX.Y
 
 ### Tài khoản có sẵn
 
-Migration `V2_4` gieo sẵn dữ liệu cho mọi vai trò. Mật khẩu chung `admin123`.
+Migration `V2_4` gieo sẵn dữ liệu cho mọi vai trò. Mật khẩu của chúng đã bị vô
+hiệu hoá (xem `V2_32`) — đặt lại qua màn Quản trị khi cần.
 Danh sách đầy đủ ở [`SEED.md`](../SEED.md); hay dùng nhất:
 
 | Email | Vai trò |

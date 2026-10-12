@@ -3,7 +3,19 @@
 Migration `V2_4__seed_demo_data.sql` tạo sẵn dữ liệu để test mọi vai trò.
 Chạy khi backend khởi động (Flyway tự migrate) hoặc trên Neon sau khi deploy.
 
-**Mật khẩu chung:** `admin123`
+## Mật khẩu
+
+Các tài khoản demo **không còn đăng nhập được bằng mật khẩu nào**.
+
+Trước 12/10/2026 chúng dùng chung một mật khẩu, và mật khẩu ấy được ghi ngay
+trong tệp này. Repo công khai, nên bất kỳ ai đọc được cũng đăng nhập được —
+kể cả vào `admin@example.com` vốn mang quyền quản trị cao nhất. Migration
+`V2_32` đã thay hash của chúng bằng chuỗi ngẫu nhiên.
+
+**Cần dùng một tài khoản demo?** Quản trị viên vào màn Quản trị → Tài khoản →
+chọn người → *Đặt lại mật khẩu*. Đường đó không để lại mật khẩu ở tệp nào.
+
+Đừng ghi mật khẩu mới vào đây, hay vào bất kỳ tệp nào trong repo.
 
 ## Tài khoản theo role
 
