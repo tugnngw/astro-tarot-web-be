@@ -31,7 +31,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/shop/orders")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('USER_BASIC')")
+@PreAuthorize("hasAuthority('CUSTOMER_ACTIONS')")
 public class OrderController {
 
     private final OrderService orderService;

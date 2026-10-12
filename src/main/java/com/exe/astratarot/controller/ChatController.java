@@ -49,7 +49,7 @@ public class ChatController {
      * @return ChatResponse with the AI reply and token usage
      */
     @PostMapping
-    @PreAuthorize("hasAuthority('USER_BASIC')")
+    @PreAuthorize("hasAuthority('CUSTOMER_ACTIONS')")
     public ResponseEntity<ApiResponse<ChatResponse>> sendMessage(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @Valid @RequestBody ChatRequest request) {
@@ -77,7 +77,7 @@ public class ChatController {
      * @return SSE emitter
      */
     @PostMapping("/stream")
-    @PreAuthorize("hasAuthority('USER_BASIC')")
+    @PreAuthorize("hasAuthority('CUSTOMER_ACTIONS')")
     public SseEmitter sendMessageStream(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @Valid @RequestBody ChatRequest request) {

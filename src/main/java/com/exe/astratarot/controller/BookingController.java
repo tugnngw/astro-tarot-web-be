@@ -109,7 +109,7 @@ public class BookingController {
     // ---------- Khách đặt lịch ----------
 
     @PostMapping("/bookings")
-    @PreAuthorize("hasAuthority('USER_BASIC')")
+    @PreAuthorize("hasAuthority('CUSTOMER_ACTIONS')")
     public ResponseEntity<ApiResponse<BookingResponse>> create(
             @AuthenticationPrincipal CustomUserDetails me,
             @Valid @RequestBody CreateBookingRequest request) {
@@ -118,7 +118,7 @@ public class BookingController {
     }
 
     @GetMapping("/bookings/me")
-    @PreAuthorize("hasAuthority('USER_BASIC')")
+    @PreAuthorize("hasAuthority('CUSTOMER_ACTIONS')")
     public ResponseEntity<ApiResponse<Page<BookingResponse>>> myBookings(
             @AuthenticationPrincipal CustomUserDetails me,
             @RequestParam(required = false) String status,
@@ -130,7 +130,7 @@ public class BookingController {
 
     /** Lịch tháng của chính khách — đủ buổi để vẽ lịch, không cắt theo trang. */
     @GetMapping("/bookings/me/calendar")
-    @PreAuthorize("hasAuthority('USER_BASIC')")
+    @PreAuthorize("hasAuthority('CUSTOMER_ACTIONS')")
     public ResponseEntity<ApiResponse<List<BookingResponse>>> myCalendar(
             @AuthenticationPrincipal CustomUserDetails me,
             @RequestParam int year,
@@ -219,7 +219,7 @@ public class BookingController {
     }
 
     @PostMapping("/bookings/{id}/review")
-    @PreAuthorize("hasAuthority('USER_BASIC')")
+    @PreAuthorize("hasAuthority('CUSTOMER_ACTIONS')")
     public ResponseEntity<ApiResponse<ReviewResponse>> review(
             @AuthenticationPrincipal CustomUserDetails me,
             @PathVariable UUID id,

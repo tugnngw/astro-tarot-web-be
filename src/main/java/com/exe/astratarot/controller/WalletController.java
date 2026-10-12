@@ -34,7 +34,7 @@ public class WalletController {
     }
 
     @PostMapping("/topup")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('CUSTOMER_ACTIONS')")
     public ResponseEntity<ApiResponse<PaymentInstructionResponse>> createTopup(
             @AuthenticationPrincipal CustomUserDetails me,
             @Valid @RequestBody TopupRequest request) {
@@ -54,7 +54,7 @@ public class WalletController {
     }
 
     @PostMapping("/pay-booking/{bookingId}")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('CUSTOMER_ACTIONS')")
     public ResponseEntity<ApiResponse<String>> payBooking(
             @AuthenticationPrincipal CustomUserDetails me,
             @PathVariable UUID bookingId) {

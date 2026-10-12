@@ -1,5 +1,6 @@
 package com.exe.astratarot.controller;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.exe.astratarot.service.BaoCaoNoiDungAiService;
 import com.exe.astratarot.domain.dto.ai.BaoCaoNoiDungAiRequest;
 import com.exe.astratarot.domain.dto.common.ApiResponse;
@@ -71,6 +72,11 @@ public class AIReadingController {
      * @param request     Contains user question, card count, and spread details.
      * @return A response containing the Tarot reading results, or an error message.
      */
+    // Hai endpoint trải bài trước đây KHÔNG có @PreAuthorize nào, kể cả ở cấp
+    // lớp — chúng rơi xuống .anyRequest().authenticated() của SecurityConfig.
+    // Nghĩa là bất kỳ ai đăng nhập cũng gọi được, gồm cả Nhân viên và Quản trị
+    // viên, và mỗi lượt gọi là một lượt tiêu token tính tiền.
+    @PreAuthorize("hasAuthority('CUSTOMER_ACTIONS')")
     @PostMapping
     public ResponseEntity<ApiResponse<TarotReadingResultDTO>> startAiTarotReading(
             @AuthenticationPrincipal CustomUserDetails userDetails,
@@ -121,6 +127,7 @@ public class AIReadingController {
      * @param request     contains user question, card count, and spread details
      * @return SSE emitter
      */
+    @PreAuthorize("hasAuthority('CUSTOMER_ACTIONS')")
     @PostMapping("/stream")
     public SseEmitter startAiTarotReadingStream(
             @AuthenticationPrincipal CustomUserDetails userDetails,

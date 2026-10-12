@@ -55,7 +55,7 @@ public class MoneyController {
     // =========================================================
 
     @PostMapping("/bookings/{bookingId}/payment")
-    @PreAuthorize("hasAuthority('USER_BASIC')")
+    @PreAuthorize("hasAuthority('CUSTOMER_ACTIONS')")
     public ResponseEntity<ApiResponse<PaymentInstructionResponse>> pay(
             @AuthenticationPrincipal CustomUserDetails me,
             @PathVariable UUID bookingId,
