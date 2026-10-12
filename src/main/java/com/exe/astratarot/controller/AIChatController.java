@@ -54,7 +54,7 @@ public class AIChatController {
      * @return ChatResponse with the AI reply and token usage
      */
     @PostMapping("/{readingId}/chat")
-    @PreAuthorize("hasAuthority('USER_BASIC')")
+    @PreAuthorize("hasAuthority('CUSTOMER_ACTIONS')")
     public ResponseEntity<ApiResponse<ChatResponse>> sendMessage(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable UUID readingId,
@@ -83,7 +83,7 @@ public class AIChatController {
      * @return SSE emitter
      */
     @PostMapping("/{readingId}/chat/stream")
-    @PreAuthorize("hasAuthority('USER_BASIC')")
+    @PreAuthorize("hasAuthority('CUSTOMER_ACTIONS')")
     public SseEmitter sendMessageStream(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable UUID readingId,

@@ -33,8 +33,12 @@ public class CustomUserDetails implements UserDetails {
      * cho cấp trên những quyền vô nghĩa với họ.
      */
     private static final Map<UserRole, List<String>> ROLE_PERMISSIONS = Map.of(
+            // Khách. Vai trò DUY NHẤT mang CUSTOMER_ACTIONS — xem chú thích ở
+            // SecurityPermissions.CUSTOMER_ACTIONS về lý do ba vai trò vận
+            // hành không được đặt lịch, mua hàng hay đánh giá.
             UserRole.USER, List.of(
                     SecurityPermissions.USER_BASIC,
+                    SecurityPermissions.CUSTOMER_ACTIONS,
                     SecurityPermissions.READER_APPLY),
 
             // READER: chuyên gia Tarot nhận booking

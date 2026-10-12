@@ -51,7 +51,7 @@ public class SubscriptionController {
         return ResponseEntity.ok(ApiResponse.success(subscriptionService.getAllActivePlans()));
     }
 
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasAuthority('CUSTOMER_ACTIONS')")
     @PostMapping("/purchase")
     public ResponseEntity<ApiResponse<AIPlanResponse>> createPurchase(
             @RequestBody CreatePurchaseRequest request,

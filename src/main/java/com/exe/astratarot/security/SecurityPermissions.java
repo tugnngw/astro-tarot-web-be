@@ -10,7 +10,34 @@ package com.exe.astratarot.security;
 public final class SecurityPermissions {
 
     // ----- Mọi tài khoản đã đăng nhập -----
+    /**
+     * Những việc BẤT KỲ người đã đăng nhập nào cũng làm, bất kể vai trò.
+     *
+     * <p>Gồm: thông báo, hồ sơ của chính mình, phiếu hỗ trợ, báo cáo vi phạm,
+     * và — quan trọng — trò chuyện cùng gọi video trong một buổi xem mà mình
+     * là một bên. Reader cần đúng những thứ này để hành nghề, nên chúng KHÔNG
+     * phải "chức năng của khách".
+     */
     public static final String USER_BASIC = "USER_BASIC";
+
+    /**
+     * Những việc chỉ KHÁCH làm: đặt lịch, trả tiền buổi xem, đánh giá Reader,
+     * mua hàng, hỏi Tarot AI.
+     *
+     * <p>Tách khỏi {@link #USER_BASIC} ngày 12/10/2026. Trước đó mọi vai trò
+     * đều mang USER_BASIC, nên một tài khoản Nhân viên đặt được lịch với chính
+     * đồng nghiệp mình và đánh giá họ. Ranh giới cũ gộp hai thứ khác hẳn nhau:
+     * "đã đăng nhập" với "là khách hàng".
+     *
+     * <p>Cố ý KHÔNG trao cho STAFF, MANAGER lẫn ADMIN. Ba vai trò ấy vận hành
+     * nền tảng; để họ vừa bán vừa mua là mở đường cho những chuyện khó giải
+     * thích về sau — Reader tự đặt lịch với mình để tự đánh giá năm sao, Quản
+     * trị viên tự cấp gói AI cho tài khoản của mình.
+     *
+     * <p>Cần một tài khoản vừa làm Reader vừa đi xem bài thì lập tài khoản
+     * riêng, đó mới là cách phân tách đúng.
+     */
+    public static final String CUSTOMER_ACTIONS = "CUSTOMER_ACTIONS";
 
     // ----- Reader (nay thuộc STAFF) -----
     /** Nộp hồ sơ xin làm Reader. Chỉ USER cần, người đã là STAFF thì không. */
