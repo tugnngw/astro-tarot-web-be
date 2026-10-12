@@ -228,10 +228,19 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
         long amount = plan.getPrice();
         long orderCode = nextOrderCode();
+        // Đường quay về phải là /profile/subscription, KHÔNG phải /subscription.
+        //
+        // Trang gói cước nằm ở route `profile_.subscription.tsx`, tức đường
+        // /profile/subscription. Mặc định cũ trỏ về /subscription — một đường
+        // không tồn tại, nên khách trả tiền xong rơi thẳng vào trang 404. Lỗi
+        // này chỉ lộ ra ở bước cuối của luồng mua, sau khi tiền đã trừ.
+        //
+        // payos.return-url để trống trong application.properties nên nhánh mặc
+        // định này là nhánh chạy thật, không phải nhánh dự phòng.
         String returnUrl = firstNonBlank(payOsProperties.getReturnUrl(),
-                trimSlash(frontendUrl) + "/subscription?payment=success");
+                trimSlash(frontendUrl) + "/profile/subscription?payment=success");
         String cancelUrl = firstNonBlank(payOsProperties.getCancelUrl(),
-                trimSlash(frontendUrl) + "/subscription?payment=cancel");
+                trimSlash(frontendUrl) + "/profile/subscription?payment=cancel");
 
         String description = "AI " + plan.getName();
         if (description.length() > 25) {
