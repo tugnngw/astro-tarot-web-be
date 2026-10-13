@@ -78,8 +78,17 @@ public class BookingServiceImpl implements BookingService {
     /** Đúng ba mốc Reader khai giá. Không nhận số phút tuỳ ý. */
     private static final Set<Integer> ALLOWED_DURATIONS = Set.of(15, 30, 60);
 
-    /** Bước nhảy khi sinh khung giờ gợi ý. */
-    private static final int SLOT_STEP_MINUTES = 15;
+    /*
+     * Khung giờ nhảy đúng bằng thời lượng khách chọn: chọn 30 phút thì được
+     * 09:00, 09:30, 10:00… chứ không phải 09:00, 09:15, 09:30…
+     *
+     * Trước đây bước nhảy cố định 15 phút. Chống trùng lịch vẫn đúng (mỗi ô
+     * vẫn là [start, start+thoiLuong) và vẫn bị loại nếu đè lịch đã có), nhưng
+     * người dùng nhìn danh sách cách nhau 15 phút thì tưởng buổi xem chỉ dài
+     * 15 phút. Đổi lại thì mất mấy mốc lệch như 09:15–09:45; chấp nhận được,
+     * và bù lại lịch của Reader không bị băm vụn.
+     */
+
 
     /** Mốc 12 giờ trước giờ hẹn — dùng chung cho cả hạn nộp tiền và hủy miễn phí. */
     private static final int CANCELLATION_DEADLINE_HOURS = 12;
@@ -196,7 +205,7 @@ public class BookingServiceImpl implements BookingService {
                 }
                 slots.add(CalendarSlotResponse.builder()
                         .startTime(start).endTime(end).price(price).state(state).build());
-                cursor = cursor.plusMinutes(SLOT_STEP_MINUTES);
+                cursor = cursor.plusMinutes(durationMinutes);
             }
         }
 
@@ -276,7 +285,7 @@ public class BookingServiceImpl implements BookingService {
                 if (inFuture && free) {
                     slots.add(SlotResponse.builder().startTime(start).endTime(end).price(price).build());
                 }
-                cursor = cursor.plusMinutes(SLOT_STEP_MINUTES);
+                cursor = cursor.plusMinutes(durationMinutes);
             }
         }
         return slots;
