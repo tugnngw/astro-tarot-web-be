@@ -235,20 +235,40 @@ class BookingServiceImplTest {
     class KhungGio {
 
         @Test
-        @DisplayName("Sinh khung theo bước 15 phút trong lịch tuần")
+        @DisplayName("Khung nhảy đúng bằng thời lượng khách chọn, không phải 15 phút cố định")
         void sinhKhung() {
             LocalDate ngay = LocalDate.now(VN).plusDays(3);
             moLichTuan(ngay, LocalTime.of(9, 0), LocalTime.of(10, 0));
 
             var khung = service.availableSlots(reader.getId(), ngay, 30);
 
-            // 09:00, 09:15, 09:30 — 09:45 + 30 phút vượt 10:00 nên không tính.
+            // Chọn 30 phút thì chỉ có 09:00 và 09:30. Không được đẻ ra 09:15:
+            // người dùng nhìn danh sách cách nhau 15 phút là tưởng buổi xem
+            // chỉ dài 15 phút.
             assertAll(
-                    () -> assertEquals(3, khung.size()),
+                    () -> assertEquals(2, khung.size()),
                     () -> assertEquals(gio(ngay, 9, 0), khung.get(0).getStartTime()),
                     () -> assertEquals(gio(ngay, 9, 30), khung.get(0).getEndTime()),
                     () -> assertEquals(180_000L, khung.get(0).getPrice()),
-                    () -> assertEquals(gio(ngay, 9, 30), khung.get(2).getStartTime()));
+                    () -> assertEquals(gio(ngay, 9, 30), khung.get(1).getStartTime()),
+                    () -> assertEquals(gio(ngay, 10, 0), khung.get(1).getEndTime()));
+        }
+
+        @Test
+        @DisplayName("Đổi thời lượng thì bước nhảy đổi theo: 15 phút được bốn khung, 60 phút được một")
+        void buocNhayTheoThoiLuong() {
+            LocalDate ngay = LocalDate.now(VN).plusDays(3);
+            moLichTuan(ngay, LocalTime.of(9, 0), LocalTime.of(10, 0));
+
+            var mười_lăm = service.availableSlots(reader.getId(), ngay, 15);
+            var sáu_mươi = service.availableSlots(reader.getId(), ngay, 60);
+
+            assertAll(
+                    () -> assertEquals(4, mười_lăm.size()),
+                    () -> assertEquals(gio(ngay, 9, 45), mười_lăm.get(3).getStartTime()),
+                    () -> assertEquals(1, sáu_mươi.size()),
+                    () -> assertEquals(gio(ngay, 9, 0), sáu_mươi.get(0).getStartTime()),
+                    () -> assertEquals(gio(ngay, 10, 0), sáu_mươi.get(0).getEndTime()));
         }
 
         @Test
@@ -287,7 +307,7 @@ class BookingServiceImplTest {
 
             var khung = service.availableSlots(reader.getId(), ngay, 30);
 
-            // 09:00 và 09:15 chồng lấn buổi đã đặt; chỉ 09:30 còn trống.
+            // 09:00 chồng lấn buổi đã đặt; chỉ 09:30 còn trống.
             assertAll(
                     () -> assertEquals(1, khung.size()),
                     () -> assertEquals(gio(ngay, 9, 30), khung.get(0).getStartTime()));
@@ -387,12 +407,13 @@ class BookingServiceImplTest {
             var hom = lich.getDays().stream()
                     .filter(d -> d.getDate().equals(ngay)).findFirst().orElseThrow();
 
+            // Khung 09:00–10:00 với thời lượng 30 phút cho đúng hai ô.
             assertAll(
                     () -> assertEquals(CalendarDayKind.OPEN, hom.getKind()),
+                    () -> assertEquals(2, hom.getSlots().size()),
                     () -> assertEquals(CalendarSlotState.TAKEN, hom.getSlots().get(0).getState()),
-                    () -> assertEquals(CalendarSlotState.TAKEN, hom.getSlots().get(1).getState()),
-                    () -> assertEquals(CalendarSlotState.FREE, hom.getSlots().get(2).getState()),
-                    () -> assertEquals(gio(ngay, 9, 30), hom.getSlots().get(2).getStartTime()));
+                    () -> assertEquals(CalendarSlotState.FREE, hom.getSlots().get(1).getState()),
+                    () -> assertEquals(gio(ngay, 9, 30), hom.getSlots().get(1).getStartTime()));
             // Cả tháng chỉ một lần chồng lấn, không phải một lần mỗi ngày.
             verify(bookingRepository, times(1)).findOverlapping(eq(reader.getId()), any(), any());
         }
