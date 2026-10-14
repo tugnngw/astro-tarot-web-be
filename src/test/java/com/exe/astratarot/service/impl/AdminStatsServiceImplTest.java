@@ -106,6 +106,7 @@ class AdminStatsServiceImplTest {
         lenient().when(userPlanPurchaseRepository.tienBanGoiTu(any())).thenReturn(0L);
         lenient().when(userPlanPurchaseRepository.demTheoTenGoi()).thenReturn(List.of());
         lenient().when(walletTransactionRepository.sumAmountByTypeAndStatus(any(), any())).thenReturn(0L);
+        lenient().when(walletTransactionRepository.sumBookingRefundForWalletPaid(any())).thenReturn(0L);
         lenient().when(paymentTransactionRepository.sumAmountByStatusExcludingPhase(any(), any())).thenReturn(0L);
         lenient().when(userRepository.countByRoleAndDeletedAtIsNull(any())).thenReturn(0L);
         lenient().when(userRepository.countByCreatedAtAfterAndDeletedAtIsNull(any())).thenReturn(0L);
@@ -242,6 +243,28 @@ class AdminStatsServiceImplTest {
         var r = service.getStats().revenue();
 
         assertEquals(2_000_000L, r.platformFee() + r.readerShare());
+    }
+
+    @Test
+    @DisplayName("Lịch trả bằng ví mà huỷ rồi hoàn tiền thì phải rút khỏi doanh thu")
+    void hoanTienLichTraBangViPhaiTru() {
+        // Hàng BOOKING_PAYMENT ở ví KHÔNG bị lật trạng thái lúc hoàn tiền
+        // (chỉ nhánh trả qua cổng mới bị lật), nên trước đây buổi đã huỷ và
+        // đã trả lại tiền vẫn nằm nguyên trong doanh thu, kéo phí nền tảng và
+        // phần chia cho Reader vống theo.
+        when(paymentTransactionRepository.sumAmountByStatusExcludingPhase(
+                TransactionStatus.SUCCESS, PaymentPhase.TOPUP))
+                .thenReturn(0L);
+        when(walletTransactionRepository.sumAmountByTypeAndStatus(
+                WalletTransactionType.BOOKING_PAYMENT, TransactionStatus.SUCCESS))
+                .thenReturn(2_000_000L);
+        // Huỷ muộn: mất cọc 500k, hoàn lại 1,5 triệu.
+        when(walletTransactionRepository.sumBookingRefundForWalletPaid(TransactionStatus.SUCCESS))
+                .thenReturn(1_500_000L);
+
+        var r = service.getStats().revenue();
+
+        assertEquals(500_000L, r.platformFee() + r.readerShare());
     }
 
     @Test
