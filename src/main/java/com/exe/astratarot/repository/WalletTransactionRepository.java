@@ -36,4 +36,40 @@ public interface WalletTransactionRepository extends JpaRepository<WalletTransac
             """)
     long sumAmountByTypeAndStatus(@Param("type") WalletTransactionType type,
                                   @Param("status") TransactionStatus status);
+
+    /**
+     * Tổng tiền đã hoàn cho những lịch hẹn ĐƯỢC TRẢ BẰNG VÍ.
+     *
+     * <p>Vì sao phải lọc riêng nhóm ấy: huỷ lịch thì tiền luôn chảy về ví
+     * ({@code PaymentServiceImpl.refund} gọi {@code walletService.credit} với
+     * {@code BOOKING_REFUND}), nhưng hai lối trả tiền ghi sổ khác nhau.
+     *
+     * <ul>
+     *   <li>Trả thẳng qua cổng: hàng ở {@code payment_transactions} bị lật
+     *       SUCCESS → CANCELLED, nên nó TỰ RƠI khỏi tổng doanh thu rồi. Trừ
+     *       thêm lần nữa là trừ hai lần.</li>
+     *   <li>Trả bằng số dư ví: hàng {@code BOOKING_PAYMENT} KHÔNG bị lật, vẫn
+     *       nằm nguyên trong tổng. Không trừ là tính cả những buổi đã huỷ và
+     *       đã trả tiền lại cho khách.</li>
+     * </ul>
+     *
+     * <p>Phân biệt hai nhóm ngay trong chính bảng này, không phải nối sang
+     * bảng khác: lịch trả bằng ví thì có sẵn một hàng {@code BOOKING_PAYMENT}
+     * cùng {@code referenceId} (referenceId là id lịch hẹn).
+     *
+     * <p>Hoàn một phần cũng đúng: huỷ muộn chỉ hoàn phần ngoài tiền cọc, và
+     * hàm này cộng đúng số tiền đã hoàn chứ không cộng giá trị buổi xem.
+     */
+    @Query("""
+            SELECT COALESCE(SUM(r.amount), 0) FROM WalletTransaction r
+            WHERE r.type = com.exe.astratarot.domain.enums.WalletTransactionType.BOOKING_REFUND
+              AND r.status = :status
+              AND EXISTS (
+                  SELECT 1 FROM WalletTransaction p
+                  WHERE p.referenceId = r.referenceId
+                    AND p.type = com.exe.astratarot.domain.enums.WalletTransactionType.BOOKING_PAYMENT
+                    AND p.status = :status
+              )
+            """)
+    long sumBookingRefundForWalletPaid(@Param("status") TransactionStatus status);
 }

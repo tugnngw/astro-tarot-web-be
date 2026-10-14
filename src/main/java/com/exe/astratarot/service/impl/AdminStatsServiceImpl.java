@@ -137,7 +137,19 @@ public class AdminStatsServiceImpl implements AdminStatsService {
                 .sumAmountByStatusExcludingPhase(TransactionStatus.SUCCESS, PaymentPhase.TOPUP);
         long tienLichHenTraBangVi = walletTransactionRepository
                 .sumAmountByTypeAndStatus(WalletTransactionType.BOOKING_PAYMENT, TransactionStatus.SUCCESS);
-        long doanhThuLichHen = tienLichHenTraThang + tienLichHenTraBangVi;
+
+        // Trừ tiền đã hoàn cho khách khi huỷ lịch — nhưng CHỈ nhánh trả bằng ví.
+        //
+        // Nhánh trả thẳng qua cổng tự rơi khỏi tổng rồi, vì lúc hoàn tiền
+        // PaymentServiceImpl lật hàng payment_transactions từ SUCCESS sang
+        // CANCELLED. Nhánh trả bằng ví thì hàng BOOKING_PAYMENT không bị lật,
+        // nên trước đây mọi buổi đã huỷ và đã trả lại tiền vẫn nằm nguyên
+        // trong doanh thu — kéo theo phí nền tảng và phần chia cho Reader đều
+        // bị khai vống.
+        long tienDaHoanChoLichTraBangVi = walletTransactionRepository
+                .sumBookingRefundForWalletPaid(TransactionStatus.SUCCESS);
+        long doanhThuLichHen =
+                tienLichHenTraThang + tienLichHenTraBangVi - tienDaHoanChoLichTraBangVi;
 
         long platformFee = doanhThuLichHen * feePercent / 100;
         long readerShare = doanhThuLichHen - platformFee;
