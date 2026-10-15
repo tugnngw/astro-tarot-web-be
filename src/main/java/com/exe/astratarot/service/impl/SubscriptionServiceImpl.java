@@ -106,6 +106,15 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             }
             case STRIPE -> throw new IllegalArgumentException(
                     "Thanh toán thẻ quốc tế chưa được hỗ trợ. Vui lòng dùng Ví hoặc PayOS.");
+            // Lượt mua qua Google Play KHÔNG đi lối này.
+            //
+            // Ở đây là "tạo một lượt mua rồi đi thu tiền". Với Play thì tiền
+            // đã thu xong trước khi máy chủ biết chuyện, nên nó vào thẳng
+            // capGoiTuGooglePlay() sau khi xác minh token với Google. Nhận ở
+            // đây là mở đường cho máy khách tự khai mình đã trả tiền.
+            case GOOGLE_PLAY -> throw new IllegalArgumentException(
+                    "Gói mua trên Google Play được cấp sau khi Google xác nhận, "
+                            + "không tạo qua đường này.");
         };
     }
 
@@ -118,6 +127,29 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .orElseThrow(() -> new ResourceNotFoundException("Plan not found"));
         assertMayAcquirePlan(userId, plan);
         return activatePurchase(user, plan, UserPlanPurchase.PurchaseType.PAYOS);
+    }
+
+    /**
+     * Cấp gói từ một lượt mua đã xác minh với Google Play.
+     *
+     * <p>Tách riêng khỏi {@code activatePaidPurchase} vì ở đây tiền đã thu
+     * xong rồi: Google đã trừ tiền khách trước khi app biết chuyện. Chặn ở
+     * bước này là khách mất tiền mà không có gói, nên KHÔNG gọi
+     * {@code assertMayAcquirePlan}. Việc mua trùng gói được chặn sớm hơn —
+     * ngay trong app, trước khi mở luồng thanh toán của Google.
+     */
+    @Override
+    @Transactional
+    public UserPlanPurchase capGoiTuGooglePlay(User user, SubscriptionPlan plan) {
+        activatePurchase(user, plan, UserPlanPurchase.PurchaseType.GOOGLE_PLAY,
+                plan.getGooglePlayPrice());
+        return userPlanPurchaseRepository
+                .findByUserIdAndStatus(user.getId(), UserPlanPurchase.PurchaseStatus.ACTIVE)
+                .stream()
+                .filter(p -> plan.getId().equals(p.getPlanId()))
+                .max(java.util.Comparator.comparing(UserPlanPurchase::getStartAt))
+                .orElseThrow(() -> new IllegalStateException(
+                        "Vừa cấp gói xong mà không đọc lại được"));
     }
 
     /**
@@ -176,6 +208,23 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     private AIPlanResponse activatePurchase(User user, SubscriptionPlan plan,
                                             UserPlanPurchase.PurchaseType purchaseType) {
+        return activatePurchase(user, plan, purchaseType, null);
+    }
+
+    /**
+     * @param giaDaThu giá thật đã thu, hoặc null để lấy giá niêm yết của gói.
+     *                 Lượt mua qua Google Play truyền giá bên Play Console
+     *                 vào đây: giá ấy cao hơn giá web vì phải bù hoa hồng
+     *                 của Google, và thống kê doanh thu cộng chính cột
+     *                 {@code priceSnapshot} này, nên ghi giá web vào là báo
+     *                 thiếu đúng phần chênh.
+     */
+    private AIPlanResponse activatePurchase(User user, SubscriptionPlan plan,
+                                            UserPlanPurchase.PurchaseType purchaseType,
+                                            Long giaDaThu) {
+        // Để Long, không phải long: gói miễn phí có thể để giá null, và
+        // bóc hộp ở đây là nổ NPE ở chỗ trước giờ vẫn chạy.
+        Long gia = giaDaThu != null ? giaDaThu : plan.getPrice();
         Instant startAt = Instant.now();
         Instant endAt = startAt.plus(plan.getDurationDays(), ChronoUnit.DAYS);
 
@@ -184,7 +233,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .planId(plan.getId())
                 .planNameSnapshot(plan.getName())
                 .dailyQuotaSnapshot(plan.getDailyQuota())
-                .priceSnapshot(plan.getPrice())
+                .priceSnapshot(gia)
                 .startAt(Timestamp.from(startAt))
                 .endAt(Timestamp.from(endAt))
                 .status(UserPlanPurchase.PurchaseStatus.ACTIVE)
@@ -208,7 +257,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .purchaseId(savedPurchase.getId())
                 .planName(plan.getName())
                 .dailyQuota(plan.getDailyQuota())
-                .price(plan.getPrice())
+                .price(gia)
                 .startAt(startAt)
                 .endAt(endAt)
                 .remainingDays(plan.getDurationDays())
