@@ -15,6 +15,8 @@ public interface BlogRepository extends JpaRepository<Blog, UUID> {
 
     boolean existsBySlug(String slug);
 
+    long countByStatus(BlogStatus status);
+
     Optional<Blog> findBySlug(String slug);
 
     @Query("""

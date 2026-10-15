@@ -9,12 +9,14 @@ import com.exe.astratarot.domain.enums.WalletTransactionType;
 import com.exe.astratarot.domain.enums.PaymentPhase;
 import com.exe.astratarot.domain.dto.admin.AdminStatsResponse;
 import com.exe.astratarot.domain.entity.ReaderApplication;
+import com.exe.astratarot.domain.enums.BlogStatus;
 import com.exe.astratarot.domain.enums.BookingStatus;
 import com.exe.astratarot.domain.enums.ReportStatus;
 import com.exe.astratarot.domain.enums.UserRole;
 import com.exe.astratarot.domain.enums.PayoutStatus;
 import com.exe.astratarot.domain.enums.TransactionStatus;
 import com.exe.astratarot.repository.AIUsageLogRepository;
+import com.exe.astratarot.repository.BlogRepository;
 import com.exe.astratarot.repository.PaymentTransactionRepository;
 import com.exe.astratarot.repository.PayoutRequestRepository;
 import com.exe.astratarot.repository.BookingRepository;
@@ -66,6 +68,7 @@ public class AdminStatsServiceImpl implements AdminStatsService {
     private final UserPlanPurchaseRepository userPlanPurchaseRepository;
     private final WalletTransactionRepository walletTransactionRepository;
     private final BaoCaoNoiDungAiService baoCaoNoiDungAiService;
+    private final BlogRepository blogRepository;
 
     private static final long USD_TO_VND = 25_000L;
 
@@ -196,6 +199,11 @@ public class AdminStatsServiceImpl implements AdminStatsService {
         long completedBookings = bookingByStatus.getOrDefault(BookingStatus.COMPLETED.name(), 0L);
         long reviewsCount = reviewRepository.count();
 
+        long totalBlogs = blogRepository.count();
+        long publishedBlogs = blogRepository.countByStatus(BlogStatus.PUBLISHED);
+        long pendingBlogs = blogRepository.countByStatus(BlogStatus.PENDING);
+        long draftBlogs = blogRepository.countByStatus(BlogStatus.DRAFT);
+
         return new AdminStatsResponse(
                 new AdminStatsResponse.UserStats(totalUsers, byRole, newUsers),
                 new AdminStatsResponse.ReaderStats(pendingApplications, activeProfiles),
@@ -236,7 +244,8 @@ public class AdminStatsServiceImpl implements AdminStatsService {
                         feedbackCount >= 20,
                         clicks30d,
                         marketingEventService.countsLast30Days()
-                )
+                ),
+                new AdminStatsResponse.BlogStats(totalBlogs, publishedBlogs, pendingBlogs, draftBlogs)
         );
     }
 

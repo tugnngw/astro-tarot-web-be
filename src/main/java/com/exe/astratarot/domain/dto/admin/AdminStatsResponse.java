@@ -18,7 +18,8 @@ public record AdminStatsResponse(
         AiStats ai,
         SubscriptionStats subscriptions,
         RevenueStats revenue,
-        TractionStats traction
+        TractionStats traction,
+        BlogStats blogs
 ) {
     /**
      * Việc BÁN gói AI — khác hẳn {@link AiStats} vốn chỉ đếm token đã tiêu.
@@ -50,6 +51,14 @@ public record AdminStatsResponse(
             long revenueLast30Days,
             Map<String, Long> purchasesByPlan
     ) {}
+
+    /**
+     * @param total          tổng bài viết blog
+     * @param published      bài viết đã xuất bản
+     * @param pending        bài viết chờ duyệt
+     * @param draft          bài viết nháp
+     */
+    public record BlogStats(long total, long published, long pending, long draft) {}
     /**
      * @param total    tổng tài khoản còn hiệu lực (chưa xoá mềm)
      * @param byRole   số tài khoản theo từng vai trò

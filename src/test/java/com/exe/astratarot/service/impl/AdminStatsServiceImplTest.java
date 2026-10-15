@@ -85,6 +85,7 @@ class AdminStatsServiceImplTest {
     @Mock private UserPlanPurchaseRepository userPlanPurchaseRepository;
     @Mock private WalletTransactionRepository walletTransactionRepository;
     @Mock private BaoCaoNoiDungAiService baoCaoNoiDungAiService;
+    @Mock private com.exe.astratarot.repository.BlogRepository blogRepository;
 
     private AdminStatsServiceImpl service;
 
@@ -95,7 +96,7 @@ class AdminStatsServiceImplTest {
                 productClickRepository, aiUsageLogRepository, paymentTransactionRepository,
                 payoutRequestRepository, reviewRepository, feedbackService, marketingEventService,
                 subscriptionPlanRepository, userPlanPurchaseRepository, walletTransactionRepository,
-                baoCaoNoiDungAiService);
+                baoCaoNoiDungAiService, blogRepository);
 
         // Mặc định: hệ thống trống trơn. Từng phép kiểm chỉ nói thêm phần nó cần.
         lenient().when(subscriptionPlanRepository.countByIsActiveTrue()).thenReturn(0L);
@@ -133,6 +134,8 @@ class AdminStatsServiceImplTest {
         lenient().when(reviewRepository.count()).thenReturn(0L);
         lenient().when(feedbackService.countAll()).thenReturn(0L);
         lenient().when(marketingEventService.countsLast30Days()).thenReturn(Map.of());
+        lenient().when(blogRepository.count()).thenReturn(0L);
+        lenient().when(blogRepository.countByStatus(any())).thenReturn(0L);
     }
 
     // =====================================================================
@@ -388,5 +391,22 @@ class AdminStatsServiceImplTest {
         assertAll(
                 () -> assertEquals(4L, kq.readers().pendingApplications()),
                 () -> assertEquals(2L, kq.moderation().pendingReports()));
+    }
+
+    @Test
+    @DisplayName("Thống kê bài viết blog phân theo từng trạng thái chuẩn")
+    void soLieuBaiVietBlog() {
+        when(blogRepository.count()).thenReturn(15L);
+        when(blogRepository.countByStatus(com.exe.astratarot.domain.enums.BlogStatus.PUBLISHED)).thenReturn(10L);
+        when(blogRepository.countByStatus(com.exe.astratarot.domain.enums.BlogStatus.PENDING)).thenReturn(3L);
+        when(blogRepository.countByStatus(com.exe.astratarot.domain.enums.BlogStatus.DRAFT)).thenReturn(2L);
+
+        var kq = service.getStats();
+
+        assertAll(
+                () -> assertEquals(15L, kq.blogs().total()),
+                () -> assertEquals(10L, kq.blogs().published()),
+                () -> assertEquals(3L, kq.blogs().pending()),
+                () -> assertEquals(2L, kq.blogs().draft()));
     }
 }
