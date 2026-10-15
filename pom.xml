@@ -263,6 +263,13 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Google Analytics Data API client -->
+        <dependency>
+            <groupId>com.google.analytics</groupId>
+            <artifactId>google-analytics-data</artifactId>
+            <version>0.67.0</version>
+        </dependency>
+
     </dependencies>
 
     <build>
