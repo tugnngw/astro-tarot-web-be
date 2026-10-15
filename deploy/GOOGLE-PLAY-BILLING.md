@@ -96,8 +96,8 @@ Render → service của backend → **Environment** → thêm biến:
 - **Giá trị:** dán **toàn bộ nội dung** tệp JSON tải ở Việc 2, một dòng cũng
   được, nhiều dòng cũng được.
 
-Rồi bấm **Deploy** (Manual Deploy → Deploy latest commit). Backend không tự
-deploy khi đẩy `main`.
+Lưu biến là Render tự dựng lại dịch vụ, không phải bấm gì thêm. (Đẩy
+`main` cũng tự deploy: workflow `cd.yml` gọi Deploy Hook của Render.)
 
 Để trống biến này thì tính năng tự tắt chứ không làm sập máy chủ: mọi thứ khác
 chạy bình thường, chỉ riêng việc đổi lượt mua trả lỗi "Máy chủ chưa cấu hình
