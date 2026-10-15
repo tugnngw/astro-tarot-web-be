@@ -13,6 +13,9 @@ public interface SubscriptionPlanRepository extends JpaRepository<SubscriptionPl
 
     List<SubscriptionPlan> findByIsActiveTrue();
 
+    /** Tra gói theo mã sản phẩm khai trong Play Console. */
+    java.util.Optional<SubscriptionPlan> findByGooglePlayProductId(String googlePlayProductId);
+
     /** Số gói đang bày bán — cho màn Tổng quan của quản trị. */
     long countByIsActiveTrue();
 

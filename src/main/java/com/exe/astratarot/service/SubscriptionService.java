@@ -18,6 +18,18 @@ public interface SubscriptionService {
      */
     AIPlanResponse activatePaidPurchase(UUID userId, UUID planId);
 
+    /**
+     * Cấp gói từ một lượt mua ĐÃ xác minh với Google Play.
+     *
+     * <p>Khác {@link #activatePaidPurchase}: ở đây tiền đã thu xong rồi —
+     * Google trừ tiền khách trước khi máy chủ biết chuyện — nên không chặn
+     * vì lý do "đang có gói tháng". Chặn ở bước này là khách mất tiền mà
+     * không có gói.
+     */
+    com.exe.astratarot.domain.entity.UserPlanPurchase capGoiTuGooglePlay(
+            com.exe.astratarot.domain.entity.User user,
+            com.exe.astratarot.domain.entity.SubscriptionPlan plan);
+
     boolean canUseAI(UUID userId);
 
     void recordAIUsage(UUID userId);

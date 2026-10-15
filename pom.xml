@@ -61,6 +61,24 @@
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
+
+        <!--
+            Xác minh lượt mua của Google Play.
+
+            Máy khách gửi lên purchaseToken; CHỈ Google mới nói được token ấy
+            có thật, đã thanh toán xong chưa, và thuộc sản phẩm nào. Tin lời
+            máy khách thì ai cũng tự cấp gói cho mình bằng một lần gọi API.
+        -->
+        <dependency>
+            <groupId>com.google.apis</groupId>
+            <artifactId>google-api-services-androidpublisher</artifactId>
+            <version>v3-rev20260528-2.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.auth</groupId>
+            <artifactId>google-auth-library-oauth2-http</artifactId>
+            <version>1.33.1</version>
+        </dependency>
         <!-- WEB -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

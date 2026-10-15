@@ -92,6 +92,6 @@ public class UserPlanPurchase {
     }
 
     public enum PurchaseType {
-        STRIPE, PAYOS, WALLET, MANUAL
+        STRIPE, PAYOS, WALLET, MANUAL, GOOGLE_PLAY
     }
 }
