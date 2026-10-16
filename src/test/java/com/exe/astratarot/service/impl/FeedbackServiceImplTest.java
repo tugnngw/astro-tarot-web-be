@@ -28,6 +28,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -279,6 +280,38 @@ class FeedbackServiceImplTest {
     }
 
     @Test
+    @DisplayName("Không lọc từ khoá thì truyền thẳng null, KHÔNG dựng chuỗi rỗng")
+    void listAdminFeedback_khongTuKhoa() {
+        // Chỗ này từng làm production trả 500: truy vấn cũ ghép
+        // LIKE LOWER(CONCAT('%', :keyword, '%')), và một null nằm giữa hai
+        // hằng chuỗi thì Postgres không suy ra nổi kiểu tham số. Mở tab mà
+        // không gõ gì vào ô tìm kiếm là hỏng; gõ một chữ lại chạy.
+        //
+        // Nay chuỗi so khớp dựng sẵn ở tầng service, còn "không lọc" nghĩa là
+        // null đi xuống một phép so sánh bình thường.
+        Pageable pageable = PageRequest.of(0, 20);
+        when(feedbackRepository.findAdminFeedback(isNull(), isNull(), isNull(), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        service.listAdminFeedback(null, null, null, pageable);
+
+        verify(feedbackRepository).findAdminFeedback(isNull(), isNull(), isNull(), eq(pageable));
+    }
+
+    @Test
+    @DisplayName("Từ khoá được hạ chữ thường và bọc dấu % trước khi xuống truy vấn")
+    void listAdminFeedback_dungSanChuoiSoKhop() {
+        Pageable pageable = PageRequest.of(0, 20);
+        when(feedbackRepository.findAdminFeedback(isNull(), isNull(), eq("%hài lòng%"), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        service.listAdminFeedback(null, null, "  Hài Lòng  ", pageable);
+
+        verify(feedbackRepository)
+                .findAdminFeedback(isNull(), isNull(), eq("%hài lòng%"), eq(pageable));
+    }
+
+    @Test
     @DisplayName("Phân trang danh sách phản hồi cho Quản trị viên — phân biệt khách ẩn danh và thành viên")
     void listAdminFeedback() {
         User user = User.builder()
@@ -311,7 +344,7 @@ class FeedbackServiceImplTest {
         Page<UserFeedback> page = new PageImpl<>(List.of(authFb, anonFb));
         Pageable pageable = PageRequest.of(0, 10);
 
-        when(feedbackRepository.findAdminFeedback(eq(5), eq("TAROT_AI"), eq("tốt"), eq(pageable)))
+        when(feedbackRepository.findAdminFeedback(eq(5), eq("TAROT_AI"), eq("%tốt%"), eq(pageable)))
                 .thenReturn(page);
 
         Page<AdminFeedbackItemResponse> result = service.listAdminFeedback(5, "tarot_ai", "tốt", pageable);
