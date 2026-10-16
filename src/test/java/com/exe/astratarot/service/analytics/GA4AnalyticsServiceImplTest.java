@@ -54,6 +54,47 @@ class GA4AnalyticsServiceImplTest {
     }
 
     @Test
+    @DisplayName("Đếm người đang truy cập bằng lượt gọi thời gian thực, tách khỏi báo cáo thường")
+    void getReport_nguoiDangTruyCap() {
+        when(clientProvider.isConfigured()).thenReturn(true);
+        when(clientProvider.getClient()).thenReturn(mockDataClient);
+        when(clientProvider.getPropertyId()).thenReturn("559341552");
+        when(mockDataClient.runReport(any(RunReportRequest.class)))
+                .thenReturn(RunReportResponse.newBuilder().build());
+        when(mockDataClient.runRealtimeReport(any(RunRealtimeReportRequest.class)))
+                .thenReturn(RunRealtimeReportResponse.newBuilder()
+                        .addRows(Row.newBuilder()
+                                .addMetricValues(MetricValue.newBuilder().setValue("4")))
+                        .build());
+
+        GA4ReportResponse response = service.getReport("30daysAgo", "today");
+
+        // Báo cáo thường của tài sản mới trễ 24–48 giờ nên rỗng, còn lượt gọi
+        // thời gian thực trả về ngay. Đây chính là lý do có trường này: không
+        // thì trang quản trị đứng im ở 0 suốt hai ngày dù web đang có khách.
+        assertEquals(0L, response.overview().activeUsers());
+        assertEquals(4L, response.realtimeActiveUsers());
+        assertEquals("SUCCESS", response.status());
+    }
+
+    @Test
+    @DisplayName("Lượt gọi thời gian thực hỏng thì trả -1, KHÔNG làm đổ cả báo cáo")
+    void getReport_thoiGianThucHong() {
+        when(clientProvider.isConfigured()).thenReturn(true);
+        when(clientProvider.getClient()).thenReturn(mockDataClient);
+        when(clientProvider.getPropertyId()).thenReturn("559341552");
+        when(mockDataClient.runReport(any(RunReportRequest.class)))
+                .thenReturn(RunReportResponse.newBuilder().build());
+        when(mockDataClient.runRealtimeReport(any(RunRealtimeReportRequest.class)))
+                .thenThrow(new RuntimeException("quota"));
+
+        GA4ReportResponse response = service.getReport("30daysAgo", "today");
+
+        assertEquals(-1L, response.realtimeActiveUsers());
+        assertEquals("SUCCESS", response.status());
+    }
+
+    @Test
     @DisplayName("getReport: ánh xạ thành công overview, timeSeries và trafficSources khi có dữ liệu")
     void getReport_success() {
         when(clientProvider.isConfigured()).thenReturn(true);
