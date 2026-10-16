@@ -60,7 +60,24 @@ public class DefaultGa4ClientProvider implements Ga4ClientProvider {
             }
 
             if (credentials != null) {
-                BetaAnalyticsDataSettings settings = BetaAnalyticsDataSettings.newBuilder()
+                // newHttpJsonBuilder, KHÔNG phải newBuilder.
+                //
+                // newBuilder dựng kênh gRPC, và gRPC nạp thư viện SSL viết
+                // bằng C (netty-tcnative) ngay lúc khởi tạo. Trên Render thư
+                // viện ấy chết hẳn tiến trình:
+                //
+                //   SIGSEGV ... netty_internal_tcnative_SSLContext_JNI_OnLoad
+                //   Exited with status 139
+                //
+                // Chết ở tầng native thì không `catch` được: cả máy chủ sập
+                // theo, không riêng gì phần Analytics. Mà container ở đây
+                // chạy với `-Xss512k` và hạn mức bộ nhớ rất chặt, đúng kiểu
+                // môi trường thư viện ấy hay vỡ.
+                //
+                // Bản REST (HTTP/JSON) gọi cùng API, cùng dữ liệu trả về,
+                // nhưng đi bằng HTTP client thuần Java — không nạp mảnh C
+                // nào, và nhẹ hơn đáng kể trên gói máy nhỏ.
+                BetaAnalyticsDataSettings settings = BetaAnalyticsDataSettings.newHttpJsonBuilder()
                         .setCredentialsProvider(FixedCredentialsProvider.create(credentials))
                         .build();
                 this.client = BetaAnalyticsDataClient.create(settings);
