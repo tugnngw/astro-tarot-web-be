@@ -10,7 +10,7 @@ Hai việc khác nhau, đừng lẫn:
 | | Thu thập | Đọc về |
 |---|---|---|
 | Ai làm | Trình duyệt của khách | Máy chủ |
-| Cần gì | Measurement ID `G-6B0LQ5Q9D8` | Service account + Property ID |
+| Cần gì | Measurement ID `G-XPERZQWF4T` | Service account + Property ID `559341552` |
 | Đặt ở đâu | Đã nằm trong mã web | **Render** |
 | Thiếu thì sao | GA4 không có dữ liệu | Có dữ liệu nhưng admin không xem được trong app |
 
@@ -20,7 +20,7 @@ Render → service backend → **Environment**:
 
 | Tên biến | Giá trị |
 | --- | --- |
-| `GA4_PROPERTY_ID` | `559041870` |
+| `GA4_PROPERTY_ID` | `559341552` |
 | `GA4_CREDENTIALS_JSON` | **Toàn bộ nội dung** tệp service account JSON |
 
 Lưu biến là Render tự dựng lại dịch vụ.
@@ -34,27 +34,35 @@ trỏ tới tệp được.
 Để trống cả hai thì ứng dụng vẫn khởi động bình thường, chỉ riêng tab Analytics
 báo chưa cấu hình — không làm sập gì.
 
-## Việc 2 — Hai bước bên Google, thiếu là 403
+## Việc 2 — Quyền bên Google (ĐÃ LÀM XONG 16/10/2026)
 
-1. **GA4 → Admin → Property Access Management** → thêm
-   `astro-tarot-ga4-reader@astra-tarot-analytics.iam.gserviceaccount.com`
-   với vai trò **Viewer**.
-2. **Google Cloud Console** (project `astra-tarot-analytics`) → APIs & Services
-   → Library → bật **Google Analytics Data API**.
+Hai bước này hay bị quên, thiếu là 403 `PERMISSION_DENIED`. Đã làm rồi, ghi
+lại để sau còn biết chúng nằm ở đâu:
 
-Thiếu bước nào thì tab Analytics hiện câu lỗi "Không thể truy vấn Google
-Analytics Data API: …PERMISSION_DENIED".
+1. **GA4 → Quản trị → Quản lý quyền truy cập vào tài sản** của tài sản
+   `AstroTarot`: `astrotarot-ga4-reader@astrotarot-play.iam.gserviceaccount.com`
+   đã có vai trò **Người xem**.
+2. **Google Cloud Console**, project `astrotarot-play`: **Google Analytics Data
+   API** đã bật.
+
+Tệp khoá: `astrotarot-ga4-reader.json`.
 
 ## Việc 3 — Kiểm hai mã có cùng một property không
 
 Đây là chỗ dễ mất cả buổi mà không ai nghĩ ra: thẻ trên web gửi dữ liệu vào
-**luồng** `G-6B0LQ5Q9D8`, còn máy chủ đọc **property** `559041870`. Nếu luồng ấy
+**luồng** `G-XPERZQWF4T`, còn máy chủ đọc **property** `559341552`. Nếu luồng ấy
 nằm trong một property khác thì web vẫn ghi nhận bình thường, máy chủ vẫn trả
 200, mà mọi con số đều bằng 0.
 
-Kiểm: GA4 → Admin → **Data streams** → mở luồng có `G-6B0LQ5Q9D8` → xem nó thuộc
+Lần đầu đã dính đúng bẫy này ở mức nặng hơn: cả luồng lẫn property đều nằm
+trong tài khoản Google của người khác trong nhóm, nên bên mình không mở được,
+không cấp quyền được, cũng không xem được. Vì vậy đã dựng lại tài sản mới trong
+tài khoản `megalit2578@gmail.com`. Cả hai mã trong tài liệu này đều thuộc tài
+sản mới ấy.
+
+Kiểm: GA4 → Admin → **Data streams** → mở luồng có `G-XPERZQWF4T` → xem nó thuộc
 property nào → Admin → **Property details** của property đó phải hiện đúng số
-`559041870`. Lệch thì sửa `GA4_PROPERTY_ID` cho khớp.
+`559341552`. Lệch thì sửa `GA4_PROPERTY_ID` cho khớp.
 
 ## Việc 4 — Gắn UTM vào mọi link đăng lên mạng xã hội
 

@@ -12,9 +12,9 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "app.ga4")
 public class Ga4Properties {
     /**
-     * GA4 Property ID (ví dụ: 559041870).
+     * GA4 Property ID (ví dụ: 559341552).
      */
-    private String propertyId = "559041870";
+    private String propertyId = "559341552";
 
     /**
      * Đường dẫn tới tệp Service Account JSON (lưu ngoài repository trên máy local).

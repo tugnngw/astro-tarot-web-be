@@ -14,7 +14,7 @@ class GA4RealSmokeTest {
     @Test
     @DisplayName("Real GA4 Smoke Test: nạp Service Account key thật và truy vấn API Google Analytics 4")
     void smokeTestRealGa4() {
-        String propId = System.getProperty("GA4_PROPERTY_ID", System.getenv().getOrDefault("GA4_PROPERTY_ID", "559041870"));
+        String propId = System.getProperty("GA4_PROPERTY_ID", System.getenv().getOrDefault("GA4_PROPERTY_ID", "559341552"));
         String credPath = System.getProperty("GA4_CREDENTIALS_PATH",
                 System.getenv().getOrDefault("GA4_CREDENTIALS_PATH", ""));
 
