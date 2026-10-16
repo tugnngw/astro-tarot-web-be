@@ -184,8 +184,13 @@ public class FeedbackServiceImpl implements FeedbackService {
             Integer rating, String source, String keyword, Pageable pageable) {
         String cleanSource = (source != null && !source.isBlank()) ? source.trim().toUpperCase() : null;
         String cleanKeyword = (keyword != null && !keyword.isBlank()) ? keyword.trim() : null;
+        // Dựng sẵn chuỗi so khớp ở đây; truy vấn không được tự ghép bằng
+        // CONCAT, xem chú thích ở findAdminFeedback.
+        String pattern = cleanKeyword == null
+                ? null
+                : "%" + cleanKeyword.toLowerCase() + "%";
 
-        return feedbackRepository.findAdminFeedback(rating, cleanSource, cleanKeyword, pageable)
+        return feedbackRepository.findAdminFeedback(rating, cleanSource, pattern, pageable)
                 .map(this::toAdminFeedbackItemResponse);
     }
 
