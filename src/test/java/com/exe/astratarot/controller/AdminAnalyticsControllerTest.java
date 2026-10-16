@@ -37,7 +37,7 @@ class AdminAnalyticsControllerTest {
         GA4OverviewDto overview = new GA4OverviewDto(150L, 120L, 200L, 500L, 0.32, 145.5);
         GA4ReportResponse mockReport = new GA4ReportResponse(
                 true,
-                "559041870",
+                "559341552",
                 "30daysAgo",
                 "today",
                 overview,
@@ -54,7 +54,7 @@ class AdminAnalyticsControllerTest {
         assertEquals(HttpStatus.OK, res.getStatusCode());
         assertNotNull(res.getBody());
         assertTrue(res.getBody().isSuccess());
-        assertEquals("559041870", res.getBody().getData().propertyId());
+        assertEquals("559341552", res.getBody().getData().propertyId());
         assertEquals(150L, res.getBody().getData().overview().activeUsers());
         verify(ga4AnalyticsService).getReport("30daysAgo", "today");
     }
@@ -62,7 +62,7 @@ class AdminAnalyticsControllerTest {
     @Test
     @DisplayName("getReport: xử lý trạng thái chưa cấu hình credentials")
     void getReport_unconfigured() {
-        GA4ReportResponse unconfiguredReport = GA4ReportResponse.unconfigured("559041870", "7daysAgo", "today");
+        GA4ReportResponse unconfiguredReport = GA4ReportResponse.unconfigured("559341552", "7daysAgo", "today");
         when(ga4AnalyticsService.getReport("7daysAgo", "today")).thenReturn(unconfiguredReport);
 
         ResponseEntity<ApiResponse<GA4ReportResponse>> res = controller.getReport("7daysAgo", "today");

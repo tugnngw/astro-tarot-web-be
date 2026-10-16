@@ -33,12 +33,12 @@ class GA4AnalyticsServiceImplTest {
     @DisplayName("getReport: trả về NOT_CONFIGURED nếu clientProvider chưa cấu hình")
     void getReport_whenNotConfigured() {
         when(clientProvider.isConfigured()).thenReturn(false);
-        when(clientProvider.getPropertyId()).thenReturn("559041870");
+        when(clientProvider.getPropertyId()).thenReturn("559341552");
 
         GA4ReportResponse response = service.getReport("30daysAgo", "today");
 
         assertFalse(response.configured());
-        assertEquals("559041870", response.propertyId());
+        assertEquals("559341552", response.propertyId());
         assertEquals("NOT_CONFIGURED", response.status());
         assertEquals(0, response.overview().activeUsers());
         verify(clientProvider, never()).getClient();
@@ -58,7 +58,7 @@ class GA4AnalyticsServiceImplTest {
     void getReport_success() {
         when(clientProvider.isConfigured()).thenReturn(true);
         when(clientProvider.getClient()).thenReturn(mockDataClient);
-        when(clientProvider.getPropertyId()).thenReturn("559041870");
+        when(clientProvider.getPropertyId()).thenReturn("559341552");
 
         // 1. Mock Overview
         RunReportResponse overviewResponse = RunReportResponse.newBuilder()
@@ -120,7 +120,7 @@ class GA4AnalyticsServiceImplTest {
     void getReport_handlesApiExceptionGracefully() {
         when(clientProvider.isConfigured()).thenReturn(true);
         when(clientProvider.getClient()).thenReturn(mockDataClient);
-        when(clientProvider.getPropertyId()).thenReturn("559041870");
+        when(clientProvider.getPropertyId()).thenReturn("559341552");
 
         when(mockDataClient.runReport(any(RunReportRequest.class)))
                 .thenThrow(new RuntimeException("Google Cloud Permission Denied for C:\\secrets\\sa-key.json"));

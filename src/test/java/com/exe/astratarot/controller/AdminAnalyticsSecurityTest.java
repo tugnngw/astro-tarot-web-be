@@ -108,7 +108,7 @@ class AdminAnalyticsSecurityTest {
 
         GA4ReportResponse response = new GA4ReportResponse(
                 true,
-                "559041870",
+                "559341552",
                 "30daysAgo",
                 "today",
                 new GA4OverviewDto(100L, 80L, 120L, 300L, 0.25, 90.0),
@@ -123,7 +123,7 @@ class AdminAnalyticsSecurityTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.propertyId").value("559041870"))
+                .andExpect(jsonPath("$.data.propertyId").value("559341552"))
                 .andExpect(jsonPath("$.data.overview.activeUsers").value(100));
     }
 }
