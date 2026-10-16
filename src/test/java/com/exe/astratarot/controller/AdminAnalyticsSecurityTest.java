@@ -114,6 +114,7 @@ class AdminAnalyticsSecurityTest {
                 new GA4OverviewDto(100L, 80L, 120L, 300L, 0.25, 90.0),
                 List.of(),
                 List.of(),
+                3L,
                 "SUCCESS",
                 "OK"
         );

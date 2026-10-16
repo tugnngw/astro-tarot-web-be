@@ -43,6 +43,7 @@ class AdminAnalyticsControllerTest {
                 overview,
                 List.of(),
                 List.of(),
+                3L,
                 "SUCCESS",
                 "Tải báo cáo GA4 thành công"
         );

@@ -105,6 +105,7 @@ public class GA4AnalyticsServiceImpl implements GA4AnalyticsService {
                     overview,
                     trafficSources,
                     timeSeries,
+                    demNguoiDangTruyCap(client, property),
                     "SUCCESS",
                     "Tải báo cáo GA4 thành công"
             );
@@ -117,6 +118,41 @@ public class GA4AnalyticsServiceImpl implements GA4AnalyticsService {
                     cleanEnd,
                     "Không thể truy vấn Google Analytics Data API: " + sanitizeError(e.getMessage())
             );
+        }
+    }
+
+    /**
+     * Số người đang ở trên web trong 30 phút qua.
+     *
+     * <p>Vì sao cần, dù đã có {@code overview.activeUsers}: báo cáo thường
+     * của GA4 trễ 24–48 giờ với tài sản mới. Suốt hai ngày đầu, trang quản
+     * trị hiện 0 ở mọi ô dù web vẫn có khách vào — người xem tưởng cấu hình
+     * hỏng và đi sửa những thứ không hỏng. Lượt gọi thời gian thực trả về
+     * ngay, nên ít nhất có một con số biết nhúc nhích để đối chiếu.
+     *
+     * <p>Hỏng thì trả -1 chứ KHÔNG ném: đây là số phụ, không đáng để làm đổ
+     * cả bản báo cáo chính đã lấy được.
+     */
+    private long demNguoiDangTruyCap(BetaAnalyticsDataClient client, String property) {
+        try {
+            RunRealtimeReportRequest request = RunRealtimeReportRequest.newBuilder()
+                    .setProperty(property)
+                    .addMetrics(Metric.newBuilder().setName("activeUsers"))
+                    .build();
+
+            RunRealtimeReportResponse response = client.runRealtimeReport(request);
+            // getRowsCount() chứ không phải getRowCount(). Hai cái khác hẳn
+            // nhau: getRowsCount() là số dòng thật trong danh sách, còn
+            // getRowCount() đọc một trường riêng của phản hồi mà Google
+            // không phải lúc nào cũng điền. Lẫn hai cái là lúc nào cũng
+            // thấy 0 người đang truy cập dù dữ liệu có đủ.
+            if (response.getRowsCount() == 0) {
+                return 0L;
+            }
+            return parseLongSafe(response.getRows(0).getMetricValues(0).getValue());
+        } catch (Exception e) {
+            log.warn("Không lấy được số người truy cập thời gian thực: {}", e.getMessage());
+            return -1L;
         }
     }
 
