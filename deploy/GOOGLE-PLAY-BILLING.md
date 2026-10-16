@@ -41,9 +41,8 @@ thì app hỏi giá vẫn không thấy gì.
 
 ### Vì sao giá trên app cao hơn giá web
 
-Google thu hoa hồng mỗi lượt mua: **15%** nếu đã vào Small Business Program
-(doanh thu dưới 1 triệu USD một năm — nên đăng ký, xem Việc 4), **30%** nếu
-chưa. Bán đúng giá web thì thực nhận còn thấp hơn bán trên web.
+Google thu hoa hồng mỗi lượt mua: **15%** cho 1 triệu USD doanh thu đầu tiên
+mỗi năm (tài khoản này đã ghi danh mức ấy — xem Việc 4), **30%** cho phần vượt. Bán đúng giá web thì thực nhận còn thấp hơn bán trên web.
 
 Giá trên bảng đã kê lên để sau hoa hồng 15% vẫn nhận về nhiều hơn giá web một
 chút:
@@ -66,35 +65,35 @@ UPDATE subscription_plan SET google_play_price = 25000
 WHERE google_play_product_id = 'ai_basic_1d';
 ```
 
-## Việc 2 — Tạo tài khoản dịch vụ để máy chủ hỏi Google
+## Việc 2 — Tài khoản dịch vụ (ĐÃ TẠO XONG 16/10/2026)
 
 Máy chủ phải tự hỏi Google "lượt mua này có thật không, đã trả tiền chưa" —
-không được tin app. Để hỏi được thì cần một khoá tài khoản dịch vụ.
+không được tin app. Phần này đã dựng sẵn, ghi lại để sau này còn biết nó nằm ở
+đâu:
 
-1. **Google Cloud Console** → chọn hoặc tạo một project → **IAM & Admin** →
-   **Service Accounts** → **Create service account**. Tên gì cũng được, ví dụ
-   `astrotarot-play-billing`.
-2. Vào tài khoản dịch vụ vừa tạo → tab **Keys** → **Add key** → **Create new
-   key** → chọn **JSON** → tải tệp về. Tệp này là khoá, đừng commit vào repo và
-   đừng gửi qua chat.
-3. Trong cùng project, bật **Google Play Android Developer API** (APIs &
-   Services → Library → tìm tên ấy → Enable).
-4. **Play Console** → **Người dùng và quyền** → **Mời người dùng mới** → điền
-   email của tài khoản dịch vụ (dạng `…@….iam.gserviceaccount.com`) → ở phần
-   quyền, cấp cho app AstroTarot quyền **Xem dữ liệu tài chính** và **Quản lý
-   đơn hàng và đăng ký**.
+| | |
+| --- | --- |
+| Project Google Cloud | `astrotarot-play` (AstroTarot Play) |
+| Tài khoản dịch vụ | `astrotarot-play-billing@astrotarot-play.iam.gserviceaccount.com` |
+| API đã bật | Google Play Android Developer API |
+| Quyền trong Play Console | Xem dữ liệu tài chính + Quản lý đơn hàng và đăng ký |
+| Tệp khoá | `astrotarot-play-c39ef10aa29f.json` (tải về máy, KHÔNG commit) |
 
-   Nếu Play Console hiện mục **Quyền truy cập API** (Setup → API access) thì
-   liên kết project Google Cloud ở đó rồi cấp quyền cho tài khoản dịch vụ trong
-   cùng trang.
+Khoá này tách riêng khỏi khoá GA4 (`astro-tarot-ga4-reader@astra-tarot-analytics`)
+có chủ đích: hai việc khác nhau, lộ cái nào thì chỉ mất cái ấy. Khoá GA4 còn
+thuộc tài khoản Google của người khác trong nhóm, nên càng không dùng chung.
+
+Cần tạo lại (khoá lộ, hoặc mất tệp) thì: Cloud Console → project `astrotarot-play`
+→ IAM & Admin → Service accounts → `astrotarot-play-billing` → Keys → Add key →
+Create new key → JSON. Khoá cũ xoá ở cùng trang ấy.
 
 ## Việc 3 — Đặt khoá lên Render
 
 Render → service của backend → **Environment** → thêm biến:
 
 - **Tên:** `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`
-- **Giá trị:** dán **toàn bộ nội dung** tệp JSON tải ở Việc 2, một dòng cũng
-  được, nhiều dòng cũng được.
+- **Giá trị:** dán **toàn bộ nội dung** tệp `astrotarot-play-c39ef10aa29f.json`,
+  một dòng cũng được, nhiều dòng cũng được.
 
 Lưu biến là Render tự dựng lại dịch vụ, không phải bấm gì thêm. (Đẩy
 `main` cũng tự deploy: workflow `cd.yml` gọi Deploy Hook của Render.)
@@ -105,9 +104,9 @@ khoá Google Play".
 
 ## Việc 4 — Hai thứ nên làm luôn
 
-- **Small Business Program**: Play Console → **Kiếm tiền** → **Thiết lập kiếm
-  tiền** → đăng ký. Hoa hồng còn 15% thay vì 30%. Điều kiện: doanh thu dưới 1
-  triệu USD một năm.
+- **Mức phí 15%**: ĐÃ ghi danh (kiểm 16/10/2026 ở Play Console → Associated
+  developer accounts → "Programs and services you're enrolled in" → ✓ 15%
+  service fee). Không phải làm gì thêm.
 - **Hồ sơ thanh toán (merchant profile)**: chưa có thì Play Console không cho
   tạo sản phẩm trong ứng dụng. Play Console → **Kiếm tiền** → **Thiết lập hồ sơ
   thanh toán**, điền thông tin ngân hàng và thuế.
