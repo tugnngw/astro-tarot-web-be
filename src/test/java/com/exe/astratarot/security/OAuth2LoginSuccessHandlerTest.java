@@ -72,7 +72,13 @@ class OAuth2LoginSuccessHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new OAuth2LoginSuccessHandler(userRepository, exchangeCodeService);
+        // Dùng bản THẬT của dịch vụ nối tài khoản, không mock: quy tắc chống
+        // tài khoản trùng nằm trong đó, và mock nó đi là những bài kiểm dưới
+        // đây chỉ còn kiểm phần chuyển hướng.
+        handler = new OAuth2LoginSuccessHandler(
+                new com.exe.astratarot.service.impl.TaiKhoanGoogleServiceImpl(userRepository),
+                userRepository,
+                exchangeCodeService);
         ReflectionTestUtils.setField(handler, "frontendUrl", "https://astrotarot.date");
 
         lenient().when(userRepository.save(any(User.class))).thenAnswer(inv -> {

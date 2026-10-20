@@ -92,6 +92,9 @@ public class SecurityConfig {
                                 // lỗi hiện ra là 401 "phiên hết hạn" — câu
                                 // dẫn người đọc đi điều tra nhầm sang xác thực.
                                 "/login/oauth2/**",
+                                // App gửi ID token của Google lên đây. Chưa
+                                // đăng nhập thì làm gì có token để qua cổng.
+                                "/api/auth/oauth/**",
                                 "/ping",
                                 "/test",
                                 "/swagger-ui/**",
