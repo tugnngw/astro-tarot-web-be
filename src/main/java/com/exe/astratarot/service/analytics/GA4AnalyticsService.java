@@ -1,5 +1,6 @@
 package com.exe.astratarot.service.analytics;
 
+import com.exe.astratarot.domain.dto.analytics.DangOnlineResponse;
 import com.exe.astratarot.domain.dto.analytics.GA4ReportResponse;
 
 /**
@@ -14,4 +15,12 @@ public interface GA4AnalyticsService {
      * @return Báo cáo GA4 gồm overview, traffic sources, time series
      */
     GA4ReportResponse getReport(String startDate, String endDate);
+
+    /**
+     * Ai đang ở trên web NGAY BÂY GIỜ, ở đâu, đang xem gì.
+     *
+     * <p>Dùng {@code runRealtimeReport} nên trả về trong vài giây, khác hẳn
+     * báo cáo thường vốn trễ 24–48 giờ.
+     */
+    DangOnlineResponse dangOnline();
 }

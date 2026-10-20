@@ -1,5 +1,6 @@
 package com.exe.astratarot.service.analytics;
 
+import com.exe.astratarot.domain.dto.analytics.DangOnlineResponse;
 import com.exe.astratarot.domain.dto.analytics.GA4OverviewDto;
 import com.exe.astratarot.domain.dto.analytics.GA4ReportResponse;
 import com.exe.astratarot.domain.dto.analytics.GA4TimeSeriesDto;
@@ -153,6 +154,81 @@ public class GA4AnalyticsServiceImpl implements GA4AnalyticsService {
         } catch (Exception e) {
             log.warn("Không lấy được số người truy cập thời gian thực: {}", e.getMessage());
             return -1L;
+        }
+    }
+
+    /**
+     * Ai đang ở trên web ngay bây giờ, ở đâu, đang xem gì.
+     *
+     * <p>Bốn lượt gọi riêng chứ không một lượt nhiều chiều. Lý do: GA4 gộp
+     * theo TỔ HỢP các chiều, nên hỏi (thành phố, trang, thiết bị) cùng lúc
+     * trả về "TP.HCM + /tarot + mobile = 1 người" — vỡ vụn thành hàng chục
+     * dòng mỗi dòng một người, không đọc được. Hỏi riêng từng chiều mới ra
+     * được "TP.HCM: 5 người".
+     *
+     * <p>Realtime API KHÔNG có {@code sessionSource}, nên phần "đến từ đâu"
+     * phải lấy từ bảng marketing_events của mình — xem
+     * {@code /api/v1/marketing/events/theo-nguon}.
+     */
+    @Override
+    public DangOnlineResponse dangOnline() {
+        if (!clientProvider.isConfigured()) {
+            return DangOnlineResponse.khongLayDuoc(
+                    "Chưa cấu hình khoá GA4 trên máy chủ.");
+        }
+        BetaAnalyticsDataClient client = clientProvider.getClient();
+        if (client == null) {
+            return DangOnlineResponse.khongLayDuoc(
+                    "Chưa cấu hình khoá GA4 trên máy chủ.");
+        }
+        String property = "properties/" + clientProvider.getPropertyId();
+
+        try {
+            return new DangOnlineResponse(
+                    demNguoiDangTruyCap(client, property),
+                    theoChieu(client, property, "city"),
+                    theoChieu(client, property, "unifiedScreenName"),
+                    theoChieu(client, property, "eventName"),
+                    theoChieu(client, property, "deviceCategory"),
+                    null);
+        } catch (Exception e) {
+            log.warn("Không lấy được số liệu thời gian thực: {}", e.getMessage());
+            return DangOnlineResponse.khongLayDuoc(
+                    "Không hỏi được Google: " + sanitizeError(e.getMessage()));
+        }
+    }
+
+    /**
+     * Gộp người đang online theo MỘT chiều, lấy 10 dòng nhiều nhất.
+     *
+     * <p>Hỏng thì trả danh sách rỗng chứ không ném: thiếu một bảng con còn
+     * hơn mất cả màn hình. Một chiều lỗi (ví dụ tài sản chưa có dữ liệu vị
+     * trí) không được kéo ba chiều kia chết theo.
+     */
+    private List<DangOnlineResponse.DongSo> theoChieu(
+            BetaAnalyticsDataClient client, String property, String tenChieu) {
+        try {
+            RunRealtimeReportResponse res = client.runRealtimeReport(
+                    RunRealtimeReportRequest.newBuilder()
+                            .setProperty(property)
+                            .addDimensions(Dimension.newBuilder().setName(tenChieu))
+                            .addMetrics(Metric.newBuilder().setName("activeUsers"))
+                            .setLimit(10)
+                            .build());
+
+            List<DangOnlineResponse.DongSo> ds = new ArrayList<>();
+            for (Row r : res.getRowsList()) {
+                String ten = r.getDimensionValues(0).getValue();
+                if (ten == null || ten.isBlank() || "(not set)".equals(ten)) {
+                    ten = "(không rõ)";
+                }
+                ds.add(new DangOnlineResponse.DongSo(
+                        ten, parseLongSafe(r.getMetricValues(0).getValue())));
+            }
+            return ds;
+        } catch (Exception e) {
+            log.warn("Không gộp được theo chiều {}: {}", tenChieu, e.getMessage());
+            return List.of();
         }
     }
 

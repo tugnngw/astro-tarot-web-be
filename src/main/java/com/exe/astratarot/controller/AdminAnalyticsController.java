@@ -1,5 +1,6 @@
 package com.exe.astratarot.controller;
 
+import com.exe.astratarot.domain.dto.analytics.DangOnlineResponse;
 import com.exe.astratarot.domain.dto.analytics.GA4ReportResponse;
 import com.exe.astratarot.domain.dto.common.ApiResponse;
 import com.exe.astratarot.service.analytics.GA4AnalyticsService;
@@ -37,5 +38,19 @@ public class AdminAnalyticsController {
     ) {
         GA4ReportResponse report = ga4AnalyticsService.getReport(startDate, endDate);
         return ResponseEntity.ok(ApiResponse.success(report));
+    }
+
+    /**
+     * Ai đang ở trên web ngay bây giờ, ở đâu, đang xem gì.
+     *
+     * <p>Tách khỏi {@code /report} vì hai nhịp khác hẳn nhau: báo cáo thường
+     * trễ 24–48 giờ nên tải một lần là đủ, còn số liệu này đáng làm mới mỗi
+     * nửa phút. Gộp chung thì mỗi lần muốn xem ai đang online lại kéo theo
+     * ba truy vấn báo cáo nặng mà kết quả không hề đổi.
+     */
+    @GetMapping("/dang-online")
+    @PreAuthorize("hasAnyAuthority('USERS_MANAGE','AUDIT_VIEW')")
+    public ResponseEntity<ApiResponse<DangOnlineResponse>> dangOnline() {
+        return ResponseEntity.ok(ApiResponse.success(ga4AnalyticsService.dangOnline()));
     }
 }
