@@ -1,0 +1,45 @@
+package com.exe.astratarot.domain.dto.marketing;
+
+import java.time.Instant;
+import java.util.List;
+
+/**
+ * Một khách: vào từ đâu, và đã làm những gì, theo thứ tự.
+ *
+ * <p>Đây là thứ mà bảng gộp theo nguồn không trả lời được. Bảng kia nói
+ * "Facebook mang về 21 lượt"; cái này nói "khách <code>ab12cd</code> vào từ
+ * Facebook lúc 20:14, xem trang chủ, mở Tarot, rút một quẻ, rồi đi".
+ *
+ * @param maKhach    sáu ký tự đầu của mã khách — đủ để phân biệt trên màn
+ *                   hình mà không bày nguyên chuỗi dài
+ * @param nguon      {@code utm_source} hoặc nguồn suy từ referrer; rỗng thì
+ *                   tầng dịch vụ đặt thành "(không rõ nguồn)"
+ * @param kenh       {@code utm_medium} — `referral`, `organic`, `social`…
+ * @param chienDich  {@code utm_campaign}, chỉ có khi vào bằng link gắn tay
+ * @param tenNguoiDung tên tài khoản nếu khách có đăng nhập trong phiên
+ * @param batDau     mốc hành động đầu tiên
+ * @param ketThuc    mốc hành động cuối
+ * @param soHanhDong tổng số hành động ghi được
+ * @param cacBuoc    danh sách hành động theo đúng thứ tự xảy ra
+ */
+public record HanhTrinhKhach(
+        String maKhach,
+        String nguon,
+        String kenh,
+        String chienDich,
+        String tenNguoiDung,
+        Instant batDau,
+        Instant ketThuc,
+        long soHanhDong,
+        List<Buoc> cacBuoc
+) {
+    /**
+     * Một bước trong hành trình.
+     *
+     * @param hanhDong tên sự kiện, ví dụ `xem_trang`, `rut_bai_tarot`
+     * @param duongDan trang xảy ra chuyện đó
+     * @param luc      thời điểm
+     */
+    public record Buoc(String hanhDong, String duongDan, Instant luc) {
+    }
+}

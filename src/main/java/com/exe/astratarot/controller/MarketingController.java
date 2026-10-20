@@ -1,6 +1,7 @@
 package com.exe.astratarot.controller;
 
 import com.exe.astratarot.domain.dto.common.ApiResponse;
+import com.exe.astratarot.domain.dto.marketing.HanhTrinhKhach;
 import com.exe.astratarot.domain.dto.marketing.HanhTrinhTheoNguon;
 import com.exe.astratarot.domain.dto.marketing.TrackMarketingEventRequest;
 import com.exe.astratarot.security.CustomUserDetails;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -53,5 +55,18 @@ public class MarketingController {
     @PreAuthorize("hasAnyAuthority('USERS_MANAGE','AUDIT_VIEW')")
     public ResponseEntity<ApiResponse<List<HanhTrinhTheoNguon>>> theoNguon() {
         return ResponseEntity.ok(ApiResponse.success(marketingEventService.hanhTrinhTheoNguon30Ngay()));
+    }
+
+    /**
+     * Những khách gần đây nhất, mỗi người kèm hành trình theo thứ tự.
+     *
+     * <p>Khác hai endpoint trên ở chỗ nó không gộp: ở đây nhìn được TỪNG
+     * người một — vào từ đâu, rồi bấm những gì, theo đúng thứ tự.
+     */
+    @GetMapping("/events/hanh-trinh")
+    @PreAuthorize("hasAnyAuthority('USERS_MANAGE','AUDIT_VIEW')")
+    public ResponseEntity<ApiResponse<List<HanhTrinhKhach>>> hanhTrinh(
+            @RequestParam(name = "so", defaultValue = "20") int so) {
+        return ResponseEntity.ok(ApiResponse.success(marketingEventService.hanhTrinhGanDay(so)));
     }
 }
