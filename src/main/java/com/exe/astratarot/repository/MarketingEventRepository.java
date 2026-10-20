@@ -1,6 +1,7 @@
 package com.exe.astratarot.repository;
 
 import com.exe.astratarot.domain.entity.MarketingEvent;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -55,4 +56,30 @@ public interface MarketingEventRepository extends JpaRepository<MarketingEvent, 
             GROUP BY e.utmSource
             """)
     List<Object[]> countUsersBySourceSince(@Param("since") Instant since);
+
+    /**
+     * Mã của những khách gần đây nhất, mới nhất trước.
+     *
+     * <p>Lấy mã trước rồi mới lấy hành động của đúng những mã ấy. Kéo thẳng
+     * toàn bộ sự kiện rồi gộp ở Java thì mỗi lần mở màn quản trị là tải cả
+     * bảng về — hôm nay vài trăm dòng thì không sao, nhưng nó chỉ lớn lên.
+     */
+    @Query("SELECT e.visitorId FROM MarketingEvent e "
+            + "WHERE e.visitorId IS NOT NULL AND e.createdAt >= :since "
+            + "GROUP BY e.visitorId ORDER BY MAX(e.createdAt) DESC")
+    List<String> maKhachGanDay(@Param("since") Instant since, Pageable pageable);
+
+    /**
+     * Toàn bộ hành động của một nhóm khách, theo đúng thứ tự xảy ra.
+     *
+     * <p>{@code LEFT JOIN} người dùng: phần lớn hành trình là của khách chưa
+     * đăng nhập, dùng {@code JOIN} thường thì họ biến mất khỏi kết quả — mà
+     * họ mới chính là nhóm cần nhìn.
+     */
+    @Query("SELECT e.visitorId, e.eventName, e.path, e.createdAt, "
+            + "e.utmSource, e.utmMedium, e.utmCampaign, u.fullName "
+            + "FROM MarketingEvent e LEFT JOIN e.user u "
+            + "WHERE e.visitorId IN :maKhach "
+            + "ORDER BY e.visitorId, e.createdAt")
+    List<Object[]> hanhDongCuaKhach(@Param("maKhach") List<String> maKhach);
 }

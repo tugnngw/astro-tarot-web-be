@@ -40,6 +40,10 @@ public class MarketingEvent {
     @Column(name = "utm_campaign", length = 100)
     private String utmCampaign;
 
+    /** Mã khách sinh ở trình duyệt — nối các hành động của cùng một người. */
+    @Column(name = "visitor_id", length = 64)
+    private String visitorId;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private String metadata;
