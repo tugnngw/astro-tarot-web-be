@@ -1,8 +1,10 @@
 package com.exe.astratarot.config;
 
+import com.exe.astratarot.security.CookieOAuth2AuthorizationRequestRepository;
 import com.exe.astratarot.security.JwtAuthenticationFilter;
 import com.exe.astratarot.security.OAuth2LoginSuccessHandler;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,7 +16,9 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -26,6 +30,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
+@Slf4j
 @Configuration
 @EnableWebSecurity
 /*
@@ -43,7 +48,21 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final com.exe.astratarot.security.AuthRateLimitFilter authRateLimitFilter;
     private final UserDetailsService userDetailsService;
-//    private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
+    private final OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
+    private final CookieOAuth2AuthorizationRequestRepository khoLuuYeuCauOAuth2;
+
+    /**
+     * Có đăng nhập Google hay không — hỏi bằng ObjectProvider, không tiêm thẳng.
+     *
+     * <p>{@code http.oauth2Login()} đòi một {@code ClientRegistrationRepository}.
+     * Tiêm bắt buộc thì thiếu {@code GOOGLE_CLIENT_ID} là máy chủ KHÔNG KHỞI
+     * ĐỘNG ĐƯỢC — cả hệ thống chết vì một tính năng đăng nhập phụ. Đã có tiền
+     * lệ đúng kiểu này: đặt khoá GA4 lên Render làm sập server.
+     *
+     * <p>Hỏi mềm thì thiếu cấu hình chỉ làm nút Google không chạy, mọi thứ
+     * khác bình thường.
+     */
+    private final ObjectProvider<ClientRegistrationRepository> khoDangKyGoogle;
 
     @Value("${app.frontend-url:http://localhost:8081}")
     private String frontendUrl;
@@ -54,6 +73,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        batDangNhapGoogleNeuCoCauHinh(http);
+
         return http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
@@ -65,6 +86,12 @@ public class SecurityConfig {
                         // Cho phép auth endpoints
                         .requestMatchers("/auth/**",
                                 "/oauth2/**",
+                                // Chặng Google trả người dùng về. Thiếu dòng
+                                // này thì .anyRequest().authenticated() chặn
+                                // ngay trước khi bộ lọc OAuth2 kịp chạy, và
+                                // lỗi hiện ra là 401 "phiên hết hạn" — câu
+                                // dẫn người đọc đi điều tra nhầm sang xác thực.
+                                "/login/oauth2/**",
                                 "/ping",
                                 "/test",
                                 "/swagger-ui/**",
@@ -149,7 +176,6 @@ public class SecurityConfig {
                         // Tất cả request khác cần auth
                         .anyRequest().authenticated()
                 )
-//                .oauth2Login(oauth2 -> oauth2.successHandler(oAuth2LoginSuccessHandler))
                 // Phân biệt "chưa đăng nhập" với "không đủ quyền".
                 //
                 // Không khai hai handler này thì Spring Security dùng mặc định
@@ -183,6 +209,39 @@ public class SecurityConfig {
                 .addFilterBefore(authRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
+    }
+
+    /**
+     * Bật đăng nhập Google, nhưng chỉ khi có cấu hình client.
+     *
+     * <p>Thiếu {@code GOOGLE_CLIENT_ID} thì Spring Boot không dựng
+     * {@code ClientRegistrationRepository}, và gọi {@code http.oauth2Login()}
+     * lúc ấy làm máy chủ KHÔNG KHỞI ĐỘNG ĐƯỢC. Cả hệ thống chết vì một lối
+     * đăng nhập phụ là cái giá không đáng — đã có tiền lệ đúng kiểu này khi
+     * đặt khoá GA4 lên Render.
+     *
+     * <p>Kho lưu yêu cầu uỷ quyền phải là bản dùng cookie. Bản mặc định nhớ
+     * bằng {@code HttpSession}, mà máy chủ chạy {@code STATELESS}, nên chặng
+     * Google trả người dùng về sẽ chết với
+     * {@code authorization_request_not_found}. Đó đúng là lý do khối này từng
+     * bị chú thích tắt.
+     */
+    private void batDangNhapGoogleNeuCoCauHinh(HttpSecurity http) throws Exception {
+        if (khoDangKyGoogle.getIfAvailable() == null) {
+            return;
+        }
+        http.oauth2Login(oauth2 -> oauth2
+                .authorizationEndpoint(ep -> ep
+                        .authorizationRequestRepository(khoLuuYeuCauOAuth2))
+                .successHandler(oAuth2LoginSuccessHandler)
+                // Hỏng thì đưa người dùng về trang chủ kèm một mã lỗi, đừng
+                // để Spring hiện trang trắng mặc định. Người bấm "Đăng nhập
+                // với Google" mà rơi vào trang lạ thì không biết quay lại
+                // đâu, và cũng không biết thử lại bằng cách nào.
+                .failureHandler((req, res, e) -> {
+                    log.warn("Đăng nhập Google hỏng: {}", e.getMessage());
+                    res.sendRedirect(trimSlash(frontendUrl) + "/?dang-nhap=google-loi");
+                }));
     }
 
     @Bean
@@ -226,5 +285,10 @@ public class SecurityConfig {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    /** Bỏ dấu `/` cuối để không ghép thành đường dẫn hai gạch. */
+    private static String trimSlash(String s) {
+        return s == null ? "" : s.replaceAll("/+$", "");
     }
 }
