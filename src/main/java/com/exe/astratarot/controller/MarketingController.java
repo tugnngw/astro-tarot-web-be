@@ -1,6 +1,7 @@
 package com.exe.astratarot.controller;
 
 import com.exe.astratarot.domain.dto.common.ApiResponse;
+import com.exe.astratarot.domain.dto.marketing.HanhTrinhTheoNguon;
 import com.exe.astratarot.domain.dto.marketing.TrackMarketingEventRequest;
 import com.exe.astratarot.security.CustomUserDetails;
 import com.exe.astratarot.service.MarketingEventService;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -39,5 +41,17 @@ public class MarketingController {
     @PreAuthorize("hasAnyAuthority('USERS_MANAGE','AUDIT_VIEW')")
     public ResponseEntity<ApiResponse<Map<String, Long>>> summary() {
         return ResponseEntity.ok(ApiResponse.success(marketingEventService.countsLast30Days()));
+    }
+
+    /**
+     * Khách đến từ đâu, rồi làm gì — 30 ngày gần nhất.
+     *
+     * <p>Khác với {@code /summary}: ở đó chỉ biết có bao nhiêu lượt bấm mỗi
+     * nút, ở đây biết lượt ấy đến từ kênh nào.
+     */
+    @GetMapping("/events/theo-nguon")
+    @PreAuthorize("hasAnyAuthority('USERS_MANAGE','AUDIT_VIEW')")
+    public ResponseEntity<ApiResponse<List<HanhTrinhTheoNguon>>> theoNguon() {
+        return ResponseEntity.ok(ApiResponse.success(marketingEventService.hanhTrinhTheoNguon30Ngay()));
     }
 }
