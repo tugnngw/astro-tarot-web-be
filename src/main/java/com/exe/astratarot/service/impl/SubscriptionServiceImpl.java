@@ -55,6 +55,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final PayOsClient payOsClient;
     private final PayOsProperties payOsProperties;
     private final ObjectMapper objectMapper;
+    private final com.exe.astratarot.service.KhuyenMaiService khuyenMaiService;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -77,8 +78,15 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             throw new IllegalArgumentException("Plan is not active");
         }
 
-        long price = plan.getPrice() != null ? plan.getPrice() : 0L;
-        if (price <= 0 || plan.getPlanType() == SubscriptionPlan.PlanType.FREE) {
+        long giaNiemYet = plan.getPrice() != null ? plan.getPrice() : 0L;
+        // Khuyến mãi áp ở ĐÂY, trước mọi nhánh thanh toán, để trang hiện giá
+        // nào thì ví trừ đúng giá đó. Tính lại ở từng nhánh là sớm muộn có
+        // nhánh quên, và khách bị trừ nhiều hơn số vừa nhìn thấy.
+        //
+        // Giá gốc vẫn dùng để chặn gói Free: "giảm 100%" không biến gói trả
+        // phí thành gói miễn phí để lách kiểm tra bên dưới.
+        long price = khuyenMaiService.apDung(giaNiemYet).giaCuoi();
+        if (giaNiemYet <= 0 || plan.getPlanType() == SubscriptionPlan.PlanType.FREE) {
             throw new IllegalArgumentException(
                     "Gói miễn phí là mặc định (" + FREE_DAILY_QUOTA + " lượt/ngày), không cần đăng ký.");
         }
@@ -94,9 +102,11 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             case WALLET -> {
                 walletService.debit(user, price, WalletTransactionType.AI_SUBSCRIPTION,
                         plan.getId().toString(), "Mua gói AI " + plan.getName());
-                yield activatePurchase(user, plan, UserPlanPurchase.PurchaseType.WALLET);
+                // Ghi đúng số đã thu, không phải giá niêm yết: báo cáo doanh
+                // thu cộng theo cột này.
+                yield activatePurchase(user, plan, UserPlanPurchase.PurchaseType.WALLET, price);
             }
-            case PAYOS -> createPayOsCheckout(user, plan);
+            case PAYOS -> createPayOsCheckout(user, plan, price);
             case MANUAL -> {
                 if (!SecurityUtils.isAdmin()) {
                     throw new IllegalArgumentException(
@@ -121,12 +131,18 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     @Override
     @Transactional
     public AIPlanResponse activatePaidPurchase(UUID userId, UUID planId) {
+        return activatePaidPurchase(userId, planId, null);
+    }
+
+    @Override
+    @Transactional
+    public AIPlanResponse activatePaidPurchase(UUID userId, UUID planId, Long soTienDaThu) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
         SubscriptionPlan plan = subscriptionPlanRepository.findById(planId)
                 .orElseThrow(() -> new ResourceNotFoundException("Plan not found"));
         assertMayAcquirePlan(userId, plan);
-        return activatePurchase(user, plan, UserPlanPurchase.PurchaseType.PAYOS);
+        return activatePurchase(user, plan, UserPlanPurchase.PurchaseType.PAYOS, soTienDaThu);
     }
 
     /**
@@ -270,12 +286,15 @@ public class SubscriptionServiceImpl implements SubscriptionService {
      * Tạo link PayOS — chưa kích hoạt gói. Webhook AI_SUBSCRIPTION mới gọi
      * {@link #activatePaidPurchase}.
      */
-    private AIPlanResponse createPayOsCheckout(User user, SubscriptionPlan plan) {
+    private AIPlanResponse createPayOsCheckout(User user, SubscriptionPlan plan, long soTienThu) {
         if (!payOsClient.enabled()) {
             throw new IllegalStateException("Cổng PayOS chưa được cấu hình trên hệ thống");
         }
 
-        long amount = plan.getPrice();
+        // Số đã áp khuyến mãi, truyền từ nơi gọi. Đọc lại plan.getPrice() ở
+        // đây là bỏ qua khuyến mãi: khách thấy giá giảm trên trang rồi sang
+        // PayOS lại phải trả nguyên giá.
+        long amount = soTienThu;
         long orderCode = nextOrderCode();
         // Đường quay về phải là /profile/subscription, KHÔNG phải /subscription.
         //
