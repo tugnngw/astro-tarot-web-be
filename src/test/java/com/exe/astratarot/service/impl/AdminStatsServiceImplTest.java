@@ -69,6 +69,7 @@ import static org.mockito.Mockito.when;
 class AdminStatsServiceImplTest {
 
     @Mock private UserRepository userRepository;
+    @Mock private com.exe.astratarot.repository.UserFeedbackRepository userFeedbackRepository;
     @Mock private ReaderApplicationRepository readerApplicationRepository;
     @Mock private ReaderProfileRepository readerProfileRepository;
     @Mock private BookingRepository bookingRepository;
@@ -91,7 +92,7 @@ class AdminStatsServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        service = new AdminStatsServiceImpl(userRepository, readerApplicationRepository,
+        service = new AdminStatsServiceImpl(userRepository, userFeedbackRepository, readerApplicationRepository,
                 readerProfileRepository, bookingRepository, reportRepository, productRepository,
                 productClickRepository, aiUsageLogRepository, paymentTransactionRepository,
                 payoutRequestRepository, reviewRepository, feedbackService, marketingEventService,

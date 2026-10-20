@@ -19,8 +19,47 @@ public record AdminStatsResponse(
         SubscriptionStats subscriptions,
         RevenueStats revenue,
         TractionStats traction,
-        BlogStats blogs
+        BlogStats blogs,
+        TongQuanStats tongQuan
 ) {
+    /**
+     * Bốn con số hay bị hỏi nhất ở màn Tổng quan, mỗi con số kèm phần THẬT.
+     *
+     * <p>Lý do tách: cơ sở dữ liệu đang chứa lẫn dữ liệu gieo sẵn để demo —
+     * hàng trăm hàng thanh toán, đánh giá, góp ý. Một ô ghi "doanh thu" mà
+     * cộng cả hai thứ thì không dùng được vào việc gì: không phải tiền thật
+     * để báo cáo, cũng không phải tổng để kiểm thử. Xem {@code DuLieuThat}
+     * để biết ranh giới được xác định thế nào.
+     *
+     * <p>Hai cột "đánh giá" cũng được tách ra ở đây. Trước đó màn Tổng quan
+     * dùng chữ "Đánh giá" cho hai thứ khác hẳn nhau: sao mà khách chấm cho
+     * Reader sau buổi xem, và phiếu góp ý về sản phẩm. Gộp lại thành một con
+     * số là cộng táo với cam.
+     *
+     * @param doanhThu          tổng tiền khách đã trả, giao dịch SUCCESS
+     * @param doanhThuThat      phần không phải dữ liệu gieo sẵn
+     * @param soGiaoDich        số LẦN trả tiền thành công
+     * @param soGiaoDichThat    phần không phải dữ liệu gieo sẵn
+     * @param nguoiTraPhi       số NGƯỜI đã trả tiền ít nhất một lần
+     * @param nguoiTraPhiThat   phần không phải dữ liệu gieo sẵn
+     * @param danhGiaReader     số sao khách chấm cho Reader sau buổi xem
+     * @param danhGiaReaderThat phần không phải dữ liệu gieo sẵn
+     * @param gopYKhaoSat       số phiếu góp ý về sản phẩm (việc khác hẳn)
+     * @param gopYKhaoSatThat   phần không phải dữ liệu gieo sẵn
+     */
+    public record TongQuanStats(
+            long doanhThu,
+            long doanhThuThat,
+            long soGiaoDich,
+            long soGiaoDichThat,
+            long nguoiTraPhi,
+            long nguoiTraPhiThat,
+            long danhGiaReader,
+            long danhGiaReaderThat,
+            long gopYKhaoSat,
+            long gopYKhaoSatThat
+    ) {}
+
     /**
      * Việc BÁN gói AI — khác hẳn {@link AiStats} vốn chỉ đếm token đã tiêu.
      *

@@ -59,4 +59,14 @@ public interface UserFeedbackRepository extends JpaRepository<UserFeedback, UUID
             @Param("source") String source,
             @Param("pattern") String pattern,
             Pageable pageable);
+
+    /**
+     * Góp ý không phải dữ liệu gieo sẵn — xem {@link DuLieuThat}.
+     *
+     * <p>Ở bảng này lọc theo người gửi là KHÔNG đủ: {@code V2_20} gieo 20 góp
+     * ý, trong đó 4 hàng cuối để {@code user_id} rỗng cho giống khách vãng
+     * lai. Lọc theo khoá chính thì bắt được cả bốn.
+     */
+    @Query("SELECT COUNT(x) FROM UserFeedback x WHERE " + DuLieuThat.DIEU_KIEN)
+    long countThat();
 }

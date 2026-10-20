@@ -84,4 +84,36 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
             ORDER BY thang
             """, nativeQuery = true)
     java.util.List<Object[]> sumAmountByMonthSince(@Param("since") java.time.Instant since);
+
+    // --- Tách phần THẬT khỏi dữ liệu mẫu (màn Tổng quan) ---
+    //
+    // "Thật" nghĩa là gì, và vì sao không lọc theo email: xem DuLieuThat.
+
+    /** Doanh thu, chỉ tính giao dịch không phải dữ liệu gieo sẵn. */
+    @Query("SELECT COALESCE(SUM(x.amount), 0) FROM PaymentTransaction x "
+            + "WHERE x.status = :status AND " + DuLieuThat.DIEU_KIEN)
+    long sumAmountByStatusThat(@Param("status") TransactionStatus status);
+
+    /** Số giao dịch, chỉ tính hàng không phải gieo sẵn. */
+    @Query("SELECT COUNT(x) FROM PaymentTransaction x "
+            + "WHERE x.status = :status AND " + DuLieuThat.DIEU_KIEN)
+    long countByStatusThat(@Param("status") TransactionStatus status);
+
+    /**
+     * Số NGƯỜI đã trả tiền, không phải số lần trả.
+     *
+     * <p>Một người nạp ví ba lần vẫn là một người. Đếm theo hàng giao dịch ra
+     * con số lớn hơn thực tế vài lần — đó đúng là chỗ hay bị nhầm khi nhìn ô
+     * "giao dịch thành công" rồi gọi nó là "khách trả phí".
+     *
+     * <p>Mua gói AI bằng số dư ví vẫn được tính, vì tiền vào ví luôn đi qua
+     * một hàng {@code payment_transactions} ở giai đoạn TOPUP.
+     */
+    @Query("SELECT COUNT(DISTINCT x.user.id) FROM PaymentTransaction x WHERE x.status = :status")
+    long countNguoiTraPhi(@Param("status") TransactionStatus status);
+
+    /** Như trên, bỏ dữ liệu gieo sẵn. */
+    @Query("SELECT COUNT(DISTINCT x.user.id) FROM PaymentTransaction x "
+            + "WHERE x.status = :status AND " + DuLieuThat.DIEU_KIEN)
+    long countNguoiTraPhiThat(@Param("status") TransactionStatus status);
 }

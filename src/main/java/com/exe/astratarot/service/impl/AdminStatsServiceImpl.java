@@ -26,6 +26,7 @@ import com.exe.astratarot.repository.ReaderApplicationRepository;
 import com.exe.astratarot.repository.ReaderProfileRepository;
 import com.exe.astratarot.repository.ReportRepository;
 import com.exe.astratarot.repository.ReviewRepository;
+import com.exe.astratarot.repository.UserFeedbackRepository;
 import com.exe.astratarot.repository.UserRepository;
 import com.exe.astratarot.service.AdminStatsService;
 import com.exe.astratarot.service.FeedbackService;
@@ -52,6 +53,7 @@ import java.util.Map;
 public class AdminStatsServiceImpl implements AdminStatsService {
 
     private final UserRepository userRepository;
+    private final UserFeedbackRepository userFeedbackRepository;
     private final ReaderApplicationRepository readerApplicationRepository;
     private final ReaderProfileRepository readerProfileRepository;
     private final BookingRepository bookingRepository;
@@ -245,7 +247,19 @@ public class AdminStatsServiceImpl implements AdminStatsService {
                         clicks30d,
                         marketingEventService.countsLast30Days()
                 ),
-                new AdminStatsResponse.BlogStats(totalBlogs, publishedBlogs, pendingBlogs, draftBlogs)
+                new AdminStatsResponse.BlogStats(totalBlogs, publishedBlogs, pendingBlogs, draftBlogs),
+                new AdminStatsResponse.TongQuanStats(
+                        grossRevenue,
+                        paymentTransactionRepository.sumAmountByStatusThat(TransactionStatus.SUCCESS),
+                        successfulPayments,
+                        paymentTransactionRepository.countByStatusThat(TransactionStatus.SUCCESS),
+                        paymentTransactionRepository.countNguoiTraPhi(TransactionStatus.SUCCESS),
+                        paymentTransactionRepository.countNguoiTraPhiThat(TransactionStatus.SUCCESS),
+                        reviewsCount,
+                        reviewRepository.countThat(),
+                        feedbackCount,
+                        userFeedbackRepository.countThat()
+                )
         );
     }
 

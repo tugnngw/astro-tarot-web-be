@@ -36,4 +36,8 @@ public interface ReviewRepository extends JpaRepository<Review, UUID> {
     double averageRating(@Param("readerProfileId") UUID readerProfileId);
 
     long countByReaderProfileId(UUID readerProfileId);
+
+    /** Đánh giá Reader không phải dữ liệu gieo sẵn — xem {@link DuLieuThat}. */
+    @Query("SELECT COUNT(x) FROM Review x WHERE " + DuLieuThat.DIEU_KIEN)
+    long countThat();
 }
