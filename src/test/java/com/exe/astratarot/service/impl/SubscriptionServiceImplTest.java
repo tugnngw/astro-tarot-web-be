@@ -78,6 +78,9 @@ class SubscriptionServiceImplTest {
     @Mock
     private ObjectMapper objectMapper;
 
+    @Mock
+    private com.exe.astratarot.service.KhuyenMaiService khuyenMaiService;
+
     @InjectMocks
     private SubscriptionServiceImpl subscriptionService;
 
@@ -91,6 +94,13 @@ class SubscriptionServiceImplTest {
     void setUp() {
         userId = UUID.randomUUID();
         planId = UUID.randomUUID();
+
+        // Mặc định không có đợt khuyến mãi nào: giá cuối = giá niêm yết. Mọi
+        // bài kiểm sẵn có đều viết theo giá niêm yết, nên đây là trạng thái
+        // đúng để chúng tiếp tục nói lên điều chúng định nói.
+        org.mockito.Mockito.when(khuyenMaiService.apDung(org.mockito.ArgumentMatchers.anyLong()))
+                .thenAnswer(i -> com.exe.astratarot.domain.dto.khuyenmai.GiaSauGiam
+                        .khongGiam(i.getArgument(0)));
 
         user = User.builder()
                 .id(userId)

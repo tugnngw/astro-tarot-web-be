@@ -71,6 +71,11 @@ public class SecurityConfig {
                                 "/v3/api-docs/**").permitAll()
                         // Cho phép xem các gói đăng ký AI đang hoạt động
                         .requestMatchers(HttpMethod.GET, "/api/admin/subscriptions/plans/active").permitAll()
+                        // Banner khuyến mãi hiện cho cả khách chưa đăng nhập —
+                        // đó chính là người mình muốn kéo vào. Chỉ /dang-chay,
+                        // và nó chỉ trả đợt đang bật; /admin vẫn cần quyền.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/khuyen-mai/dang-chay",
+                                "/api/v1/khuyen-mai/gia-goi").permitAll()
                         // Catalog shop: khách chưa đăng nhập vẫn phải duyệt được
                         // sản phẩm. Giỏ hàng và đơn hàng (/shop/cart, /shop/orders)
                         // KHÔNG nằm trong đây nên vẫn cần đăng nhập.

@@ -450,7 +450,11 @@ public class PaymentServiceImpl implements PaymentService {
         }
         UUID planId = UUID.fromString(String.valueOf(planRaw));
         tx.setStatus(TransactionStatus.SUCCESS);
-        var activated = subscriptionService.activatePaidPurchase(tx.getUser().getId(), planId);
+        // tx.getAmount() là số khách THẬT SỰ trả — đã trừ khuyến mãi lúc tạo
+        // link. plan.getPrice() ở đây là giá niêm yết, ghi vào thì doanh thu
+        // cộng dư đúng bằng phần đã giảm.
+        var activated = subscriptionService.activatePaidPurchase(
+                tx.getUser().getId(), planId, tx.getAmount());
         notificationService.push(tx.getUser(), NotificationTypes.PAYMENT_CONFIRMED,
                 "Đã kích hoạt gói AI",
                 "Gói " + activated.getPlanName() + " đã được kích hoạt sau thanh toán thành công.",
