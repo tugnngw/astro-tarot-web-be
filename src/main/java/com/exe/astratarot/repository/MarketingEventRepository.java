@@ -77,7 +77,7 @@ public interface MarketingEventRepository extends JpaRepository<MarketingEvent, 
      * họ mới chính là nhóm cần nhìn.
      */
     @Query("SELECT e.visitorId, e.eventName, e.path, e.createdAt, "
-            + "e.utmSource, e.utmMedium, e.utmCampaign, u.fullName "
+            + "e.utmSource, e.utmMedium, e.utmCampaign, u.fullName, e.metadata "
             + "FROM MarketingEvent e LEFT JOIN e.user u "
             + "WHERE e.visitorId IN :maKhach "
             + "ORDER BY e.visitorId, e.createdAt")

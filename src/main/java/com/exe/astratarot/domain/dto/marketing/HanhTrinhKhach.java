@@ -39,7 +39,16 @@ public record HanhTrinhKhach(
      * @param hanhDong tên sự kiện, ví dụ `xem_trang`, `rut_bai_tarot`
      * @param duongDan trang xảy ra chuyện đó
      * @param luc      thời điểm
+     * @param metadata chuỗi JSON kèm theo sự kiện, hoặc {@code null}.
+     *                 <p>Đây là thứ biến "Sang Shopee" thành "Sang Shopee —
+     *                 bo-bai-rider-waite", và "Rút bài" thành "Rút bài —
+     *                 Past-Present-Future, 3 lá". Bảng quản trị không đoán
+     *                 được những chi tiết ấy từ tên sự kiện với đường dẫn.
+     *                 <p>Trả nguyên chuỗi chứ không tách sẵn thành các
+     *                 trường: mỗi loại sự kiện kèm một bộ khoá khác nhau, và
+     *                 bộ ấy còn đổi khi thêm nút mới. Tách ở đây thì cứ thêm
+     *                 một khoá là phải sửa cả DTO lẫn tầng dịch vụ.
      */
-    public record Buoc(String hanhDong, String duongDan, Instant luc) {
+    public record Buoc(String hanhDong, String duongDan, Instant luc, String metadata) {
     }
 }

@@ -100,7 +100,7 @@ public class MarketingEventServiceImpl implements MarketingEventService {
             String tenNguoiDung = null;
             for (Object[] r : ds) {
                 buoc.add(new HanhTrinhKhach.Buoc(
-                        chuoi(r[1]), chuoi(r[2]), (Instant) r[3]));
+                        chuoi(r[1]), chuoi(r[2]), (Instant) r[3], chuoi(r[8])));
                 // Khách đăng nhập giữa chừng: tên chỉ có ở những hàng sau.
                 // Lấy tên đầu tiên tìm được chứ không lấy của hàng đầu.
                 if (tenNguoiDung == null && r[7] != null) {
