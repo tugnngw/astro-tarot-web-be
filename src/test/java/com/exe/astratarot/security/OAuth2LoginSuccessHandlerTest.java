@@ -2,7 +2,6 @@ package com.exe.astratarot.security;
 
 import com.exe.astratarot.domain.entity.User;
 import com.exe.astratarot.domain.enums.AuthProvider;
-import com.exe.astratarot.exception.InvalidCredentialsException;
 import com.exe.astratarot.repository.UserRepository;
 import com.exe.astratarot.service.OAuthExchangeCodeService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,16 +25,17 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -69,6 +69,9 @@ class OAuth2LoginSuccessHandlerTest {
     @Mock private Authentication authentication;
 
     private OAuth2LoginSuccessHandler handler;
+
+    /** Nơi handler đưa người dùng về khi hỏng — cùng chỗ với failureHandler. */
+    private static final String TRANG_LOI = "https://astrotarot.date/?dang-nhap=google-loi";
 
     @BeforeEach
     void setUp() {
@@ -183,30 +186,49 @@ class OAuth2LoginSuccessHandlerTest {
     }
 
     @Test
-    @DisplayName("Email chưa được Google xác minh thì TỪ CHỐI")
-    void emailChuaXacMinh() {
+    @DisplayName("Email chưa được Google xác minh thì TỪ CHỐI, và không ném ra ngoài")
+    void emailChuaXacMinh() throws Exception {
         // Google có trả về tài khoản mà email chưa xác minh. Tin nó là cho
         // người khác đăng ký một địa chỉ họ không sở hữu rồi bước vào tài khoản
         // của chủ địa chỉ ấy.
-        assertAll(
-                () -> assertThrows(IllegalArgumentException.class,
-                        () -> dangNhap(Map.of("email_verified", false))),
-                () -> assertThrows(IllegalArgumentException.class,
-                        () -> dangNhap(new HashMap<>(Map.of("email_verified", "khong-phai-boolean")))));
+        dangNhap(Map.of("email_verified", false));
+        dangNhap(new HashMap<>(Map.of("email_verified", "khong-phai-boolean")));
+
         verify(userRepository, never()).save(any());
+        verify(response, times(2)).sendRedirect(TRANG_LOI);
     }
 
     @Test
-    @DisplayName("Thiếu sub hoặc thiếu email thì từ chối")
-    void thieuThuocTinhBatBuoc() {
+    @DisplayName("Thiếu sub hoặc thiếu email thì từ chối, và không ném ra ngoài")
+    void thieuThuocTinhBatBuoc() throws Exception {
         Map<String, Object> khongSub = new HashMap<>();
         khongSub.put("sub", null);
         Map<String, Object> khongEmail = new HashMap<>();
         khongEmail.put("email", null);
 
-        assertAll(
-                () -> assertThrows(IllegalArgumentException.class, () -> dangNhap(khongSub)),
-                () -> assertThrows(IllegalArgumentException.class, () -> dangNhap(khongEmail)));
+        dangNhap(khongSub);
+        dangNhap(khongEmail);
+
+        verify(userRepository, never()).save(any());
+        verify(response, times(2)).sendRedirect(TRANG_LOI);
+    }
+
+    /**
+     * Chỗ này từng trả HTTP 500 thật.
+     *
+     * <p>Handler chạy BÊN TRONG chuỗi bộ lọc, sau khi xác thực đã xong, nên
+     * {@code failureHandler} của {@code oauth2Login} không với tới. Lỗi ném ở
+     * đây chui thẳng lên Tomcat: người dùng nhận trang "HTTP Status 500" trần
+     * trên tên miền api, không có đường quay lại.
+     */
+    @Test
+    @DisplayName("Lỗi bất ngờ cũng chuyển hướng, KHÔNG để 500 lọt ra")
+    void loiBatNgoKhongThanh500() throws Exception {
+        when(exchangeCodeService.createCode(any()))
+                .thenThrow(new IllegalStateException("kho ma trao doi hong"));
+
+        assertDoesNotThrow(() -> dangNhap(Map.of()));
+        verify(response).sendRedirect(TRANG_LOI);
     }
 
     @Test
@@ -263,19 +285,40 @@ class OAuth2LoginSuccessHandlerTest {
                 () -> assertEquals("https://lh3.googleusercontent.com/abc", cu.getAvatar()));
     }
 
+    /**
+     * Bản trước TỪ CHỐI nhánh này, và vì nó ném từ bên trong handler nên mọi
+     * lần bấm nút Google đều ra HTTP 500. Tới 27/10/2026 cả 12 tài khoản trên
+     * production đều là {@code LOCAL}, tức là nhánh ấy bắt đúng mọi người.
+     *
+     * <p>Nối được là an toàn vì {@code timHoacTao} đã bắt buộc
+     * {@code email_verified}: Google xác nhận người đang đăng nhập làm chủ
+     * hòm thư. Và nó không mở cửa nào mới — hệ thống vốn đã có đặt lại mật
+     * khẩu qua chính hòm thư ấy.
+     */
     @Test
-    @DisplayName("Email trùng tài khoản đăng nhập bằng MẬT KHẨU thì từ chối gộp")
-    void emailTrungTaiKhoanMatKhau() {
+    @DisplayName("Email trùng tài khoản MẬT KHẨU thì NỐI vào, giữ nguyên tài khoản cũ")
+    void emailTrungTaiKhoanMatKhau() throws Exception {
+        UUID idCu = UUID.randomUUID();
         User taiKhoanMatKhau = new User();
-        taiKhoanMatKhau.setId(UUID.randomUUID());
+        taiKhoanMatKhau.setId(idCu);
         taiKhoanMatKhau.setEmail("khach@gmail.com");
+        taiKhoanMatKhau.setFullName("Tên tự đặt");
+        taiKhoanMatKhau.setPasswordHash("bam-mat-khau-cu");
         taiKhoanMatKhau.setAuthProvider(AuthProvider.LOCAL);
         when(userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull("khach@gmail.com"))
                 .thenReturn(Optional.of(taiKhoanMatKhau));
 
-        // Gộp tự động nghĩa là ai đăng ký Google bằng email của người khác cũng
-        // vào được tài khoản của họ — không cần biết mật khẩu.
-        assertThrows(InvalidCredentialsException.class, () -> dangNhap(Map.of()));
+        dangNhap(Map.of());
+
+        User u = daLuu();
+        assertAll(
+                () -> assertEquals(idCu, u.getId(), "phải là tài khoản CŨ, không phải tài khoản thứ hai"),
+                () -> assertEquals(AuthProvider.GOOGLE, u.getAuthProvider()),
+                () -> assertEquals("google-123", u.getProviderId()),
+                // Giữ mật khẩu: ai quen đăng nhập bằng mật khẩu vẫn vào được.
+                () -> assertEquals("bam-mat-khau-cu", u.getPasswordHash()),
+                // Và không đè lên tên người ta tự đặt.
+                () -> assertEquals("Tên tự đặt", u.getFullName()));
     }
 
     @Test
