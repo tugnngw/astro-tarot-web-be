@@ -2,7 +2,6 @@ package com.exe.astratarot.service.impl;
 
 import com.exe.astratarot.domain.entity.User;
 import com.exe.astratarot.domain.enums.AuthProvider;
-import com.exe.astratarot.exception.InvalidCredentialsException;
 import com.exe.astratarot.repository.UserRepository;
 import com.exe.astratarot.service.TaiKhoanGoogleService;
 import lombok.RequiredArgsConstructor;
@@ -59,16 +58,33 @@ public class TaiKhoanGoogleServiceImpl implements TaiKhoanGoogleService {
      * <p>Nối theo email là chỗ quan trọng nhất: người đăng ký bằng email từ
      * trước, sau này bấm nút Google, phải vào đúng tài khoản cũ với đủ lịch
      * sử và số dư ví — không phải một tài khoản trắng.
+     *
+     * <h3>Vì sao nối cả tài khoản đăng nhập bằng MẬT KHẨU</h3>
+     *
+     * Bản trước từ chối, với lý do: "gộp tự động nghĩa là ai đăng ký Google
+     * bằng email của người khác cũng vào được tài khoản của họ". Lý do ấy đã
+     * bị chính {@link #timHoacTao} vô hiệu từ trước: nó bắt buộc
+     * {@code email_verified}, tức Google đã xác nhận người đang đăng nhập làm
+     * chủ hòm thư ấy. Không ai tạo được một tài khoản Google mang Gmail của
+     * người khác rồi được Google xác nhận.
+     *
+     * <p>Và nó KHÔNG mở thêm cửa nào: hệ thống vốn đã có đặt lại mật khẩu qua
+     * email. Ai đọc được hòm thư ấy thì đã vào được tài khoản rồi. Nối theo
+     * email đã xác minh không yếu hơn lối sẵn có.
+     *
+     * <p>Cái giá của việc từ chối thì đo được: tới 27/10/2026, CẢ 12 tài
+     * khoản trên production đều là {@code LOCAL}. Nghĩa là nhánh từ chối này
+     * bắt mọi lần bấm nút Google — và vì nó ném từ bên trong
+     * {@code onAuthenticationSuccess}, nơi không ai bắt, người dùng nhận
+     * HTTP 500 chứ không phải một câu giải thích.
+     *
+     * <p>Mật khẩu cũ KHÔNG bị xoá, nên ai đã quen đăng nhập bằng mật khẩu thì
+     * vẫn đăng nhập được như cũ. {@code authProvider} không chặn lối mật khẩu
+     * ở bất cứ đâu — nó chỉ dùng để hiện ra và lúc tạo tài khoản.
      */
     private User noiHoacTao(String email, String hoTen, String anhDaiDien, String providerId) {
         return userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(email)
-                .map(u -> {
-                    if (u.getAuthProvider() != AuthProvider.GOOGLE) {
-                        throw new InvalidCredentialsException(
-                                "Email này đã đăng ký bằng cách khác. Hãy đăng nhập bằng mật khẩu.");
-                    }
-                    return capNhat(u, email, hoTen, anhDaiDien, providerId);
-                })
+                .map(u -> capNhat(u, email, hoTen, anhDaiDien, providerId))
                 .orElseGet(() -> userRepository.save(User.builder()
                         .username(tenDangNhapChuaTrung(email))
                         .email(email)
