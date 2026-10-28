@@ -81,6 +81,15 @@ class SubscriptionServiceImplTest {
     @Mock
     private com.exe.astratarot.service.KhuyenMaiService khuyenMaiService;
 
+    /**
+     * Lượt AI thưởng từ mini game "Giao Hội" cộng vào hạn mức ngày, nên
+     * {@code getQuotaForToday} tra bảng này. Thiếu mock ở đây thì mọi bài về
+     * hạn mức ném NullPointerException chứ không phải kết quả sai — tức là
+     * không nói gì về luật hạn mức.
+     */
+    @Mock
+    private com.exe.astratarot.repository.GameNgayRepository gameNgayRepository;
+
     @InjectMocks
     private SubscriptionServiceImpl subscriptionService;
 
@@ -314,6 +323,45 @@ class SubscriptionServiceImplTest {
                 AiUsageDaily.builder().userId(userId).usageDate(today).countUsed(3).build()
         ));
         assertFalse(subscriptionService.canUseAI(userId));
+    }
+
+    /**
+     * Lượt thưởng từ mini game "Giao Hội" phải CỘNG vào hạn mức, không phải
+     * tham gia phép max() như các gói mua.
+     *
+     * <p>Các gói lấy max vì chúng thay thế nhau. Lượt thưởng thì khác loại: nó
+     * là thứ kiếm thêm. Lấy max thì người đã mua gói 20 lượt/ngày chơi game cả
+     * buổi mà hạn mức không nhích một lượt — game vẫn trao thưởng, màn hình vẫn
+     * báo "được 2 lượt", mà lượt ấy không dùng được ở đâu. Không có bài nào
+     * khác trong dự án nhìn thấy chuyện đó.
+     */
+    @Test
+    @DisplayName("Lượt thưởng từ mini game cộng thêm vào hạn mức trong ngày")
+    void canUseAI_LuotThuongTuGame_CongThemVaoHanMuc() {
+        when(userPlanPurchaseRepository.findByUserIdAndStatus(userId, UserPlanPurchase.PurchaseStatus.ACTIVE))
+                .thenReturn(List.of());
+
+        LocalDate today = LocalDate.now(VN_ZONE);
+        AiUsageDailyId key = new AiUsageDailyId(userId, today);
+
+        // Đã tiêu hết 3 lượt của gói miễn phí.
+        when(aiUsageDailyRepository.findById(key)).thenReturn(Optional.of(
+                AiUsageDaily.builder().userId(userId).usageDate(today).countUsed(3).build()
+        ));
+
+        when(gameNgayRepository.findById(any())).thenReturn(Optional.empty());
+        assertFalse(subscriptionService.canUseAI(userId),
+                "chưa chơi game thì hết lượt là hết");
+
+        // Chơi game được thưởng 2 lượt -> hạn mức thành 5, đã tiêu 3, còn 2.
+        when(gameNgayRepository.findById(any())).thenReturn(Optional.of(
+                com.exe.astratarot.domain.entity.GameNgay.builder()
+                        .userId(userId).ngay(today)
+                        .diemDaTinh(2000).luotDaNhan(2).build()
+        ));
+        assertTrue(subscriptionService.canUseAI(userId),
+                "lượt thưởng phải mở lại được quyền dùng AI");
+        assertEquals(5, subscriptionService.getDailyQuotaForUser(userId, today));
     }
 
     @Test
