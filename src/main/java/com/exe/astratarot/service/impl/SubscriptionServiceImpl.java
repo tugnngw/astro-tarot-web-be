@@ -56,6 +56,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final PayOsProperties payOsProperties;
     private final ObjectMapper objectMapper;
     private final com.exe.astratarot.service.KhuyenMaiService khuyenMaiService;
+    private final com.exe.astratarot.repository.GameNgayRepository gameNgayRepository;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -417,7 +418,32 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         if (quotaToday == 0) {
             quotaToday = FREE_DAILY_QUOTA;
         }
-        return quotaToday;
+        return quotaToday + luotThuongTuGame(userId);
+    }
+
+    /**
+     * Lượt AI người dùng đã kiếm được từ mini game "Giao Hội" trong hôm nay.
+     *
+     * <h2>Vì sao CỘNG vào chứ không lấy max</h2>
+     *
+     * Các gói mua lấy max vì chúng thay thế nhau — mua gói lớn hơn thì dùng hạn
+     * mức lớn hơn, không phải cộng hai gói lại. Lượt thưởng từ game thì khác
+     * loại: nó là thứ kiếm thêm, nên lấy max sẽ làm người đã mua gói 20
+     * lượt/ngày chơi game cả buổi mà hạn mức không nhích một lượt — và không có
+     * gì trên màn hình giải thích vì sao.
+     *
+     * <h2>Vì sao an toàn khi cộng</h2>
+     *
+     * Bảng {@code game_ngay} tính theo NGÀY và có trần cứng trong
+     * {@link com.exe.astratarot.game.LuatGame}, nên phần cộng vào đây bị chặn
+     * trên bởi {@code TRAN_LUOT_NGAY} chứ không lớn tuỳ ý.
+     */
+    private int luotThuongTuGame(UUID userId) {
+        return gameNgayRepository
+                .findById(new com.exe.astratarot.domain.entity.GameNgayId(
+                        userId, LocalDate.now(VN_ZONE)))
+                .map(com.exe.astratarot.domain.entity.GameNgay::getLuotDaNhan)
+                .orElse(0);
     }
 
     // ------------------------------------------------------------
