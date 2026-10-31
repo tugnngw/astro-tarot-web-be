@@ -364,6 +364,76 @@ class SubscriptionServiceImplTest {
         assertEquals(5, subscriptionService.getDailyQuotaForUser(userId, today));
     }
 
+    /**
+     * Người dùng báo ngày 31/10/2026: chơi game được thưởng 3 lượt, nhưng huy
+     * hiệu trên trang Tarot vẫn ghi "AI: 3/3 lượt".
+     *
+     * <p>Lượt thưởng DÙNG được — {@code canUseAI} và {@code recordAIUsage}
+     * đều đọc đúng con số, và bài kiểm ngay trên đã chốt điều đó. Hỏng nằm ở
+     * chỗ khác: giao diện tự dựng lại hạn mức bằng max() trên danh sách gói,
+     * một bản sao của luật không biết gì về phần thưởng.
+     *
+     * <p>{@code tomTatHanMuc} là câu trả lời: một con số duy nhất do máy chủ
+     * tính, tách sẵn từng nguồn để màn hình nói được "3 từ gói, 3 từ game".
+     */
+    @Test
+    @DisplayName("Tóm tắt hạn mức tách rõ phần từ gói và phần thưởng từ game")
+    void tomTatHanMuc_TachRoNguonGoc() {
+        when(userPlanPurchaseRepository.findByUserIdAndStatus(userId, UserPlanPurchase.PurchaseStatus.ACTIVE))
+                .thenReturn(List.of());
+
+        LocalDate today = LocalDate.now(VN_ZONE);
+        when(aiUsageDailyRepository.findById(new AiUsageDailyId(userId, today))).thenReturn(Optional.of(
+                AiUsageDaily.builder().userId(userId).usageDate(today).countUsed(2).build()
+        ));
+        when(gameNgayRepository.findById(any())).thenReturn(Optional.of(
+                com.exe.astratarot.domain.entity.GameNgay.builder()
+                        .userId(userId).ngay(today)
+                        .diemDaTinh(3000).luotDaNhan(3).build()
+        ));
+
+        var tt = subscriptionService.tomTatHanMuc(userId);
+
+        assertEquals(3, tt.getTuGoi(), "gói miễn phí");
+        assertEquals(3, tt.getTuGame(), "thưởng từ mini game");
+        assertEquals(6, tt.getTongHanMuc(), "tổng phải CỘNG, không lấy max");
+        assertEquals(2, tt.getDaDung());
+        assertEquals(4, tt.getConLai());
+    }
+
+    @Test
+    @DisplayName("Tóm tắt hạn mức: chưa chơi game thì phần thưởng là 0, không phải null")
+    void tomTatHanMuc_ChuaChoiGame() {
+        when(userPlanPurchaseRepository.findByUserIdAndStatus(userId, UserPlanPurchase.PurchaseStatus.ACTIVE))
+                .thenReturn(List.of());
+        when(aiUsageDailyRepository.findById(any())).thenReturn(Optional.empty());
+        when(gameNgayRepository.findById(any())).thenReturn(Optional.empty());
+
+        var tt = subscriptionService.tomTatHanMuc(userId);
+
+        assertEquals(3, tt.getTongHanMuc());
+        assertEquals(0, tt.getTuGame());
+        assertEquals(0, tt.getDaDung());
+        assertEquals(3, tt.getConLai());
+    }
+
+    @Test
+    @DisplayName("Tóm tắt hạn mức: dùng quá tay thì còn lại là 0, không âm")
+    void tomTatHanMuc_KhongBaoGioAm() {
+        when(userPlanPurchaseRepository.findByUserIdAndStatus(userId, UserPlanPurchase.PurchaseStatus.ACTIVE))
+                .thenReturn(List.of());
+        LocalDate today = LocalDate.now(VN_ZONE);
+        // Hạn mức có thể TỤT trong ngày: gói hết hạn lúc nửa buổi, hoặc phần
+        // thưởng game của hôm qua không còn tính. Lúc ấy đã dùng > hạn mức, và
+        // một con số âm trên màn hình trông như lỗi.
+        when(aiUsageDailyRepository.findById(new AiUsageDailyId(userId, today))).thenReturn(Optional.of(
+                AiUsageDaily.builder().userId(userId).usageDate(today).countUsed(9).build()
+        ));
+        when(gameNgayRepository.findById(any())).thenReturn(Optional.empty());
+
+        assertEquals(0, subscriptionService.tomTatHanMuc(userId).getConLai());
+    }
+
     @Test
     @DisplayName("Người dùng có nhiều gói active: lấy max() quota giữa các gói")
     void canUseAI_MultipleActivePackages_UsesMaxQuota() {

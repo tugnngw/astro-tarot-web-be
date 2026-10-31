@@ -85,6 +85,23 @@ public class SubscriptionController {
         return ResponseEntity.ok(ApiResponse.success(subscriptionService.getUserAIUsage(userId, date)));
     }
 
+    /**
+     * Hạn mức AI hôm nay, đã cộng cả lượt thưởng từ mini game.
+     *
+     * Có đường này vì giao diện trước đây tự dựng lại con số: lấy danh sách
+     * gói rồi max(dailyQuotaSnapshot), không có gói thì mặc định 3. Bản sao ấy
+     * lệch với máy chủ ngay khi mini game bắt đầu thưởng lượt — người dùng
+     * chơi được 3 lượt mà huy hiệu vẫn ghi "3/3".
+     */
+    @PreAuthorize("#userId == authentication.principal.user.id or hasAuthority('USERS_MANAGE')")
+    @GetMapping("/users/{userId}/quota")
+    public ResponseEntity<ApiResponse<HanMucAiResponse>> getQuota(
+            @PathVariable UUID userId,
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            Authentication auth) {
+        return ResponseEntity.ok(ApiResponse.success(subscriptionService.tomTatHanMuc(userId)));
+    }
+
     // -------- Admin endpoints --------
 
     @PreAuthorize("hasAuthority('PAYMENTS_MANAGE')")

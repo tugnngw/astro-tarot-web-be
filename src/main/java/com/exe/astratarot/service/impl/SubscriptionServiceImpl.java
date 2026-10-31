@@ -406,6 +406,18 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     // 4. Helper: get quota for today based on active packages (max logic)
     // ------------------------------------------------------------
     private int getQuotaForToday(UUID userId) {
+        return hanMucTuGoi(userId) + luotThuongTuGame(userId);
+    }
+
+    /**
+     * Phần hạn mức đến từ gói, chưa cộng thưởng game.
+     *
+     * Tách ra khỏi {@link #getQuotaForToday} để {@link #tomTatHanMuc} nói được
+     * cho người dùng biết con số của họ từ đâu ra. Gộp một cục thì màn hình
+     * chỉ hiện được tổng, và người vừa chơi xong một ván không thấy công của
+     * mình ở đâu — đúng cái đã khiến họ tưởng phần thưởng không chạy.
+     */
+    private int hanMucTuGoi(UUID userId) {
         List<UserPlanPurchase> activePurchases = userPlanPurchaseRepository.findByUserIdAndStatus(
                 userId, UserPlanPurchase.PurchaseStatus.ACTIVE);
 
@@ -418,7 +430,25 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         if (quotaToday == 0) {
             quotaToday = FREE_DAILY_QUOTA;
         }
-        return quotaToday + luotThuongTuGame(userId);
+        return quotaToday;
+    }
+
+    // ------------------------------------------------------------
+    // 4b. Tóm tắt hạn mức cho client
+    // ------------------------------------------------------------
+    @Override
+    public HanMucAiResponse tomTatHanMuc(UUID userId) {
+        int tuGoi = hanMucTuGoi(userId);
+        int tuGame = luotThuongTuGame(userId);
+        int tong = tuGoi + tuGame;
+        int daDung = getUsageCountForToday(userId);
+        return HanMucAiResponse.builder()
+                .tongHanMuc(tong)
+                .tuGoi(tuGoi)
+                .tuGame(tuGame)
+                .daDung(daDung)
+                .conLai(Math.max(0, tong - daDung))
+                .build();
     }
 
     /**

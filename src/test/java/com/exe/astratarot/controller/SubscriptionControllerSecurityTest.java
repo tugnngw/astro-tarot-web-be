@@ -66,13 +66,38 @@ class SubscriptionControllerSecurityTest {
     }
 
     @Test
-    @DisplayName("tìm thấy đủ tám endpoint — test không âm thầm rỗng")
+    @DisplayName("tìm thấy đủ chín endpoint — test không âm thầm rỗng")
     void khongRong() {
         // Nếu đổi tên lớp hay đổi cách khai annotation mà bộ lọc trên không
         // bắt được nữa, test đầu sẽ xanh vì danh sách rỗng chứ không phải vì
         // mã đúng. Chốt số lượng để chuyện đó lộ ra.
-        assertEquals(8, endpoints().size(),
+        assertEquals(9, endpoints().size(),
                 "Số endpoint đổi — xem lại cả hai test trong lớp này.");
+    }
+
+    @Test
+    @DisplayName("ba endpoint users/{userId} chỉ cho đọc của chính mình")
+    void endpointNguoiDungChiDocCuaMinh() {
+        // userId nằm trên ĐƯỜNG DẪN, nên không có điều kiện so với người đang
+        // đăng nhập thì đổi một chữ trong URL là đọc được dữ liệu người khác:
+        // lượt mua, lịch sử dùng AI, và hạn mức còn lại.
+        //
+        // `getQuota` thêm vào ngày 31/10/2026 — chốt ở đây để nó không lọt ra
+        // ngoài nguyên tắc chỉ vì là endpoint mới.
+        List<String> cuaNguoiDung = List.of(
+                "getUserActivePurchases", "getUserAIUsage", "getQuota");
+
+        for (String ten : cuaNguoiDung) {
+            Method m = endpoints().stream()
+                    .filter(x -> x.getName().equals(ten))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Không còn endpoint " + ten));
+            String quyen = m.getAnnotation(PreAuthorize.class).value();
+            assertTrue(quyen.contains("#userId == authentication.principal.user.id"),
+                    ten + " phải so userId trên đường dẫn với người đang đăng nhập, "
+                            + "nếu không đổi một chữ trong URL là đọc được của người khác. "
+                            + "Hiện khai: " + quyen);
+        }
     }
 
     @Test
