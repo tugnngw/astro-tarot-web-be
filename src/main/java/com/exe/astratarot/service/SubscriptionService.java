@@ -64,4 +64,14 @@ public interface SubscriptionService {
     Optional<SubscriptionPlan> getFreePlan();
 
     int getDailyQuotaForUser(UUID userId, LocalDate date);
+
+    /**
+     * Hạn mức AI hôm nay của một người, đã cộng đủ mọi nguồn.
+     *
+     * Đây là con số DUY NHẤT client được phép hiện. Trước đây giao diện tự
+     * tính lại bằng max() trên danh sách gói, và bản sao ấy không biết gì về
+     * lượt thưởng từ mini game — người chơi được thưởng mà màn hình vẫn ghi
+     * con số cũ.
+     */
+    HanMucAiResponse tomTatHanMuc(UUID userId);
 }
