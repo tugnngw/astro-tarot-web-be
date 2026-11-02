@@ -57,7 +57,8 @@ public class ChatController {
         ChatResponse response = chatService.sendMessage(
                 request.getReadingId(),
                 userDetails.getUser(),
-                request.getMessage()
+                request.getMessage(),
+                request.getNguoiThuHai()
         );
 
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -95,6 +96,7 @@ public class ChatController {
                 request.getReadingId(),
                 userDetails.getUser(),
                 request.getMessage(),
+                request.getNguoiThuHai(),
                 /* onChunk */ chunk -> {
                     try {
                         emitter.send(SseEmitter.event()

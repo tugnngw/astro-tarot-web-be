@@ -45,6 +45,26 @@ public class BuildPromptRequest {
     private AstrologyContextDTO astrologyContext;
 
     /**
+     * Ngữ cảnh chiêm tinh của NGƯỜI THỨ HAI trong một lượt xem đôi (optional).
+     *
+     * Null ở lượt xem một người, tức là gần như mọi lượt. Khác với
+     * {@link #astrologyContext}, dữ liệu này không tra từ hồ sơ mà đi kèm
+     * từng yêu cầu, vì người thứ hai không có tài khoản.
+     */
+    @Valid
+    private AstrologyContextDTO astrologyContextNguoiThuHai;
+
+    /**
+     * Tên người thứ hai (optional), để lời giải gọi đúng tên thay vì
+     * "người kia".
+     *
+     * Có thể có tên mà không có {@link #astrologyContextNguoiThuHai}: người
+     * dùng khai tên nhưng không biết ngày sinh của đối phương. Khi ấy vẫn
+     * phải cho mô hình biết là đang xem cho HAI người.
+     */
+    private String tenNguoiThuHai;
+
+    /**
      * List of drawn tarot cards with complete enriched details.
      * Card metadata (name, arcana, number) must be resolved before creation.
      * The order in this list determines the order in the final prompt.

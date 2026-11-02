@@ -1,6 +1,7 @@
 package com.exe.astratarot.service.impl;
 
 import com.exe.astratarot.domain.dto.astrology.AstrologyContextDTO;
+import com.exe.astratarot.domain.dto.astrology.NguoiThuHaiDTO;
 import com.exe.astratarot.domain.dto.llm.LLMResponse;
 import com.exe.astratarot.domain.dto.llm.LLMTokenUsage;
 import com.exe.astratarot.domain.dto.llm.StreamCompletion;
@@ -104,6 +105,9 @@ public class TarotReadingServiceImpl implements TarotReadingService {
         BuildPromptRequest promptRequest = BuildPromptRequest.builder()
                 .userQuestion(request.getQuestion())
                 .astrologyContext(astrologyContext.orElse(null))
+                .astrologyContextNguoiThuHai(
+                        astrologyContextService.nguCanhNguoiThuHai(request.getNguoiThuHai()).orElse(null))
+                .tenNguoiThuHai(NguoiThuHaiDTO.tenCua(request.getNguoiThuHai()))
                 .drawnCardDetails(enrichedCards)
                 .spreadName(request.getSpreadName())
                 .build();
@@ -161,6 +165,9 @@ public class TarotReadingServiceImpl implements TarotReadingService {
             BuildPromptRequest promptRequest = BuildPromptRequest.builder()
                     .userQuestion(request.getQuestion())
                     .astrologyContext(astrologyContext.orElse(null))
+                    .astrologyContextNguoiThuHai(
+                            astrologyContextService.nguCanhNguoiThuHai(request.getNguoiThuHai()).orElse(null))
+                    .tenNguoiThuHai(NguoiThuHaiDTO.tenCua(request.getNguoiThuHai()))
                     .drawnCardDetails(enrichedCards)
                     .spreadName(request.getSpreadName())
                     .build();
