@@ -1,5 +1,6 @@
 package com.exe.astratarot.service;
 
+import com.exe.astratarot.domain.dto.astrology.NguoiThuHaiDTO;
 import com.exe.astratarot.domain.dto.chat.ChatHistoryResponse;
 import com.exe.astratarot.domain.dto.chat.ChatResponse;
 import com.exe.astratarot.domain.entity.User;
@@ -24,7 +25,20 @@ public interface ChatService {
      * @param message the follow-up question
      * @return ChatResponse with the AI reply and token usage
      */
-    ChatResponse sendMessage(UUID readingId, User user, String message);
+    default ChatResponse sendMessage(UUID readingId, User user, String message) {
+        return sendMessage(readingId, user, message, null);
+    }
+
+    /**
+     * Như trên, nhưng cho lượt xem đôi.
+     *
+     * <p>Người thứ hai đi kèm TỪNG tin nhắn chứ không lưu ở đâu cả. Họ không
+     * có tài khoản nên không có hồ sơ để tra, và nếu nhớ hộ theo userId thì
+     * người của phiên trước sẽ còn nguyên trong phiên sau.
+     *
+     * @param nguoiThuHai người thứ hai, null ở lượt xem một người
+     */
+    ChatResponse sendMessage(UUID readingId, User user, String message, NguoiThuHaiDTO nguoiThuHai);
 
     /**
      * Sends a follow-up message via streaming.
@@ -41,12 +55,25 @@ public interface ChatService {
      * @param onError  consumer for the terminal error, if any
      * @param onComplete consumer for session/message metadata after save
      */
+    default void sendMessageStream(UUID readingId,
+                                   User user,
+                                   String message,
+                                   Consumer<String> onChunk,
+                                   Consumer<Throwable> onError,
+                                   Consumer<StreamResult> onComplete) {
+        sendMessageStream(readingId, user, message, null, onChunk, onError, onComplete);
+    }
+
+    /**
+     * Bản streaming cho lượt xem đôi. Xem {@link #sendMessage(UUID, User, String, NguoiThuHaiDTO)}.
+     */
     void sendMessageStream(UUID readingId,
                            User user,
                            String message,
+                           NguoiThuHaiDTO nguoiThuHai,
                            Consumer<String> onChunk,
                            Consumer<Throwable> onError,
-                   Consumer<StreamResult> onComplete);
+                           Consumer<StreamResult> onComplete);
 
     /**
      * Retrieves paginated message history for an AI reading session.

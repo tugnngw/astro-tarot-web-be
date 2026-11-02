@@ -1,6 +1,7 @@
 package com.exe.astratarot.service;
 
 import com.exe.astratarot.domain.dto.astrology.AstrologyContextDTO;
+import com.exe.astratarot.domain.dto.astrology.NguoiThuHaiDTO;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -46,4 +47,17 @@ public interface AstrologyContextService {
      * @throws IllegalArgumentException if userId is null
      */
     Optional<AstrologyContextDTO> getAstrologyContext(UUID userId);
+
+    /**
+     * Dựng ngữ cảnh chiêm tinh cho người thứ hai của một lượt xem đôi, từ dữ
+     * liệu sinh đi kèm yêu cầu — không đụng tới cơ sở dữ liệu.
+     *
+     * Người thứ hai không phải người dùng của hệ thống nên không có hồ sơ để
+     * tra. Tính cùng một bộ công thức với người thứ nhất, để hai bên của lời
+     * giải đứng trên cùng một thước đo.
+     *
+     * @param nguoi dữ liệu sinh của người thứ hai, có thể null
+     * @return Optional.empty() nếu null hoặc chưa có ngày sinh
+     */
+    Optional<AstrologyContextDTO> nguCanhNguoiThuHai(NguoiThuHaiDTO nguoi);
 }

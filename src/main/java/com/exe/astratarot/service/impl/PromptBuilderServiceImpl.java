@@ -49,7 +49,11 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
         sys.append(buildReadingContext(request.getSpreadName()));
 
         if (request.getAstrologyContext() != null) {
-            sys.append(buildAstrologyContext(request.getAstrologyContext(), hasCards));
+            sys.append(buildAstrologyContext(
+                    request.getAstrologyContext(),
+                    request.getAstrologyContextNguoiThuHai(),
+                    request.getTenNguoiThuHai(),
+                    hasCards));
         }
 
         if (hasCards) {
@@ -294,67 +298,65 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
 
     // ==================== ASTROLOGY CONTEXT ====================
 
-    private String buildAstrologyContext(AstrologyContextDTO astrology, boolean hasCards) {
-        if (astrology == null) {
-            return "";
-        }
-
-        StringBuilder section = new StringBuilder();
-
-        if (hasCards) {
-            section.append("=== ASTROLOGY CONTEXT (Supporting Context) ===\n\n");
-        } else {
-            section.append("=== ASTROLOGY CONTEXT (Primary Source of Insight) ===\n\n");
-        }
-
+    /**
+     * Khối dữ liệu sinh của MỘT người: ngày/giờ/nơi sinh, Sun, Moon, Rising,
+     * con giáp, rồi hành tinh và góc chiếu nếu có.
+     *
+     * Tách ra khỏi {@link #buildAstrologyContext} vì lượt xem đôi phải in
+     * khối này hai lần. Trước đây nó nằm thẳng trong hàm kia nên người thứ
+     * hai không có đường nào vào prompt: form hỏi dữ liệu của hai người mà
+     * lời giải chỉ dựng trên một.
+     */
+    private String buildKhoiMotNguoi(AstrologyContextDTO astrology) {
+        StringBuilder khoi = new StringBuilder();
         // Natal Chart Foundation
-        section.append("Natal Chart:\n");
-        section.append("  • Birth Date: ").append(astrology.getBirthDate());
+        khoi.append("Natal Chart:\n");
+        khoi.append("  • Birth Date: ").append(astrology.getBirthDate());
         if (astrology.getBirthTime() != null) {
-            section.append(" at ").append(astrology.getBirthTime());
+            khoi.append(" at ").append(astrology.getBirthTime());
         }
         if (astrology.getBirthPlace() != null && !astrology.getBirthPlace().isBlank()) {
-            section.append(" in ").append(astrology.getBirthPlace()).append("\n");
+            khoi.append(" in ").append(astrology.getBirthPlace()).append("\n");
         } else {
-            section.append("\n");
+            khoi.append("\n");
         }
 
         // Primary Zodiac Data — kèm tên tiếng Việt để model khỏi lẫn Cancer/Gemini
-        section.append("  • Sun: ").append(astrology.getSunSign());
+        khoi.append("  • Sun: ").append(astrology.getSunSign());
         try {
-            section.append(" / ").append(ZodiacCalculator.vietnameseSignName(astrology.getSunSign()));
+            khoi.append(" / ").append(ZodiacCalculator.vietnameseSignName(astrology.getSunSign()));
         } catch (IllegalArgumentException ignored) {
             // unknown sign — skip VI label
         }
         if (astrology.getElement() != null && !astrology.getElement().isBlank()) {
-            section.append(" (").append(astrology.getElement()).append(")");
+            khoi.append(" (").append(astrology.getElement()).append(")");
         }
         if (astrology.getModality() != null && !astrology.getModality().isBlank()) {
-            section.append(" — ").append(astrology.getModality()).append(" modality");
+            khoi.append(" — ").append(astrology.getModality()).append(" modality");
         }
-        section.append("\n");
+        khoi.append("\n");
         if (astrology.getMoonSign() != null) {
-            section.append("  • Moon: ").append(astrology.getMoonSign());
+            khoi.append("  • Moon: ").append(astrology.getMoonSign());
             try {
-                section.append(" / ").append(ZodiacCalculator.vietnameseSignName(astrology.getMoonSign()));
+                khoi.append(" / ").append(ZodiacCalculator.vietnameseSignName(astrology.getMoonSign()));
             } catch (IllegalArgumentException ignored) {
                 // skip
             }
-            section.append("\n");
+            khoi.append("\n");
         }
         if (astrology.getRisingSign() != null) {
-            section.append("  • Rising: ").append(astrology.getRisingSign());
+            khoi.append("  • Rising: ").append(astrology.getRisingSign());
             try {
-                section.append(" / ").append(ZodiacCalculator.vietnameseSignName(astrology.getRisingSign()));
+                khoi.append(" / ").append(ZodiacCalculator.vietnameseSignName(astrology.getRisingSign()));
             } catch (IllegalArgumentException ignored) {
                 // skip
             }
-            section.append("\n");
+            khoi.append("\n");
         }
         if (astrology.getBirthDate() != null) {
             try {
                 String animal = ZodiacCalculator.approximateChineseZodiac(astrology.getBirthDate());
-                section.append("  • Birth year animal (approx): ").append(animal)
+                khoi.append("  • Birth year animal (approx): ").append(animal)
                         .append(" — dùng như màu tuổi, không thay Sun/Moon.\n");
             } catch (IllegalArgumentException ignored) {
                 // skip
@@ -363,26 +365,26 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
 
         // Natal Planet Positions
         if (astrology.getNatalPlanetPositions() != null && !astrology.getNatalPlanetPositions().isEmpty()) {
-            section.append("\nPlanetary Positions:\n");
+            khoi.append("\nPlanetary Positions:\n");
             for (PlanetPositionDTO planet : astrology.getNatalPlanetPositions()) {
-                section.append("- ").append(planet.getPlanetName())
+                khoi.append("- ").append(planet.getPlanetName())
                         .append(" in ").append(planet.getSign())
                         .append(" at ").append(planet.getDegree()).append("°");
                 if (planet.getHouse() != null) {
-                    section.append(" (House ").append(planet.getHouse()).append(")");
+                    khoi.append(" (House ").append(planet.getHouse()).append(")");
                 }
                 if (planet.getRetrograde() != null && planet.getRetrograde()) {
-                    section.append(" [Retrograde]");
+                    khoi.append(" [Retrograde]");
                 }
-                section.append("\n");
+                khoi.append("\n");
             }
         }
 
         // Natal Aspects
         if (astrology.getNatalAspects() != null && !astrology.getNatalAspects().isEmpty()) {
-            section.append("\nNatal Aspects:\n");
+            khoi.append("\nNatal Aspects:\n");
             for (AspectDTO aspect : astrology.getNatalAspects()) {
-                section.append("- ").append(aspect.getPlanet1())
+                khoi.append("- ").append(aspect.getPlanet1())
                         .append(" ").append(aspect.getAspectType())
                         .append(" ").append(aspect.getPlanet2())
                         .append(" (").append(aspect.getExactDegree()).append("° exact, ")
@@ -392,19 +394,83 @@ public class PromptBuilderServiceImpl implements PromptBuilderService {
 
         // Current Transits
         if (astrology.getCurrentTransit() != null && !astrology.getCurrentTransit().isBlank()) {
-            section.append("\nCurrent Influences:\n");
-            section.append("- Transit: ").append(astrology.getCurrentTransit()).append("\n");
+            khoi.append("\nCurrent Influences:\n");
+            khoi.append("- Transit: ").append(astrology.getCurrentTransit()).append("\n");
         }
 
         // Transit Aspects
         if (astrology.getTransitAspects() != null && !astrology.getTransitAspects().isEmpty()) {
-            section.append("\nActive Aspects:\n");
+            khoi.append("\nActive Aspects:\n");
             for (AspectDTO aspect : astrology.getTransitAspects()) {
-                section.append("- ").append(aspect.getPlanet1())
+                khoi.append("- ").append(aspect.getPlanet1())
                         .append(" ").append(aspect.getAspectType())
                         .append(" ").append(aspect.getPlanet2())
                         .append(" (orb: ").append(aspect.getOrb()).append("°)\n");
             }
+        }
+
+        return khoi.toString();
+    }
+
+    /**
+     * Dặn mô hình đọc CẢ HAI người, chứ không phải người thứ nhất kèm một
+     * cái tên.
+     *
+     * Dặn thẳng như vậy là cần: khi khối thứ hai chỉ là vài dòng nối vào
+     * cuối một ngữ cảnh vốn viết cho một người, mô hình có xu hướng luận cho
+     * người đứng đầu rồi nhắc tên người kia một câu cho có.
+     */
+    private String buildHuongDanXemDoi(AstrologyContextDTO nguoiThuHai, boolean hasCards) {
+        StringBuilder d = new StringBuilder();
+        d.append("\nĐÂY LÀ LƯỢT XEM ĐÔI — BẮT BUỘC:\n");
+        d.append("• Lời giải phải nói về QUAN HỆ giữa hai người, không phải chân dung của riêng người thứ nhất.\n");
+        if (nguoiThuHai != null) {
+            d.append("• So hai bên với nhau: Sun với Sun, Moon với Moon, nguyên tố với nguyên tố — chỗ hợp và chỗ cọ xát.\n");
+            d.append("• Nhắc đích danh dữ liệu của CẢ HAI. Chỉ luận cung của một người là trả lời sai câu hỏi.\n");
+        } else {
+            d.append("• Chỉ có ngày sinh của người thứ nhất. Nói rõ MỘT LẦN rằng phần của người thứ hai dựa trên\n");
+            d.append("  những gì người hỏi kể, rồi vẫn luận về quan hệ — đừng lấy chuyện thiếu dữ liệu làm nội dung.\n");
+        }
+        if (hasCards) {
+            d.append("• Bộ bài này rút cho CẶP ĐÔI, không chia lá cho từng người.\n");
+        }
+        return d.toString();
+    }
+
+    private String buildAstrologyContext(AstrologyContextDTO astrology,
+                                         AstrologyContextDTO nguoiThuHai,
+                                         String tenNguoiThuHai,
+                                         boolean hasCards) {
+        if (astrology == null) {
+            return "";
+        }
+
+        boolean moHaiNguoi = nguoiThuHai != null
+                || (tenNguoiThuHai != null && !tenNguoiThuHai.isBlank());
+
+        StringBuilder section = new StringBuilder();
+
+        if (hasCards) {
+            section.append("=== ASTROLOGY CONTEXT (Supporting Context) ===\n\n");
+        } else {
+            section.append("=== ASTROLOGY CONTEXT (Primary Source of Insight) ===\n\n");
+        }
+
+        section.append(moHaiNguoi ? "NGƯỜI THỨ NHẤT — người đang hỏi:\n" : "");
+        section.append(buildKhoiMotNguoi(astrology));
+
+        if (moHaiNguoi) {
+            section.append("\nNGƯỜI THỨ HAI");
+            if (tenNguoiThuHai != null && !tenNguoiThuHai.isBlank()) {
+                section.append(" — ").append(tenNguoiThuHai);
+            }
+            section.append(":\n");
+            if (nguoiThuHai != null) {
+                section.append(buildKhoiMotNguoi(nguoiThuHai));
+            } else {
+                section.append("  • Chưa khai ngày sinh — chỉ biết tên.\n");
+            }
+            section.append(buildHuongDanXemDoi(nguoiThuHai, hasCards));
         }
 
         // Personalization Guidance — only mention fields that exist

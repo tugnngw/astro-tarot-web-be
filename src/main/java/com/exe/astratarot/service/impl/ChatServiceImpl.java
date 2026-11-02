@@ -1,6 +1,7 @@
 package com.exe.astratarot.service.impl;
 
 import com.exe.astratarot.domain.dto.astrology.AstrologyContextDTO;
+import com.exe.astratarot.domain.dto.astrology.NguoiThuHaiDTO;
 import com.exe.astratarot.domain.dto.chat.ChatHistoryResponse;
 import com.exe.astratarot.domain.dto.chat.ChatMessageResponse;
 import com.exe.astratarot.domain.dto.chat.ChatResponse;
@@ -74,7 +75,7 @@ public class ChatServiceImpl implements ChatService {
 
     @Override
     @Transactional
-    public ChatResponse sendMessage(UUID readingId, User user, String message) {
+    public ChatResponse sendMessage(UUID readingId, User user, String message, NguoiThuHaiDTO nguoiThuHai) {
         log.debug("Chat request: readingId={}, userId={}", readingId, user.getId());
         requireAiQuota(user);
         if (readingId != null) {
@@ -108,7 +109,7 @@ public class ChatServiceImpl implements ChatService {
 
             // Step 5: Build continuation prompt (with history, cards, astrology) and call AI
             // Exclude current user message from history to avoid duplication
-            BuildPromptRequest promptRequest = buildContinuationPromptRequest(reading, user, session, message, userMessage.getId());
+            BuildPromptRequest promptRequest = buildContinuationPromptRequest(reading, user, session, message, userMessage.getId(), nguoiThuHai);
             LLMResponse llmResponse = aiTarotService.generateInterpretation(promptRequest);
             log.debug("AI continuation response received for readingId={}", readingId);
             recordAiQuota(user);
@@ -180,7 +181,7 @@ public class ChatServiceImpl implements ChatService {
             chatMessageRepository.save(userMessage);
 
             // Build astrology prompt with conversation history
-            BuildPromptRequest promptRequest = buildAstrologyPromptRequest(user, session, message, userMessage.getId());
+            BuildPromptRequest promptRequest = buildAstrologyPromptRequest(user, session, message, userMessage.getId(), nguoiThuHai);
             LLMResponse llmResponse = aiTarotService.generateInterpretation(promptRequest);
             recordAiQuota(user);
 
@@ -233,6 +234,7 @@ public class ChatServiceImpl implements ChatService {
     public void sendMessageStream(UUID readingId,
                                   User user,
                                   String message,
+                                  NguoiThuHaiDTO nguoiThuHai,
                                   Consumer<String> onChunk,
                                   Consumer<Throwable> onError,
                                   Consumer<StreamResult> onComplete) {
@@ -271,7 +273,7 @@ public class ChatServiceImpl implements ChatService {
 
                 // Step 5: Build continuation prompt request (exclude current message from history)
                 BuildPromptRequest promptRequest = buildContinuationPromptRequest(
-                        reading, user, session, message, userMessage.getId());
+                        reading, user, session, message, userMessage.getId(), nguoiThuHai);
 
                 // Step 6: Stream from AI and handle callbacks
                 StringBuilder fullContent = new StringBuilder();
@@ -331,7 +333,7 @@ public class ChatServiceImpl implements ChatService {
                 chatMessageRepository.save(userMessage);
 
                 BuildPromptRequest promptRequest = buildAstrologyPromptRequest(
-                        user, session, message, userMessage.getId());
+                        user, session, message, userMessage.getId(), nguoiThuHai);
 
                 StringBuilder fullContent = new StringBuilder();
                 aiTarotService.generateInterpretationStream(
@@ -502,7 +504,7 @@ public class ChatServiceImpl implements ChatService {
      * - Reverses order before formatting (so latest messages appear at end)
      * - Preserves original question, astrology context, card details (no trimming)
      */
-    private BuildPromptRequest buildContinuationPromptRequest(TarotReading reading, User user, ChatSession session, String message, UUID excludeMessageId) {
+    private BuildPromptRequest buildContinuationPromptRequest(TarotReading reading, User user, ChatSession session, String message, UUID excludeMessageId, NguoiThuHaiDTO nguoiThuHai) {
         // Step 1: Reconstruct card details from the reading (NOT trimmed)
         List<ReadingCard> readingCards = readingCardRepository.findByReading(reading);
         List<DrawnCardDetailDTO> cardDetails = new ArrayList<>();
@@ -546,6 +548,9 @@ public class ChatServiceImpl implements ChatService {
                 .originalQuestion(reading.getMainQuestion())
                 .conversationHistory(conversationHistory)
                 .astrologyContext(astrologyContext.orElse(null))
+                .astrologyContextNguoiThuHai(
+                        astrologyContextService.nguCanhNguoiThuHai(nguoiThuHai).orElse(null))
+                .tenNguoiThuHai(NguoiThuHaiDTO.tenCua(nguoiThuHai))
                 .drawnCardDetails(cardDetails)
                 .spreadName("Continuation")
                 .build();
@@ -628,7 +633,7 @@ public class ChatServiceImpl implements ChatService {
     /**
      * Builds a prompt request for astrology-only chat with conversation history.
      */
-    private BuildPromptRequest buildAstrologyPromptRequest(User user, ChatSession session, String message, UUID excludeMessageId) {
+    private BuildPromptRequest buildAstrologyPromptRequest(User user, ChatSession session, String message, UUID excludeMessageId, NguoiThuHaiDTO nguoiThuHai) {
         // Load conversation history with token budgeting
         Pageable historyPageable = PageRequest.of(0, 100, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<ChatMessage> allMessages = chatMessageRepository
@@ -650,6 +655,9 @@ public class ChatServiceImpl implements ChatService {
                 .originalQuestion(null)
                 .conversationHistory(conversationHistory)
                 .astrologyContext(astrologyContext.orElse(null))
+                .astrologyContextNguoiThuHai(
+                        astrologyContextService.nguCanhNguoiThuHai(nguoiThuHai).orElse(null))
+                .tenNguoiThuHai(NguoiThuHaiDTO.tenCua(nguoiThuHai))
                 .drawnCardDetails(Collections.emptyList())
                 .spreadName("Astrology Chat")
                 .build();

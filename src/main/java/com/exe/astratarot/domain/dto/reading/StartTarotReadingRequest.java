@@ -1,5 +1,7 @@
 package com.exe.astratarot.domain.dto.reading;
 
+import com.exe.astratarot.domain.dto.astrology.NguoiThuHaiDTO;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -32,4 +34,13 @@ public class StartTarotReadingRequest {
     private boolean includeReversed = true;
 
     private String spreadName;
+
+    /**
+     * Người thứ hai, khi người dùng chọn xem đôi (tương hợp, chuyện tình cảm).
+     *
+     * Null ở lượt xem một người. Đi kèm từng yêu cầu chứ không lưu thành hồ
+     * sơ, xem {@link NguoiThuHaiDTO}.
+     */
+    @Valid
+    private NguoiThuHaiDTO nguoiThuHai;
 }

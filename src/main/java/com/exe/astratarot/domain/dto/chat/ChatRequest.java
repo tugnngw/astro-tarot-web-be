@@ -1,5 +1,7 @@
 package com.exe.astratarot.domain.dto.chat;
 
+import com.exe.astratarot.domain.dto.astrology.NguoiThuHaiDTO;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -29,4 +31,13 @@ public class ChatRequest {
 
     @Builder.Default
     private boolean stream = false;
+
+    /**
+     * Người thứ hai, khi người dùng chọn xem đôi (tương hợp, chuyện tình cảm).
+     *
+     * Null ở lượt xem một người. Đi kèm từng yêu cầu chứ không lưu thành hồ
+     * sơ, xem {@link NguoiThuHaiDTO}.
+     */
+    @Valid
+    private NguoiThuHaiDTO nguoiThuHai;
 }

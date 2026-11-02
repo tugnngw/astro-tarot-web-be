@@ -1,6 +1,7 @@
 package com.exe.astratarot.service.impl;
 
 import com.exe.astratarot.domain.dto.astrology.AstrologyContextDTO;
+import com.exe.astratarot.domain.dto.astrology.NguoiThuHaiDTO;
 import com.exe.astratarot.domain.entity.UserAstrologicalData;
 import com.exe.astratarot.repository.UserAstrologicalDataRepository;
 import com.exe.astratarot.service.AstrologyContextService;
@@ -13,6 +14,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -83,14 +85,32 @@ public class AstrologyContextServiceImpl implements AstrologyContextService {
         String moonSign = ZodiacCalculator.approximateMoonSign(
                 entity.getBirthDate(), decrypted.birthTime);
 
+        return dungNguCanh(
+                entity.getBirthDate(), decrypted.birthTime, decrypted.birthPlace,
+                decrypted.latitude, decrypted.longitude, entity.getTimezone(),
+                sunSign, element, modality, moonSign);
+    }
+
+    /**
+     * Gom một bộ dữ liệu sinh thành AstrologyContextDTO.
+     *
+     * Tách riêng vì hai lối vào phải cho ra cùng một hình dạng: người thứ nhất
+     * đi từ hồ sơ trong CSDL, người thứ hai đi thẳng từ yêu cầu. Nếu mỗi lối
+     * tự dựng lấy thì chỉ cần một bên quên `moonSign` là lời giải lệch hẳn về
+     * một phía, mà nhìn mã thì không thấy gì sai.
+     */
+    private AstrologyContextDTO dungNguCanh(
+            LocalDate birthDate, LocalTime birthTime, String birthPlace,
+            BigDecimal latitude, BigDecimal longitude, String timezone,
+            String sunSign, String element, String modality, String moonSign) {
         return AstrologyContextDTO.builder()
                 // Birth data (plain-text + decrypted)
-                .birthDate(entity.getBirthDate())
-                .birthTime(decrypted.birthTime)
-                .birthPlace(decrypted.birthPlace)
-                .latitude(decrypted.latitude)
-                .longitude(decrypted.longitude)
-                .timezone(entity.getTimezone())
+                .birthDate(birthDate)
+                .birthTime(birthTime)
+                .birthPlace(birthPlace)
+                .latitude(latitude)
+                .longitude(longitude)
+                .timezone(timezone)
                 // Deterministic zodiac metadata
                 .sunSign(sunSign)
                 .element(element)
@@ -106,6 +126,37 @@ public class AstrologyContextServiceImpl implements AstrologyContextService {
                 .ascendantDegree(null)
                 .midheavenDegree(null)
                 .build();
+    }
+
+    /**
+     * Người thứ hai: dữ liệu đi kèm yêu cầu, không tra CSDL, không cache.
+     *
+     * KHÔNG đặt @Cacheable ở đây. Khoá cache của người thứ nhất là userId;
+     * người thứ hai đổi theo từng lượt xem của cùng một userId, nên mọi khoá
+     * dựng từ userId đều sẽ trả về người của lượt trước.
+     */
+    @Override
+    public Optional<AstrologyContextDTO> nguCanhNguoiThuHai(NguoiThuHaiDTO nguoi) {
+        if (nguoi == null || !nguoi.coNgaySinh()) {
+            return Optional.empty();
+        }
+        try {
+            String sunSign = ZodiacCalculator.calculateSunSign(nguoi.getBirthDate());
+            String element = ZodiacCalculator.calculateElement(sunSign);
+            String modality = ZodiacCalculator.calculateModality(sunSign);
+            String moonSign = ZodiacCalculator.approximateMoonSign(
+                    nguoi.getBirthDate(), nguoi.getBirthTime());
+            return Optional.of(dungNguCanh(
+                    nguoi.getBirthDate(), nguoi.getBirthTime(), nguoi.getBirthPlace(),
+                    null, null, nguoi.getTimezone(),
+                    sunSign, element, modality, moonSign));
+        } catch (RuntimeException e) {
+            // Ngày sinh người dùng gõ tay có thể ra ngoài mọi khoảng cung.
+            // Hỏng ở đây thì bỏ phần chiêm tinh của người thứ hai, đừng làm
+            // đổ cả lượt xem.
+            log.warn("Không dựng được ngữ cảnh cho người thứ hai", e);
+            return Optional.empty();
+        }
     }
 
     /**
