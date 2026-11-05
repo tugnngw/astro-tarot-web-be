@@ -22,7 +22,8 @@ import java.util.UUID;
 /**
  * Khảo sát phản hồi người dùng (EXE201 OC3 — mục tiêu ≥20 phản hồi).
  * Cho phép gửi khi chưa đăng nhập (userId null).
- * Khi đã đăng nhập: mỗi tài khoản có tối đa 1 bản ghi; gửi lại sẽ cập nhật bản ghi cũ.
+ * Gửi bao nhiêu lần cũng được, mỗi lần là một bản ghi riêng — một người dùng
+ * sản phẩm nhiều lần thì có nhiều điều để nói, ở những thời điểm khác nhau.
  */
 @RestController
 @RequestMapping("/api/v1/feedback")
@@ -44,6 +45,9 @@ public class FeedbackController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> myStatus(
             @AuthenticationPrincipal CustomUserDetails me) {
         UUID userId = me != null ? me.getUser().getId() : null;
+        // `submitted` chỉ nói là người này ĐÃ TỪNG góp ý, để giao diện chào
+        // cho đúng giọng. KHÔNG được dùng nó để khoá form — góp ý lần nữa là
+        // chuyện được phép.
         boolean submitted = userId != null && feedbackService.hasSubmitted(userId);
         UserFeedbackResponse myFeedback = userId != null
                 ? feedbackService.getMyFeedback(userId).orElse(null)
