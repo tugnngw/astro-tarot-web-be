@@ -104,7 +104,6 @@ class FeedbackServiceImplTest {
                 "BOOKING", 5, 10, "Đặt lịch reader rất tiện", null, null, null);
 
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-        when(feedbackRepository.findFirstByUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.empty());
         when(feedbackRepository.save(any(UserFeedback.class))).thenAnswer(inv -> inv.getArgument(0));
 
         UserFeedbackResponse response = service.submit(userId, request);
@@ -120,13 +119,17 @@ class FeedbackServiceImplTest {
     }
 
     @Test
-    @DisplayName("Thành viên gửi lại phản hồi — cập nhật bản ghi cũ, giữ nguyên ID và không tăng tổng số")
-    void submit_authenticated_resubmission_updates_existing() {
+    @DisplayName("Thành viên gửi lại phản hồi — tạo bản ghi MỚI, không đụng tới bản cũ")
+    void submit_authenticated_resubmission_creates_new_record() {
+        // Trước đây bản sau ghi đè lên bản trước, nên góp ý sau khi trải bài
+        // tháng trước và góp ý sau buổi xem hôm nay không cùng tồn tại được.
+        // Một người dùng sản phẩm nhiều lần thì có nhiều điều để nói, ở những
+        // thời điểm khác nhau — giữ cả thì mới thấy cảm nhận đổi theo thời gian.
         UUID userId = UUID.randomUUID();
         UUID existingFeedbackId = UUID.randomUUID();
         User user = User.builder().id(userId).username("cuong").build();
 
-        UserFeedback existing = UserFeedback.builder()
+        UserFeedback cu = UserFeedback.builder()
                 .id(existingFeedbackId)
                 .user(user)
                 .source("LANDING")
@@ -136,28 +139,34 @@ class FeedbackServiceImplTest {
                 .createdAt(Instant.now().minusSeconds(3600))
                 .build();
 
-        SubmitFeedbackRequest updateRequest = new SubmitFeedbackRequest(
+        SubmitFeedbackRequest lanHai = new SubmitFeedbackRequest(
                 "TAROT_AI", 5, null, "Dùng thêm thì thấy AI rất chuẩn", "facebook", "cpc", "retarget");
 
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-        when(feedbackRepository.findFirstByUserIdOrderByCreatedAtDesc(userId)).thenReturn(Optional.of(existing));
         when(feedbackRepository.save(any(UserFeedback.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        UserFeedbackResponse response = service.submit(userId, updateRequest);
+        UserFeedbackResponse response = service.submit(userId, lanHai);
 
-        assertEquals(existingFeedbackId, response.id());
         assertEquals(5, response.rating());
         assertEquals(10, response.nps()); // 5 * 2
         assertEquals("Dùng thêm thì thấy AI rất chuẩn", response.comment());
         assertEquals("TAROT_AI", response.source());
         assertEquals("facebook", response.utmSource());
-        assertNotNull(response.updatedAt());
 
-        // Kiểm tra đúng bản ghi cũ được cập nhật
-        verify(feedbackRepository, times(1)).save(existing);
-        assertEquals(5, existing.getRating());
-        assertEquals(10, existing.getNps());
-        assertEquals("Dùng thêm thì thấy AI rất chuẩn", existing.getComment());
+        ArgumentCaptor<UserFeedback> captor = ArgumentCaptor.forClass(UserFeedback.class);
+        verify(feedbackRepository, times(1)).save(captor.capture());
+        UserFeedback moi = captor.getValue();
+
+        // Bản được lưu KHÔNG phải bản cũ.
+        assertNotSame(cu, moi);
+        assertNull(moi.getId(), "bản mới chưa có ID, để CSDL tự sinh");
+        assertEquals(userId, moi.getUser().getId());
+
+        // Bản cũ còn nguyên — đây là điều quan trọng nhất của thay đổi này.
+        assertEquals(3, cu.getRating());
+        assertEquals(6, cu.getNps());
+        assertEquals("Ban đầu thấy bình thường", cu.getComment());
+        assertEquals("LANDING", cu.getSource());
     }
 
     @Test
@@ -367,40 +376,42 @@ class FeedbackServiceImplTest {
     }
 
     @Test
-    @DisplayName("Nhiều luồng đồng thời gửi cho cùng 1 tài khoản — đảm bảo chỉ cập nhật 1 bản ghi duy nhất")
+    @DisplayName("Nhiều luồng cùng gửi cho một tài khoản — ra đủ từng ấy bản ghi")
     void submit_concurrent_requests_for_same_user() throws InterruptedException {
+        // Test này trước đây canh cho CHỈ CÒN MỘT bản ghi. Giờ đảo lại: nhiều
+        // bản ghi chính là thứ cần có. Giữ phần chạy nhiều luồng vì nó vẫn
+        // bắt được lỗi hỏng khác — mất bản ghi, hoặc ném ngoại lệ khi hai
+        // người gửi cùng lúc.
         UUID userId = UUID.randomUUID();
         User user = User.builder().id(userId).username("concurrent_user").build();
 
-        java.util.concurrent.atomic.AtomicReference<UserFeedback> store = new java.util.concurrent.atomic.AtomicReference<>(null);
+        java.util.List<UserFeedback> daLuu =
+                java.util.Collections.synchronizedList(new java.util.ArrayList<>());
 
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-        when(feedbackRepository.findFirstByUserIdOrderByCreatedAtDesc(userId))
-                .thenAnswer(inv -> Optional.ofNullable(store.get()));
         when(feedbackRepository.save(any(UserFeedback.class)))
                 .thenAnswer(inv -> {
                     UserFeedback f = inv.getArgument(0);
-                    if (f.getId() == null) {
-                        f.setId(UUID.randomUUID());
-                        f.setCreatedAt(Instant.now());
-                    }
-                    store.set(f);
+                    f.setId(UUID.randomUUID());
+                    f.setCreatedAt(Instant.now());
+                    daLuu.add(f);
                     return f;
                 });
 
-        int threadCount = 10;
-        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
-        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(threadCount);
-        java.util.concurrent.atomic.AtomicInteger successCount = new java.util.concurrent.atomic.AtomicInteger();
+        int soLuong = 10;
+        java.util.concurrent.ExecutorService executor =
+                java.util.concurrent.Executors.newFixedThreadPool(soLuong);
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(soLuong);
+        java.util.concurrent.atomic.AtomicInteger thanhCong = new java.util.concurrent.atomic.AtomicInteger();
 
-        for (int i = 1; i <= threadCount; i++) {
-            final int star = (i % 5) + 1;
+        for (int i = 1; i <= soLuong; i++) {
+            final int sao = (i % 5) + 1;
             executor.submit(() -> {
                 try {
                     SubmitFeedbackRequest req = new SubmitFeedbackRequest(
-                            "GENERAL", star, null, "Concurrent test " + star, null, null, null);
+                            "GENERAL", sao, null, "Concurrent test " + sao, null, null, null);
                     service.submit(userId, req);
-                    successCount.incrementAndGet();
+                    thanhCong.incrementAndGet();
                 } finally {
                     latch.countDown();
                 }
@@ -410,10 +421,12 @@ class FeedbackServiceImplTest {
         latch.await(5, java.util.concurrent.TimeUnit.SECONDS);
         executor.shutdown();
 
-        assertEquals(threadCount, successCount.get());
-        assertNotNull(store.get());
-        assertNotNull(store.get().getId());
-        assertEquals(userId, store.get().getUser().getId());
-        verify(feedbackRepository, times(threadCount)).save(any(UserFeedback.class));
+        assertEquals(soLuong, thanhCong.get());
+        assertEquals(soLuong, daLuu.size(), "mỗi lần gửi phải thành một bản ghi riêng");
+        assertEquals(soLuong,
+                daLuu.stream().map(UserFeedback::getId).distinct().count(),
+                "các bản ghi phải khác ID nhau");
+        assertTrue(daLuu.stream().allMatch(f -> userId.equals(f.getUser().getId())));
+        verify(feedbackRepository, times(soLuong)).save(any(UserFeedback.class));
     }
 }

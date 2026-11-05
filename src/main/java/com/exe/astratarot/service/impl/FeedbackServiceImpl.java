@@ -52,53 +52,33 @@ public class FeedbackServiceImpl implements FeedbackService {
                 ? Math.max(0, Math.min(10, request.nps()))
                 : request.rating() * 2;
 
-        UserFeedback saved;
-
-        if (userIdOrNull != null) {
-            // Đồng bộ hoá theo userId để chống race condition khi 2 request gửi đồng thời từ 1 tài khoản
-            synchronized (userIdOrNull.toString().intern()) {
-                User user = userRepository.findById(userIdOrNull).orElse(null);
-                Optional<UserFeedback> existingOpt = feedbackRepository.findFirstByUserIdOrderByCreatedAtDesc(userIdOrNull);
-
-                if (existingOpt.isPresent()) {
-                    UserFeedback existing = existingOpt.get();
-                    existing.setRating(request.rating());
-                    existing.setNps(effectiveNps);
-                    existing.setComment(blankToNull(request.comment()));
-                    existing.setSource(source);
-                    existing.setUtmSource(blankToNull(request.utmSource()));
-                    existing.setUtmMedium(blankToNull(request.utmMedium()));
-                    existing.setUtmCampaign(blankToNull(request.utmCampaign()));
-                    existing.setUpdatedAt(Instant.now());
-                    saved = feedbackRepository.save(existing);
-                } else {
-                    saved = feedbackRepository.save(UserFeedback.builder()
-                            .user(user)
-                            .source(source)
-                            .nps(effectiveNps)
-                            .rating(request.rating())
-                            .comment(blankToNull(request.comment()))
-                            .utmSource(blankToNull(request.utmSource()))
-                            .utmMedium(blankToNull(request.utmMedium()))
-                            .utmCampaign(blankToNull(request.utmCampaign()))
-                            .updatedAt(Instant.now())
-                            .build());
-                }
-            }
-        } else {
-            // Khách vãng lai ẩn danh — cho phép gửi nhiều phản hồi độc lập
-            saved = feedbackRepository.save(UserFeedback.builder()
-                    .user(null)
-                    .source(source)
-                    .nps(effectiveNps)
-                    .rating(request.rating())
-                    .comment(blankToNull(request.comment()))
-                    .utmSource(blankToNull(request.utmSource()))
-                    .utmMedium(blankToNull(request.utmMedium()))
-                    .utmCampaign(blankToNull(request.utmCampaign()))
-                    .updatedAt(Instant.now())
-                    .build());
-        }
+        // Mỗi lần gửi là một bản ghi riêng, kể cả của người đã đăng nhập.
+        //
+        // Trước đây tài khoản đã đăng nhập chỉ giữ ĐÚNG MỘT bản góp ý: gửi lần
+        // hai thì tìm bản cũ ra rồi ghi đè lên. Nghĩa là góp ý sau khi trải
+        // bài tháng trước và góp ý sau buổi xem hôm nay không cùng tồn tại
+        // được — cái sau xoá mất cái trước, và không ai biết là đã mất.
+        //
+        // Một người góp ý nhiều lần là chuyện bình thường và đáng giữ: mỗi
+        // lần ứng với một lần dùng khác nhau, ở một thời điểm khác nhau. Giữ
+        // cả thì mới thấy được cảm nhận đổi theo thời gian.
+        //
+        // Bỏ luôn khối `synchronized` khoá theo userId trước đây: nó dựng để
+        // chặn hai yêu cầu cùng lúc tạo ra hai bản trùng, mà giờ hai bản là
+        // điều mong muốn. Nó cũng chưa bao giờ làm được việc ấy cho tử tế —
+        // khoá trên chuỗi `intern()` chỉ có tác dụng trong một tiến trình,
+        // nên khi chạy nhiều bản sao thì vô nghĩa.
+        UserFeedback saved = feedbackRepository.save(UserFeedback.builder()
+                .user(userIdOrNull == null ? null : userRepository.findById(userIdOrNull).orElse(null))
+                .source(source)
+                .nps(effectiveNps)
+                .rating(request.rating())
+                .comment(blankToNull(request.comment()))
+                .utmSource(blankToNull(request.utmSource()))
+                .utmMedium(blankToNull(request.utmMedium()))
+                .utmCampaign(blankToNull(request.utmCampaign()))
+                .updatedAt(Instant.now())
+                .build());
 
         return toUserFeedbackResponse(saved);
     }
