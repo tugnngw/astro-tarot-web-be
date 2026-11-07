@@ -2,6 +2,7 @@
 
 Migration `V2_4__seed_demo_data.sql` tạo sẵn dữ liệu để test mọi vai trò.
 Chạy khi backend khởi động (Flyway tự migrate) hoặc trên Neon sau khi deploy.
+Migration `V2_39` tinh gọn thêm số liệu ở năm ô chính của màn Tổng quan.
 
 ## Mật khẩu
 
@@ -38,13 +39,18 @@ chọn người → *Đặt lại mật khẩu*. Đường đó không để l�
 - Hồ sơ Reader: PENDING / APPROVED / REJECTED
 - Booking: COMPLETED, CONFIRMED, PENDING, CANCELLED
 - Thanh toán, ký quỹ, lệnh rút PENDING/REJECTED
-- 1 đánh giá 5★ cho Lan
+- Đánh giá Reader mẫu qua các booking đã hoàn tất
 - Báo cáo vi phạm PENDING + RESOLVED
 - Ticket hỗ trợ OPEN / PENDING / RESOLVED kèm tin nhắn
 - 1 lượt trải bài AI + chat
 - Thông báo, activity log, lượt bấm shop affiliate
+- Migration `V2_39` thêm 18 booking/đánh giá demo giá thấp; sau khi áp dụng,
+  với bộ số liệu trong ảnh, Tổng quan hướng tới khoảng 30 giao dịch, 25 người
+  trả phí, 26 đánh giá Reader, 29 góp ý và 270.000 đồng doanh thu seed. Các
+  giao dịch seed thanh toán cũ được huỷ để giảm doanh thu demo.
 - Log token Tarot AI (`ai_usage_logs`, migration V2_5) để biểu đồ admin có số liệu
-- Doanh thu theo tháng (`payment_transactions` SUCCESS, migration V2_10) để biểu đồ cột có nhiều tháng
+- Doanh thu theo tháng (`payment_transactions` SUCCESS, migrations V2_10, V2_28,
+  V2_39) để biểu đồ cột có nhiều tháng
 
 Shop sản phẩm + 78 lá Tarot đã có từ migration cũ (V1_3, V1_5).
 
